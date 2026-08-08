@@ -98,9 +98,10 @@ Notes:
 
 - `card: null` lets Avalonia find the card. Give `/dev/dri/card1` to select
   one card.
-- `DrmOutputOptions.Orientation` turns the output in software. Our display is
-  native portrait, so `Rotation0` is possibly correct. Touch coordinates
-  change with the orientation automatically.
+- `DrmOutputOptions.Orientation` turns the output in software. The panel is
+  native portrait and the appliance operates in landscape, thus the value is
+  `Rotation90`. Touch coordinates change with the orientation automatically.
+  See section 4.2.
 - A console cursor blinks on top of the user interface. The documents give a
   `SilenceConsole` method that stops this.
 - Touch operates automatically through `libinput` with DRM.
@@ -212,9 +213,32 @@ SECTION 3.1.**
 | Connections | DSI ribbon cable, and electrical supply from the GPIO header |
 | Temperature range | −20 °C to +70 °C |
 
-**IMPORTANT:** the display is native portrait at 720 × 1280. The upstream user
-interface is landscape at 480 × 320. The layout of the two lanes must change.
-Do not copy the upstream layout.
+**IMPORTANT: the panel is native portrait, and the appliance operates in
+landscape.** The user made this decision on 2026-08-08.
+
+| Item | Value |
+| --- | --- |
+| The panel | 720 × 1280, native portrait. The datasheet, page 3. |
+| Upstream | 480 × 320, landscape. `style.css:68` says "hardcoded 480x320 landscape". |
+| The appliance | 1280 × 720, landscape. `SurfaceOrientation.Rotation90`. |
+
+Avalonia turns the output in software with an offscreen framebuffer and a
+shader. It adjusts the touch coordinates automatically.
+
+The correct value is `Rotation90` or `Rotation270`. Which one is correct
+depends on the side that the DSI cable goes out, and you cannot know it before
+the hardware is here. If the display shows the user interface upside down,
+change the one value in `Program.cs`.
+
+Landscape keeps the upstream proportions, thus the layout is a move and not new
+work. The upstream heights of the 320 pixels, and the heights here:
+
+- The response area: 232 upstream, the remainder here, 72.5 % of the height.
+- The two lanes: 60 upstream, 135 here, 18.75 % of the height.
+- The visualizer: 28 upstream, 63 here, 8.75 % of the height.
+
+**CAUTION: THE CASE MUST HOLD THE PANEL ON ITS SIDE, WITH THE LONG EDGE
+HORIZONTAL. THE STL FILES IN `stl/` MUST AGREE WITH THIS DECISION.**
 
 ### 4.3 Audio — Jabra Speak2 40
 
