@@ -1,7 +1,19 @@
+# =============================================================================
+# gemma-translator .gitignore
+# This fork is being migrated from Python + React to .NET 10 / C# / Avalonia
+# UI (targeting Raspberry Pi / Linux ARM64). Rules for the legacy Python
+# backend and React frontend are kept below until the migration is complete.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Node.js / React frontend (legacy, still present during migration)
+# -----------------------------------------------------------------------------
 node_modules/
 dist/
-.env
-.DS_Store
+
+# -----------------------------------------------------------------------------
+# Python backend (legacy, still present during migration)
+# -----------------------------------------------------------------------------
 venv/
 __pycache__/
 *.pyc
@@ -9,17 +21,138 @@ __pycache__/
 *.pyd
 .Python
 env/
+.venv/
+
+# -----------------------------------------------------------------------------
+# Environment variables / secrets
+# -----------------------------------------------------------------------------
+.env
+.env*
+
+# -----------------------------------------------------------------------------
+# Logs
+# -----------------------------------------------------------------------------
 *.log
 server.log
-.venv/
-.env*
+
+# -----------------------------------------------------------------------------
+# ML model weights (intentional: large binary model files, not source)
+# -----------------------------------------------------------------------------
 *.litertlm
 *.tflite
 *.gguf
 *.bin
 *.onnx
+
+# -----------------------------------------------------------------------------
+# Audio samples generated/consumed at runtime
+# -----------------------------------------------------------------------------
 *.wav
 *.mp3
 *.ogg
 *.flac
+
+# -----------------------------------------------------------------------------
+# Test coverage output (Node.js / Python)
+# -----------------------------------------------------------------------------
 coverage/
+
+# =============================================================================
+# .NET / C# (new backend/UI stack)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# .NET / C# build output
+# -----------------------------------------------------------------------------
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+ARM/
+ARM64/
+*.user
+*.suo
+*.userprefs
+project.lock.json
+artifacts/
+publish/
+*.nupkg
+*.snupkg
+BenchmarkDotNet.Artifacts/
+TestResults/
+*.trx
+*.coverage
+*.coverlet.json
+.dotnet/
+*.binlog
+*.VisualState.xml
+StyleCop.Cache
+
+# -----------------------------------------------------------------------------
+# Avalonia UI
+# Avalonia's generated/compiled XAML output (e.g. AvaloniaResources, the
+# *.axaml.g.cs compiler-generated partials) is emitted under bin/ and obj/,
+# which are already ignored above. Hand-written *.axaml.cs code-behind files
+# are normal tracked source and must NOT be ignored. No additional
+# Avalonia-specific top-level pattern is added here: none could be verified
+# as a real, documented Avalonia output path distinct from bin/obj/.
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# JetBrains Rider / ReSharper
+# NOTE: *.DotSettings (team-shared settings) is intentionally kept TRACKED;
+# only the per-user *.DotSettings.user override is ignored.
+# -----------------------------------------------------------------------------
+.idea/
+*.sln.iml
+_ReSharper*/
+*.[Rr]e[Ss]harper
+.JustCode
+*.DotSettings.user
+
+# -----------------------------------------------------------------------------
+# Visual Studio
+# (*.suo and *.user are already covered by the .NET section above)
+# -----------------------------------------------------------------------------
+.vs/
+*.userosscache
+*.sln.docstates
+ipch/
+*.aps
+*.opendb
+*.VC.db
+
+# -----------------------------------------------------------------------------
+# VS Code
+# Ignore everything under .vscode/ except the team-shared config files.
+# -----------------------------------------------------------------------------
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+
+# -----------------------------------------------------------------------------
+# NuGet
+# packages/* (not packages/) is used so the packages/build/ negation below
+# can actually re-include that subtree - git cannot re-include paths inside
+# a directory that was itself excluded.
+# -----------------------------------------------------------------------------
+*.nuget.props
+*.nuget.targets
+packages/*
+!packages/build/
+.nuget/
+
+# -----------------------------------------------------------------------------
+# OS cruft
+# -----------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*~
