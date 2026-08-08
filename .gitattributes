@@ -1,0 +1,180 @@
+# =============================================================================
+# .gitattributes - gemma-translator
+#
+# This repo is developed on Windows 11 and deployed to Raspberry Pi OS
+# (Linux ARM64). The rules below make sure a given file has the SAME line
+# endings and diff/merge behavior no matter which platform touched it last,
+# and that platform-specific files (shell scripts vs. .bat/.ps1) get the
+# line ending their own interpreter actually requires.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. Default behavior
+# -----------------------------------------------------------------------------
+# Let Git auto-detect text vs. binary, normalize text files to LF in the
+# repository itself, and convert to the platform's native ending on
+# checkout - unless a more specific rule below pins it explicitly.
+* text=auto
+
+# -----------------------------------------------------------------------------
+# 2. Forced LF - files that run on / are read by Raspberry Pi OS (Linux)
+# -----------------------------------------------------------------------------
+# These MUST stay LF no matter what platform edited them last. A CRLF
+# shebang line breaks on Linux with "bash: bad interpreter: No such file or
+# directory" because the trailing \r is read as part of the interpreter
+# path. This is not optional for anything that runs on the Pi.
+*.sh            text eol=lf
+*.bash          text eol=lf
+*.service       text eol=lf
+Dockerfile      text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+.gitattributes  text eol=lf
+.gitignore      text eol=lf
+.editorconfig   text eol=lf
+
+# Extensionless scripts: git attribute patterns can't express "no extension"
+# reliably, so there is nothing to glob here. Every current entry-point
+# script in this repo (start.sh, setup.sh, download_model.sh, deploy-pi.sh)
+# already has a .sh extension and is covered by the *.sh rule above. If an
+# extensionless script is ever added, list it here explicitly, e.g.:
+#   /bin/some-tool  text eol=lf
+
+# -----------------------------------------------------------------------------
+# 3. Forced CRLF - Windows-only files
+# -----------------------------------------------------------------------------
+# cmd.exe's batch parser is genuinely line-ending sensitive - multi-line
+# constructs (FOR loops, IF/ELSE blocks, labels) can misbehave or fail to
+# parse with bare LF. Batch files only ever run under cmd.exe, so there's no
+# cross-platform reason to keep them LF; force the ending they need.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# *.ps1 is intentionally NOT forced to CRLF. PowerShell's parser (Windows
+# PowerShell 5.1 and cross-platform PowerShell 7/pwsh alike) reads
+# LF-terminated scripts correctly. Forcing CRLF here would reintroduce the
+# exact platform-coupling problem this file exists to avoid, for no benefit.
+# Left to `* text=auto` (stored as LF, checked out native).
+
+# -----------------------------------------------------------------------------
+# 4. C# / .NET source and project files
+# -----------------------------------------------------------------------------
+*.cs        text diff=csharp
+*.csproj    text
+*.props     text
+*.targets   text
+*.config    text
+*.axaml     text
+*.xaml      text
+*.resx      text
+
+# *.sln - forced CRLF.
+# Research finding: this is no longer a hard technical requirement. Modern
+# `dotnet` CLI tooling and Visual Studio 2019/2022 parse LF-only .sln files
+# without complaint - the strict "VS will corrupt/refuse LF solutions" bugs
+# were a VS2015-and-earlier era problem. That said, CRLF-for-.sln remains
+# the de facto community convention (it's still what `dotnet new sln` and
+# VS itself emit on save on Windows), some older VS extensions / installers
+# are still less forgiving, and this file is only ever opened or generated
+# on a Windows dev box in this project - never on the Pi. Forcing CRLF costs
+# nothing here and matches what most tooling will write back anyway, so it
+# stays pinned rather than left to `text=auto` drift.
+*.sln       text eol=crlf
+
+# -----------------------------------------------------------------------------
+# 5. Merge strategy
+# -----------------------------------------------------------------------------
+# `*.sln merge=union` is deliberately NOT set, even though it's a common
+# template default. `union` keeps lines from both sides of a conflict with
+# no conflict markers at all. For a structured, GUID-indexed format like
+# .sln (paired Project/EndProject blocks, nested GlobalSection entries under
+# NestedProjects), a silent union merge can produce a file that still LOADS
+# in Visual Studio but is semantically wrong - duplicated project entries,
+# or a NestedProjects section referencing a GUID that only exists on one
+# side. That kind of corruption is worse than a normal merge conflict,
+# because nothing flags it for review. A real conflict that stops and forces
+# a human to look at the .sln is the safer default. If solution-file
+# conflicts turn out to be frequent (e.g. many contributors adding projects
+# in parallel), revisit this - but don't default to silent merging.
+
+# -----------------------------------------------------------------------------
+# 6. Binary files
+# -----------------------------------------------------------------------------
+# 3D print files (stl/)
+*.stl       binary
+
+# Datasheets / product briefs (docs/)
+*.pdf       binary
+
+# Images
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+
+# Fonts
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+*.otf       binary
+
+# Native binaries / libraries
+*.dll       binary
+*.exe       binary
+*.so        binary
+*.dylib     binary
+
+# Signing / certificate material - content must never be touched or diffed
+*.snk       binary
+*.pfx       binary
+
+# ML model formats used by this project
+*.litertlm  binary
+*.tflite    binary
+*.gguf      binary
+*.onnx      binary
+*.bin       binary
+
+# Audio
+*.wav       binary
+*.mp3       binary
+*.ogg       binary
+*.flac      binary
+
+# SVG - deliberately NOT treated as binary.
+# SVG is XML text, not a binary image format. Marking it `binary` would
+# block meaningful diffs and blame on hand-authored/icon-tweak changes and
+# would defeat git's normal text delta compression for no reason. Treated as
+# text and LF-normalized like other source. Revisit per-file/per-directory
+# only if this project ever vendors minified/data-URI-embedded SVGs where a
+# textual diff is useless anyway.
+*.svg       text eol=lf
+
+# -----------------------------------------------------------------------------
+# 7. Linguist overrides (GitHub language statistics)
+# -----------------------------------------------------------------------------
+# Note: *.stl and *.pdf are already `binary` above, and GitHub Linguist
+# already excludes binary files from language percentages by itself - so,
+# as of today, neither folder strictly needs an override to keep language
+# stats clean. Overrides below are added anyway to be explicit and to
+# future-proof against non-binary files (e.g. a markdown spec sheet) later
+# landing in these folders and unexpectedly skewing the language graph.
+#
+# stl/ holds original 3D-printable enclosure parts. It is neither
+# documentation nor vendored/third-party code, so neither
+# linguist-documentation nor linguist-vendored is semantically honest for
+# it - forcing one on would mislabel what these files are. No linguist
+# override is applied for stl/*; the `binary` attribute above already keeps
+# it out of language stats, which is the actual goal.
+#
+# docs/ holds reference material (component datasheets, product briefs).
+# That does fit linguist-documentation's intent, so it's marked explicitly.
+docs/*      linguist-documentation
+
+# -----------------------------------------------------------------------------
+# 8. Existing tracked source (must keep working as-is)
+# -----------------------------------------------------------------------------
+frontend/src/**/*.jsx   text eol=lf diff=javascript
+frontend/src/**/*.js    text eol=lf diff=javascript
+backend/*.py            text eol=lf diff=python
