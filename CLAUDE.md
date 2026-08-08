@@ -57,10 +57,22 @@ The DRM backend of Avalonia is the correct one for a Raspberry Pi with a DSI
 display and no desktop. Use the `avalonia-docs` server to get the current
 Avalonia API before you write the startup code. See section 6.1.
 
+**The change to C# removes our Python. It does not remove all Python.**
+`litert-lm` is a pip package, and `start.sh:45` starts it as a CLI. Thus the
+venv, `setup.sh`, and `download_model.sh` stay on the Raspberry Pi.
+
+`deploy-pi.sh` must keep `python3-venv` and `python3-pip`. What leaves is
+`moonshine-voice`, `numpy`, `sounddevice`, `soundfile`, and
+`backend/server.py`.
+
 ### 3.1 The Avalonia constraints
 
 These facts come from the `avalonia-docs` server, not from memory. They give
 the structure of the C# code.
+
+**IMPORTANT: this section needs Avalonia 12.x.** Avalonia 11.3 does not have
+`DrmOutputOptions.Orientation`. The `avalonia-docs` server answers from 12.x.
+Because of this, the user selected 12.x on 2026-08-08.
 
 **The lifetime is different on the target.** The desktop software uses
 `IClassicDesktopStyleApplicationLifetime` and makes windows. The Raspberry Pi
@@ -96,6 +108,13 @@ Notes:
 - `CompositionOptions.UseRegionDirtyRectClipping` is off by default from
   Avalonia 12.1. The documents name embedded Linux as a condition where
   `true` can help. Do a test on the Pi.
+- The DRM backend makes no popup. Each flyout, tooltip, ComboBox dropdown, and
+  context menu draws in the overlay layer, clipped to 720 × 1280. Make the
+  settings screen and the language selector for this condition from the start.
+- Supply the fonts with the software. Add static font files as
+  `AvaloniaResource`, then make an `EmbeddedFontCollection`. Avalonia cannot
+  use a variable font. Noto Sans CJK is usually a variable OTF, so use the
+  static instances.
 
 **Avalonia is not WPF.** Do not think that a WPF pattern operates. These are
 the errors that occur most frequently:
@@ -127,8 +146,12 @@ The datasheets are in the `docs/` directory.
 
 ### 4.1 Computer
 
-A Raspberry Pi. The upstream project uses a Raspberry Pi 5 with 8 GB of RAM.
-Make sure with the user which model this fork uses.
+A Raspberry Pi 5 with 8 GB of RAM, the same as upstream. The system image is
+Raspberry Pi OS Lite. The user confirmed the two items on 2026-08-08.
+
+**CAUTION: PI OS LITE CAN HAVE NO CJK FONT AND NO ARABIC FONT. WITH NO FONT,
+AVALONIA THROWS AT STARTUP. THE SOFTWARE MUST SUPPLY ITS OWN FONTS. SEE
+SECTION 3.1.**
 
 ### 4.2 Display — Raspberry Pi Touch Display 2, 5 inch
 
@@ -325,10 +348,26 @@ Obey this procedure:
 
 1. Use the `asd-ste100-dictionary` skill before you write prose.
 2. Write the text.
-3. Do a check with `scripts/ste_check.py`.
-4. Correct each error. Use `scripts/lookup.py` for each word that is not clear.
+3. Do a check with the checker of the skill.
+4. Correct each error. Use the lookup tool of the skill for each word that is
+   not clear.
 5. Do the check again.
 6. Tell the user what the checker found and what you changed.
+
+The two scripts come with the skill. This repository has no `scripts/`
+directory. On this development host the scripts are here:
+
+```bash
+python ~/.claude/skills/asd-ste100-dictionary/scripts/ste_check.py CLAUDE.md
+python ~/.claude/skills/asd-ste100-dictionary/scripts/lookup.py utilize
+```
+
+The command is `python`, not `python3`. The Windows host has no `python3`. The
+skill documents show `python3`, which is correct on Linux only.
+
+The checker gives exit code 1 if it finds an error. It reads the dictionary
+from `~/.claude/ste/dictionary.json`. If you do not have that file, the skill
+tells you how to make it.
 
 Keep the technical names in `.ste-technical-names.txt` at the repository root.
 The checker reads this file. Do not add a word only to remove a checker result.
@@ -344,11 +383,33 @@ This section records what the C# code must replace.
 
 | Part | File | Function |
 | --- | --- | --- |
-| User interface | `frontend/src/TranslatorApp.jsx` | Two lanes, one for each person. |
+| User interface | `frontend/src/TranslatorApp.jsx` | The response area, the two lanes, and the visualizer. |
+| One lane | `frontend/src/components/LanguageLane.jsx` | One person. The two lanes are adjacent to each other in a strip of 60 pixels, not two half screens. |
 | API client | `frontend/src/utils/api.js` | The STT, translation, and TTS calls. |
 | Audio capture | `frontend/src/hooks/useAudioRecorder.js` | 16 kHz mono Float32 capture. |
-| Server | `backend/server.py` | Static files, `/proxy`, `/api/stt`, `/api/tts`. |
+| Server | `backend/server.py` | Static files, `/proxy`, `/api/stt`, `/api/tts`, `/api/volume`. |
+| Settings | `frontend/src/components/SettingsOverlay.jsx` | The endpoint, the model, the API key, and the volume. |
 | Startup | `start.sh`, `deploy-pi.sh` | Three processes, and the systemd unit. |
+
+`litert-lm serve` is not in this table. It is a Python CLI and it stays on the
+device. See section 3.
+
+The plan deletes `/api/volume` (`backend/server.py:263-381`), which
+`SettingsOverlay.jsx:42,61` calls. It starts `wpctl`, `pactl`, and `amixer`,
+which are Linux only, and Pi OS Lite has no PipeWire.
+
+Use software gain in the C# software. This is cross-platform, and a test can
+use a fake.
+
+The three text fields of `SettingsOverlay.jsx` become `LiteRtOptions` in the
+`LiteRt` section of `appsettings.json`. See section 3.2. The key is not in that
+file. It comes from `GEMMA_LiteRt__ApiKey`, because the repository holds
+`appsettings.json`.
+
+The upstream `useProxy` value has no C# equivalent. The browser sent each
+request through `/proxy` in `server.py` to keep the same origin. C# has no
+browser and no same-origin rule, thus the software speaks to the endpoint
+directly.
 
 The flow is simple. The user holds a button. The software records the
 microphone.

@@ -46,6 +46,14 @@ xunit
 mstest
 bash
 
+# --- Audio and typography technical names ---
+# gain     - part of "software gain", the audio engineering term for a
+#            multiplication of the signal level.
+# variable - part of "variable font", the OpenType term for a font file with
+#            axes. Avalonia cannot use one. See section 3.1.
+gain
+variable
+
 # --- Machine learning and voice ---
 gemma
 litert
@@ -106,6 +114,8 @@ cors
 url
 uri
 xml
+# key - part of "API key", the name of the field in SettingsOverlay.jsx.
+key
 
 # --- Software engineering terms ---
 software
