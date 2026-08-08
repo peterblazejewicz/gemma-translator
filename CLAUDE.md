@@ -57,6 +57,64 @@ The DRM backend of Avalonia is the correct one for a Raspberry Pi with a DSI
 display and no desktop. Use the `avalonia-docs` server to get the current
 Avalonia API before you write the startup code. See section 6.1.
 
+### 3.1 The Avalonia constraints
+
+These facts come from the `avalonia-docs` server, not from memory. They give
+the structure of the C# code.
+
+**The lifetime is different on the target.** The desktop software uses
+`IClassicDesktopStyleApplicationLifetime` and makes windows. The Raspberry Pi
+has no window manager. Avalonia uses `ISingleViewApplicationLifetime` there,
+which gives one view that fills the display.
+
+Put all the user interface in a `MainView` UserControl. Host that control in
+`MainWindow` on the Windows development host, and in `MainSingleView` on the
+Raspberry Pi. This is the mechanism that makes section 7 possible: the same
+user interface operates on the two machines.
+
+**The DRM startup.** Add the `Avalonia.LinuxFramebuffer` package. Then start
+the software with `StartLinuxDrm`:
+
+```csharp
+return builder.StartLinuxDrm(args, card: null, options: new DrmOutputOptions
+{
+    Scaling = 1.0,
+});
+```
+
+Notes:
+
+- `card: null` lets Avalonia find the card. Give `/dev/dri/card1` to select
+  one card.
+- `DrmOutputOptions.Orientation` turns the output in software. Our display is
+  native portrait, so `Rotation0` is possibly correct. Touch coordinates
+  change with the orientation automatically.
+- A console cursor blinks on top of the user interface. The documents give a
+  `SilenceConsole` method that stops this.
+- Touch operates automatically through `libinput` with DRM.
+- `kmscube` makes sure that DRM operates before you start the software.
+- `CompositionOptions.UseRegionDirtyRectClipping` is off by default from
+  Avalonia 12.1. The documents name embedded Linux as a condition where
+  `true` can help. Do a test on the Pi.
+
+**Avalonia is not WPF.** Do not think that a WPF pattern operates. These are
+the errors that occur most frequently:
+
+| Do not use | Use |
+| --- | --- |
+| `.xaml` | `.axaml` |
+| `DependencyProperty` | `StyledProperty` or `DirectProperty` |
+| `Style.Triggers`, `DataTrigger` | Pseudo-classes such as `:pointerover` |
+| `Style x:Key` | Style classes and selectors |
+| `HierarchicalDataTemplate` | `TreeDataTemplate` |
+| `pack://` URI | `avares://` URI |
+| The `Visibility` enumeration | The `bool IsVisible` property |
+| ReactiveUI | CommunityToolkit.Mvvm |
+| `Avalonia.Diagnostics` | `AvaloniaUI.DiagnosticsSupport` |
+
+`Directory.Build.props` sets `AvaloniaUseCompiledBindingsByDefault` to `true`.
+Thus each AXAML root element must have an `x:DataType` attribute.
+
 ---
 
 ## 4. Target hardware
