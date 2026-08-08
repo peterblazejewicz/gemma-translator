@@ -30,6 +30,15 @@
     <!-- A missing XML comment is not an error in an application project. -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
 
+    <!-- Compiled bindings for each Avalonia project. The avalonia-docs server
+         gives this instruction: always prefer compiled bindings, and make them
+         the default in the project. A compiled binding finds an error when you
+         build, not when the software operates. It also uses no reflection,
+         which is necessary if we use trimming or NativeAOT for the Pi.
+         Each AXAML root element must then have an x:DataType attribute.
+         The property does nothing until a project references Avalonia. -->
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
     <!-- Reproducible output -->
     <Deterministic>true</Deterministic>
 
