@@ -16,15 +16,17 @@
 
 import React from "react"
 
-// Fullscreen developer settings: theme color, LLM endpoint/model/key,
-// keyboard mode, TTS toggle, visualizer density, and system volume
-// (proxied to amixer on the Pi via the backend's /api/volume).
+// Fullscreen developer settings: theme color, keyboard mode, TTS toggle,
+// visualizer density, and system volume (proxied to amixer on the Pi via the
+// backend's /api/volume).
+//
+// The LLM endpoint, model, and key moved to C# (LiteRtOptions). See CLAUDE.md
+// section 5.3.
 export default function SettingsOverlay({
   isActive,
   onClose,
   config,
   setConfig,
-  onTestConnection,
 }) {
   const THEME_COLORS = [
     { name: "RED", value: "#ff4444" },
@@ -130,43 +132,15 @@ export default function SettingsOverlay({
           </div>
         </div>
 
-        <div className="form-group">
-          <label>API Endpoint</label>
-          <div className="input-inline">
-            <input
-              type="text"
-              value={config.endpointUrl}
-              onChange={(e) => handleChange("endpointUrl", e.target.value)}
-            />
-            <button className="overlay-btn btn-sm" onClick={onTestConnection}>
-              Test
-            </button>
-          </div>
-        </div>
+        {/*
+          The API endpoint, the model name, and the API key were three text
+          fields here. The C# code replaces them with LiteRtOptions, in the
+          "LiteRt" section of src/GemmaTranslator/appsettings.json. The key
+          comes from the GEMMA_LiteRt__ApiKey variable of the environment.
 
-        <div className="form-group">
-          <label>Model Name</label>
-          <input
-            type="text"
-            value={config.modelName}
-            onChange={(e) => handleChange("modelName", e.target.value)}
-            list="model-suggestions"
-          />
-          <datalist id="model-suggestions">
-            <option value="gemma4-e2b"></option>
-            <option value="gemma-4-2b"></option>
-          </datalist>
-        </div>
-
-        <div className="form-group">
-          <label>API Key</label>
-          <input
-            type="password"
-            placeholder="Optional api key"
-            value={config.apiKey}
-            onChange={(e) => handleChange("apiKey", e.target.value)}
-          />
-        </div>
+          The display of the appliance has no keyboard, thus a person cannot
+          type in a text field. See section 5.3 of CLAUDE.md.
+        */}
 
         <div className="form-group">
           <label>Keyboard Mode</label>

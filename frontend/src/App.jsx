@@ -86,7 +86,6 @@ function App() {
         onClose={() => setIsSettingsOpen(false)}
         config={config}
         setConfig={setConfig}
-        onTestConnection={testConnection}
       />
     </div>
   )
