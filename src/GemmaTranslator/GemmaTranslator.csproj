@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    GemmaTranslator - the Avalonia replacement for the React user interface.
+
+    One project holds the two heads of the software:
+      - Windows, with a window (IClassicDesktopStyleApplicationLifetime).
+      - The Raspberry Pi, with the Linux DRM backend and one view
+        (ISingleViewApplicationLifetime). Start it with the DRM argument.
+
+    Program.cs selects the head. See section 3.1 of CLAUDE.md.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>GemmaTranslator</RootNamespace>
+    <AssemblyName>GemmaTranslator</AssemblyName>
+
+    <!-- The two runtime identifiers of this fork. macOS is not a target. -->
+    <RuntimeIdentifiers>win-x64;linux-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+
+    <!-- The DRM output for the Raspberry Pi. The package is managed code, so
+         it restores and builds on Windows. It operates on Linux only. -->
+    <PackageReference Include="Avalonia.LinuxFramebuffer" Version="12.1.1" />
+
+    <!-- CLAUDE.md section 3.2 selects CommunityToolkit.Mvvm, not ReactiveUI. -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+
+    <!-- The dependency injection container. See ServiceRegistration.cs. The
+         software uses the container only. It does not use the generic host,
+         because Avalonia has its own lifetime. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+
+    <!-- IConfiguration. The appliance has no keyboard, thus the settings come
+         from appsettings.json and from the environment. The environment lets
+         the systemd unit change a value with no change to a file. -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.10" />
+
+    <!-- The options pattern. It binds a section to a class and examines the
+         values at the start. See Configuration/LiteRtOptions.cs. -->
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
+
+    <!-- ILogger. Abstractions holds the [LoggerMessage] source generator, thus
+         it is a direct reference and not a transitive one.
+         Console goes to journald on the Raspberry Pi. Debug goes to the
+         output window of the IDE, because a WinExe on Windows has no
+         console. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Configuration" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The settings must be beside the binary, also in a published folder. -->
+    <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

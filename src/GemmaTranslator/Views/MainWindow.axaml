@@ -1,0 +1,23 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:GemmaTranslator.ViewModels"
+        xmlns:views="using:GemmaTranslator.Views"
+        x:Class="GemmaTranslator.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="Gemma Translator"
+        Width="1280"
+        Height="720"
+        WindowStartupLocation="CenterScreen">
+
+  <!--
+    The container for the Windows development host only.
+
+    The size is the size of the surface that the appliance gives: the panel is
+    720 x 1280 in native portrait, and the DRM startup turns it 90 degrees to
+    make 1280 x 720. Thus the layout that you see here is the layout that the
+    appliance shows.
+  -->
+
+  <views:MainView />
+
+</Window>

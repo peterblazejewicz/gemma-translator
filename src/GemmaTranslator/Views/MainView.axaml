@@ -1,0 +1,111 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GemmaTranslator.ViewModels"
+             x:Class="GemmaTranslator.Views.MainView"
+             x:DataType="vm:MainViewModel"
+             d:DesignWidth="1280"
+             d:DesignHeight="720"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+
+  <!--
+    The skeleton of the user interface, for a landscape surface of 1280 x 720.
+
+    The panel is 720 x 1280 in native portrait. The DRM startup turns it 90
+    degrees. See Program.cs and section 4.2 of CLAUDE.md.
+
+    The structure is the structure of the upstream user interface, which
+    style.css line 68 calls "hardcoded 480x320 landscape". The heights keep the
+    upstream proportion of 320 pixels:
+
+      The response area: 232 upstream, star here, 72.5 % of the height.
+      The two lanes:      60 upstream, 135 here, 18.75 % of the height.
+      The visualizer:     28 upstream,  63 here,  8.75 % of the height.
+
+    This view has no logic. The touch interaction model is not decided. The 135
+    pixels of the lanes give a touch target of approximately 11 mm on the
+    panel, which is sufficient for a finger.
+  -->
+
+  <Grid RowDefinitions="*,135,63" Background="#000000">
+
+    <!-- The response area. Upstream calls this the ResponseDrawer. It shows
+         the text that the microphone heard and the translation of it. -->
+    <Grid Grid.Row="0" Background="#111114">
+      <StackPanel VerticalAlignment="Center"
+                  HorizontalAlignment="Center"
+                  Spacing="18">
+        <TextBlock Text="こんにちは"
+                   FontSize="44"
+                   HorizontalAlignment="Center" />
+        <TextBlock Text="Hello"
+                   FontSize="44"
+                   Opacity="0.55"
+                   HorizontalAlignment="Center" />
+      </StackPanel>
+
+      <!-- The attribution that the Moonshine licence conditions make
+           necessary. It is a fixed part of the layout, not a late addition. -->
+      <TextBlock Text="{x:Static vm:MainViewModel.Attribution}"
+                 FontSize="12"
+                 Opacity="0.45"
+                 HorizontalAlignment="Right"
+                 VerticalAlignment="Bottom"
+                 Margin="14" />
+    </Grid>
+
+    <!-- The two lanes, beside each other, as upstream has them. Each lane is
+         one half of the width. Lane 1 is the person on the left. -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,*">
+
+      <Border Grid.Column="0"
+              BorderBrush="#333338"
+              BorderThickness="0,1,1,0">
+        <StackPanel VerticalAlignment="Center"
+                    HorizontalAlignment="Center"
+                    Spacing="6">
+          <TextBlock Text="1"
+                     FontSize="14"
+                     Opacity="0.45"
+                     HorizontalAlignment="Center" />
+          <TextBlock Text="{Binding Lane1Language.Name}"
+                     FontSize="28"
+                     HorizontalAlignment="Center" />
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Column="1"
+              BorderBrush="#333338"
+              BorderThickness="0,1,0,0">
+        <StackPanel VerticalAlignment="Center"
+                    HorizontalAlignment="Center"
+                    Spacing="6">
+          <TextBlock Text="2"
+                     FontSize="14"
+                     Opacity="0.45"
+                     HorizontalAlignment="Center" />
+          <TextBlock Text="{Binding Lane2Language.Name}"
+                     FontSize="28"
+                     HorizontalAlignment="Center" />
+        </StackPanel>
+      </Border>
+
+    </Grid>
+
+    <!-- The visualizer. Upstream draws 32 bars from the Web Audio
+         AnalyserNode. Avalonia has no AnalyserNode, thus this part needs an
+         FFT that we write. It is empty until then. -->
+    <Border Grid.Row="2"
+            BorderBrush="#333338"
+            BorderThickness="0,1,0,0">
+      <TextBlock Text="visualizer"
+                 FontSize="12"
+                 Opacity="0.3"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center" />
+    </Border>
+
+  </Grid>
+
+</UserControl>

@@ -1,0 +1,15 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GemmaTranslator.ViewModels"
+             xmlns:views="using:GemmaTranslator.Views"
+             x:Class="GemmaTranslator.Views.MainSingleView"
+             x:DataType="vm:MainViewModel">
+
+  <!--
+    The container for the Raspberry Pi. The DRM backend gives one view that
+    fills the display. There is no window and there is no window manager.
+  -->
+
+  <views:MainView />
+
+</UserControl>
