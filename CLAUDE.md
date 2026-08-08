@@ -139,7 +139,7 @@ Thus each AXAML root element must have an `x:DataType` attribute.
 ## 4. Target hardware
 
 The target hardware is not available in the development phase. You cannot do a
-test on the target device. Write the code so that the tests can operate on the
+test on the target device. Write the code so that it operates on the Windows
 development host without the hardware.
 
 The datasheets are in the `docs/` directory.
@@ -256,7 +256,44 @@ These subagents do the inspection:
 | --- | --- |
 | `dotnet-skills:code-reviewer` | Correct operation. Readability. The architecture. The security. The speed. |
 | `dotnet-skills:security-auditor` | The proxy, the static server, and the audio device access. |
-| `dotnet-skills:test-engineer` | Test strategy and test quality. |
+
+### 5.2 No test project
+
+This fork has no test project. Upstream has no tests, and this work only moves
+the upstream code to C#. Keep it simple.
+
+- Do not make a test project. Do not use the TDD cycle.
+- To make sure that the code is correct, use `dotnet build`. Then operate the
+  software.
+- An interface is for a different platform, not for a fake. Windows and the
+  Raspberry Pi get different code for the audio and for the inference. This is
+  the cause for each interface in this fork.
+
+### 5.3 The move removes as much as it adds
+
+The C# code replaces the upstream code. It does not go on top of it. This
+repository must not hold two sets of code that do the same work.
+
+Obey these rules:
+
+- When you move one function to C#, remove the upstream code of that same
+  function in the same change. Thus the quantity of the code stays about
+  equal.
+- Do work in a vertical slice. A vertical slice is the full path of one
+  function: the user interface, the client, and the part of the server.
+- When a vertical slice is complete, remove the upstream part of that slice.
+  The new C# part goes in its position.
+- Do not keep upstream code to look at subsequently. Git holds the history, and
+  `upstream/main` holds all the upstream software. You can get each file
+  again.
+- Do not remove upstream code before its C# replacement operates. A slice that
+  is not complete must keep the upstream part, or the software stops.
+- Tell the user which upstream code you removed, and where the new code is.
+
+Example: the endpoint, the model, and the key are one small slice.
+`LiteRtOptions` replaces the three text fields of `SettingsOverlay.jsx`, thus
+the three text fields go away in the same change. The other fields of that file
+stay until their C# replacement operates.
 
 ---
 
@@ -303,8 +340,7 @@ These skills are installed. Use them.
 | --- | --- |
 | `dotnet-skills:spec` | A specification before the C# code. |
 | `dotnet-skills:plan` | Small tasks that you can make sure of. |
-| `dotnet-skills:build` | Small steps with `dotnet build` and `dotnet test`. |
-| `dotnet-skills:test` | The TDD cycle with xUnit or MSTest. |
+| `dotnet-skills:build` | Small steps with `dotnet build`. |
 | `dotnet-skills:review` | The five-axis inspection of C# changes. |
 | `dotnet-skills:deprecation-and-migration` | The change from Python to C#. |
 | `dotnet-skills:frontend-ui-engineering-avalonia` | Avalonia user interface work. |
@@ -319,7 +355,9 @@ These skills are installed. Use them.
 | Item | Value |
 | --- | --- |
 | Development host | Windows 11 |
-| Target | Linux on ARM64 (Raspberry Pi OS) |
+| Appliance target | Linux on ARM64 (Raspberry Pi OS Lite) |
+| Second target | Windows x64. The software must fully operate here. |
+| Not a target | macOS. The user confirmed this on 2026-08-08. |
 | .NET SDK | 10.0.302 |
 
 **IMPORTANT:** the upstream Python and bash stack does not operate on the
@@ -327,9 +365,17 @@ Windows host. `start.sh`, `deploy-pi.sh`, `os.getuid()`, `wpctl`, `pactl`,
 `amixer`, and `lsof` are Linux only. Do not try to start the upstream software
 on Windows.
 
-The new C# code must operate on the Windows host. The tests must give a correct
-result there. Keep the Linux-only parts behind an interface. Supply a fake
-object for the tests.
+The new C# code must operate on the Windows host. Keep the Linux-only parts
+behind an interface, so that each platform can put in its own code. See
+section 5.2.
+
+The LiteRT-LM native library is not the same on the two platforms. Windows uses
+`litert-lm.dll` from the `win_amd64` wheel. The Raspberry Pi uses
+`liblitert-lm.so` from the `manylinux aarch64` wheel.
+
+The software must operate fully on Windows, and there is no fake. Thus make
+sure of the Windows native library as one of the first steps. If it does not
+operate, tell the user immediately.
 
 ---
 
