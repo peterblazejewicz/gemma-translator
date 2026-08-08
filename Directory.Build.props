@@ -1,0 +1,50 @@
+<Project>
+
+  <!--
+    Directory.Build.props - gemma-translator (.NET fork)
+
+    MSBuild imports this file automatically for every project below this
+    directory. It holds the settings that must be the same in each project.
+    It does not create a project and it does not hold any code.
+
+    The most important part is EnforceCodeStyleInBuild. Without it the rules
+    in .editorconfig apply only in the IDE, and `dotnet build` ignores them.
+    A test with a probe project confirmed this behaviour.
+  -->
+
+  <PropertyGroup>
+    <!-- Language and null safety -->
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Make the .editorconfig rules operate during a build, not only in the
+         IDE. GenerateDocumentationFile is necessary: without it the compiler
+         does not report IDE0005 (unnecessary using directive). -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <AnalysisMode>Recommended</AnalysisMode>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- A missing XML comment is not an error in an application project. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <!-- Reproducible output -->
+    <Deterministic>true</Deterministic>
+
+    <!-- The build is strict in CI and permissive on a development machine.
+         A warning must not stop your work, but it must stop a merge. -->
+    <TreatWarningsAsErrors Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</TreatWarningsAsErrors>
+
+    <!--
+      CAUTION: DO NOT SET InvariantGlobalization TO true.
+
+      This software translates Arabic, Japanese, Chinese, Korean, and Spanish.
+      Invariant globalization removes the ICU culture data. Text comparison,
+      casing, and sorting then become incorrect for these languages.
+    -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>
