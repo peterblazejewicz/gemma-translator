@@ -134,6 +134,50 @@ the errors that occur most frequently:
 `Directory.Build.props` sets `AvaloniaUseCompiledBindingsByDefault` to `true`.
 Thus each AXAML root element must have an `x:DataType` attribute.
 
+### 3.2 The code patterns
+
+These are rules, not a selection. The user confirmed them on 2026-08-08.
+
+| Item | Rule |
+| --- | --- |
+| The pattern | MVVM. Each view gets its data from a view model. |
+| The MVVM library | `CommunityToolkit.Mvvm`. Do not use ReactiveUI. |
+| Dependency injection | `Microsoft.Extensions.DependencyInjection`. |
+| The settings | `IConfiguration`, from `appsettings.json` and the environment. |
+| The log | `ILogger<T>` from the container. |
+
+Obey these rules:
+
+- Do not make a service or a view model with `new` in a view. Get it from the
+  container.
+- Add each service in `ServiceRegistration.cs`. This is the one location.
+- Give each dependency to the constructor.
+- Use `ObservableObject` and the `[ObservableProperty]` attribute for a
+  property that the display shows. Use `[RelayCommand]` for an operation.
+- Do not put logic in the code behind an AXAML file. It goes in the view
+  model.
+- The software uses the container only. It does not use the generic host,
+  because Avalonia has its own lifetime.
+
+An interface goes in front of each part that is not the same on Windows and on
+the Raspberry Pi. See section 5.2.
+
+Obey these rules for the settings and for the log:
+
+- Do not read a value with `Environment.GetEnvironmentVariable` or from a file
+  that you open. Get `IConfiguration` from the container.
+- A variable of the environment has the prefix `GEMMA_`, and two low lines for
+  a level, for example `GEMMA_Logging__LogLevel__Default`. The systemd unit
+  changes a value with this method and touches no file.
+- `appsettings.json` is the location of the settings of the appliance. The
+  display has no keyboard, thus a person cannot type a value. See section 4.2.
+- Do not use `Console.WriteLine`. Get `ILogger<T>` from the container.
+- Write each log message with the `[LoggerMessage]` attribute. It makes the
+  code, it makes no garbage, and it does no work if the level is off.
+- The console output goes to the journal of systemd on the Raspberry Pi. On
+  Windows a WinExe has no console, thus the debug output is the one that you
+  see in the IDE.
+
 ---
 
 ## 4. Target hardware

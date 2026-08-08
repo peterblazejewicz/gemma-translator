@@ -134,6 +134,13 @@ event
 mcp
 wpf
 xpf
+mvvm
+# injection - part of "dependency injection", the name of the pattern.
+injection
+# service - a part of the software that the container supplies. It is also the
+#           systemd word for a unit. The dictionary approves "servicing" only,
+#           which has a different meaning (maintenance work).
+service
 
 # --- Git and process terms ---
 repository
