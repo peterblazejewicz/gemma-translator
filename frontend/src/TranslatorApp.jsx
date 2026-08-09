@@ -23,11 +23,7 @@ import LanguageLane from "./components/LanguageLane"
 import ResponseDrawer from "./components/ResponseDrawer"
 import Visualizer from "./components/Visualizer"
 import { useAudioRecorder } from "./hooks/useAudioRecorder"
-import {
-  transcribeAudio,
-  translateText,
-  splitTextIntoSpeechChunks,
-} from "./utils/api"
+import { transcribeAudio, splitTextIntoSpeechChunks } from "./utils/api"
 import { playBlip } from "./utils/audio-blip"
 
 // Core orchestrator for the two-person kiosk translator.
@@ -91,6 +87,10 @@ function TranslatorApp({ config }) {
 
   // Speak text via /api/tts, splitting into ~180-char chunks and chaining
   // playback so long translations don't overflow a single TTS request.
+  //
+  // Nothing calls this right now: translation moved to C# and TTS ran on its
+  // output. Text-to-speech has no C# replacement yet, so CLAUDE.md section 5.3
+  // says the upstream code stays until that slice lands. Do not delete it.
   const playTTS = useCallback(
     (text, targetLang) => {
       if (!text) return
@@ -222,19 +222,17 @@ function TranslatorApp({ config }) {
         return
       }
 
-      // 2. Translation
-      const result = await translateText(transcribedText, {
-        ...config,
-        modelName: config.modelName,
-        systemPrompt: `You are a high-performance translator. Your task is to translate text from ${src.name.split(" ")[0]} into ${dst.name.split(" ")[0]}.\nYou MUST format your response as a valid JSON object matching this structure:\n{\n  "translation": "High-quality, natural translation into ${dst.name.split(" ")[0]}"\n}\nDo NOT return anything else except this JSON object. No Markdown block wraps (no \`\`\`json), no introductory text, no conversational text. Start directly with "{" and end directly with "}".`,
-      })
-
-      setTranslationData((prev) => ({ ...prev, text: result.translation }))
-      setMetaText(`Duration: ${result.duration}s | Tokens: ${result.tokens}`)
-
-      if (config.enableTts) {
-        playTTS(result.translation, dst.ttsLang)
-      }
+      // 2. Translation — moved to C#.
+      //
+      // GemmaTranslator.Services.LiteRtTranslator does this step now, and it
+      // owns the system prompt. This React path keeps speech-to-text only
+      // until the audio and STT slices move too, and then this whole file is
+      // deleted.
+      setTranslationData((prev) => ({
+        ...prev,
+        text: "(Translation moved to the C# software)",
+      }))
+      setMetaText("")
     } catch (err) {
       console.error(err)
       setTranscriptionData((prev) => ({

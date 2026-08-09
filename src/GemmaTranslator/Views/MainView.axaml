@@ -19,14 +19,14 @@
 -->
 
 <UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:GemmaTranslator.ViewModels"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="GemmaTranslator.Views.MainView"
              x:DataType="vm:MainViewModel"
              d:DesignWidth="1280"
              d:DesignHeight="720"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d">
 
   <!--
@@ -50,20 +50,63 @@
 
   <Grid RowDefinitions="*,135,63" Background="#000000">
 
-    <!-- The response area. Upstream calls this the ResponseDrawer. It shows
-         the text that the microphone heard and the translation of it. -->
-    <Grid Grid.Row="0" Background="#111114">
-      <StackPanel VerticalAlignment="Center"
-                  HorizontalAlignment="Center"
-                  Spacing="18">
-        <TextBlock Text="こんにちは"
-                   FontSize="44"
-                   HorizontalAlignment="Center" />
-        <TextBlock Text="Hello"
-                   FontSize="44"
-                   Opacity="0.55"
-                   HorizontalAlignment="Center" />
-      </StackPanel>
+    <!-- The response area, which upstream calls the ResponseDrawer.
+         The text scrolls and the button has its own row, because the model has
+         no limit on the quantity of tokens. A long answer must not move the
+         button off the display: the appliance has no keyboard that can then
+         correct the condition. -->
+    <Grid Grid.Row="0" Background="#111114" RowDefinitions="*,Auto,Auto">
+
+      <ScrollViewer Grid.Row="0"
+                    VerticalScrollBarVisibility="Auto"
+                    Margin="40,16">
+        <StackPanel VerticalAlignment="Center"
+                    HorizontalAlignment="Center"
+                    Spacing="18">
+
+          <!-- What the person said. The microphone does not operate, thus the
+               view model puts a constant example here. -->
+          <TextBlock Text="{Binding SourceText}"
+                     FontSize="36"
+                     Opacity="0.55"
+                     TextWrapping="Wrap"
+                     TextAlignment="Center"
+                     HorizontalAlignment="Center" />
+
+          <!-- The translation, which the LiteRT-LM server makes. -->
+          <TextBlock Text="{Binding TranslatedText}"
+                     FontSize="44"
+                     TextWrapping="Wrap"
+                     TextAlignment="Center"
+                     HorizontalAlignment="Center" />
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- CAUTION: this button is temporary and the audio slice replaces it.
+           But the dimension is not temporary. The panel gives 11.6 pixels for
+           one millimetre (1280 pixels on 110.4 mm, datasheet page 3), and a
+           finger needs 9 mm. Thus 105 pixels is the minimum for each control
+           that a person touches. The control that comes after this button
+           must keep this number. -->
+      <Button Grid.Row="1"
+              Content="Translate"
+              Command="{Binding TranslateCommand}"
+              MinHeight="105"
+              MinWidth="260"
+              FontSize="18"
+              HorizontalAlignment="Center" />
+
+      <!-- The status line shows an error. It must wrap: a message can be long,
+           and one line goes off the two sides of the display. -->
+      <TextBlock Grid.Row="2"
+                 Text="{Binding StatusText}"
+                 FontSize="14"
+                 Opacity="0.45"
+                 TextWrapping="Wrap"
+                 MaxLines="3"
+                 TextAlignment="Center"
+                 Margin="40,10,40,14"
+                 HorizontalAlignment="Center" />
 
       <!-- The attribution that the Moonshine licence conditions make
            necessary. It is a fixed part of the layout, not a late addition. -->

@@ -26,6 +26,9 @@ namespace GemmaTranslator;
 /// part and the translation part use this code.
 /// </param>
 /// <param name="Name">The name that the display shows.</param>
+/// <param name="PromptName">
+/// The name of the language in the message to the model, in English.
+/// </param>
 /// <param name="TtsLanguage">
 /// The Moonshine language code for the text-to-speech part, for example
 /// <c>ja-jp</c>. It is not the same as <paramref name="Code"/>.
@@ -34,9 +37,17 @@ namespace GemmaTranslator;
 /// The Moonshine voice, or <c>null</c> to use the default voice of the
 /// language.
 /// </param>
+/// <remarks>
+/// CAUTION: <paramref name="Name"/> and <paramref name="PromptName"/> hold the
+/// same text now, and they are two different tasks. The display can show
+/// <c>日本語</c> subsequently. The model must continue to read
+/// <c>Japanese</c>. One field for the two tasks makes a change to the display
+/// change the answer of the model, and no error occurs.
+/// </remarks>
 public sealed record Language(
     string Code,
     string Name,
+    string PromptName,
     string TtsLanguage,
     string? TtsVoice = null);
 
@@ -63,15 +74,15 @@ public static class Languages
     /// </summary>
     public static IReadOnlyList<Language> All { get; } =
     [
-        new Language("ar", "Arabic", "ar-msa"),
-        new Language("en", "English", "en-us"),
-        new Language("es", "Spanish", "es-es"),
-        new Language("ja", "Japanese", "ja-jp"),
+        new Language("ar", "Arabic", "Arabic", "ar-msa"),
+        new Language("en", "English", "English", "en-us"),
+        new Language("es", "Spanish", "Spanish", "es-es"),
+        new Language("ja", "Japanese", "Japanese", "ja-jp"),
 
         // Upstream gives Chinese a voice that is not the default one.
-        new Language("zh", "Chinese", "zh-hans", "kokoro_zf_xiaoxiao"),
+        new Language("zh", "Chinese", "Chinese", "zh-hans", "kokoro_zf_xiaoxiao"),
 
-        new Language("ko", "Korean", "ko-kr"),
+        new Language("ko", "Korean", "Korean", "ko-kr"),
     ];
 
     /// <summary>

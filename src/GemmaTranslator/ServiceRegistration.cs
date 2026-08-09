@@ -17,6 +17,7 @@
 // been modified.
 
 using GemmaTranslator.Configuration;
+using GemmaTranslator.Services;
 using GemmaTranslator.ViewModels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,17 +41,9 @@ public static class ServiceRegistration
     /// Reads the settings of the software.
     /// </summary>
     /// <remarks>
-    /// <para>
     /// The base path is <see cref="AppContext.BaseDirectory"/> and not the
     /// current directory. systemd starts the software with a current directory
-    /// of <c>/</c>, thus the current directory finds no file.
-    /// </para>
-    /// <para>
-    /// The file is optional, and thus the software starts with no file. The
-    /// environment comes after the file and can change each value. A variable
-    /// has the prefix <c>GEMMA_</c>, for example
-    /// <c>GEMMA_Logging__LogLevel__Default</c>.
-    /// </para>
+    /// of <c>/</c>, where there is no file.
     /// </remarks>
     /// <returns>The settings.</returns>
     public static IConfiguration BuildConfiguration()
@@ -77,29 +70,57 @@ public static class ServiceRegistration
 
         services.AddLogging(logging =>
         {
-            // The levels come from the "Logging" section of appsettings.json.
             logging.AddConfiguration(configuration.GetSection("Logging"));
 
-            // The Raspberry Pi gets the console, which systemd puts in the
-            // journal. Windows gets the debug output, because a WinExe has no
-            // console and the console lines go to no location.
+            // Two providers, because the two targets are different. systemd
+            // puts the console in the journal. A WinExe has no console, thus
+            // Windows needs the debug output.
             logging.AddConsole();
             logging.AddDebug();
         });
 
-        // The settings of the LiteRT-LM server. The values come from the
-        // "LiteRt" section, and the validator examines them.
         services.AddOptions<LiteRtOptions>()
             .Bind(configuration.GetSection(LiteRtOptions.SectionName));
 
         services.AddSingleton<IValidateOptions<LiteRtOptions>, LiteRtOptionsValidator>();
 
+        // CAUTION: MainViewModel is a singleton and it keeps this client for
+        // the life of the process. Thus the handler never rotates, and the
+        // lifetime is infinite on purpose. With the default of 2 minutes the
+        // factory puts each expired handler in a queue and wakes a timer every
+        // 10 seconds to collect it. The handler is not collectable while the
+        // singleton holds the client, so that timer never stops. The appliance
+        // operates for days on a battery.
+        //
+        // One endpoint on the local machine has no DNS that can change, thus
+        // one handler for the life of the process is correct here.
+        services.AddHttpClient<ITranslator, LiteRtTranslator>((provider, client) =>
+        {
+            LiteRtOptions options = provider
+                .GetRequiredService<IOptions<LiteRtOptions>>().Value;
+
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+
+            // The body of an answer goes to the log. 2 GB is the default, and
+            // the Raspberry Pi has 8 GB with Gemma already in it.
+            client.MaxResponseContentBufferSize = 1024 * 1024;
+        })
+            .SetHandlerLifetime(Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                // An OpenAI endpoint does not redirect. With the default,
+                // status 307 sends the text that the person spoke to a machine
+                // that the operator did not select. A test on 2026-08-09 shows
+                // that .NET removes the Authorization header on a redirect but
+                // sends the body.
+                AllowAutoRedirect = false,
+            });
+
         // The view models.
         services.AddSingleton<MainViewModel>();
 
-        // The parts that touch the hardware and the machine come later: the
-        // audio capture, the speech-to-text part, the translation part, and
-        // the text-to-speech part.
+        // The parts that touch the hardware come later: the audio capture, the
+        // speech-to-text part, and the text-to-speech part.
         //
         // Each one gets an interface, because Windows and the Raspberry Pi get
         // different code and a different native library. See section 5.2 of

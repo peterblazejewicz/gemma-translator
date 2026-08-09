@@ -22,18 +22,9 @@ namespace GemmaTranslator.Configuration;
 /// The settings of the LiteRT-LM server, which does the translation.
 /// </summary>
 /// <remarks>
-/// <para>
-/// These three values are the three text fields of
-/// <c>SettingsOverlay.jsx</c>, at lines 136, 149, and 163. A person cannot
-/// type in a text field on the appliance, because the display has no keyboard.
-/// Thus the values come from <c>appsettings.json</c> or from the environment.
-/// </para>
-/// <para>
-/// The upstream <c>useProxy</c> value is not here. The browser sent each call
-/// through <c>/proxy</c> in <c>server.py</c> to keep the same origin and to
-/// prevent a CORS result. C# has no browser and no same-origin rule, thus the
-/// software speaks to the endpoint directly and the proxy is not necessary.
-/// </para>
+/// These values are the three text fields of <c>SettingsOverlay.jsx</c>. The
+/// appliance has no keyboard, thus they come from <c>appsettings.json</c> or
+/// from the environment.
 /// </remarks>
 public sealed class LiteRtOptions
 {
@@ -48,12 +39,8 @@ public sealed class LiteRtOptions
     public const string DefaultEndpointUrl = "http://localhost:9379/v1";
 
     /// <summary>
-    /// The address of the LiteRT-LM server.
+    /// The address of the LiteRT-LM server, which speaks the OpenAI protocol.
     /// </summary>
-    /// <remarks>
-    /// The server is OpenAI-compatible. Use <see cref="GetBaseUrl"/> to get
-    /// the address in the correct form.
-    /// </remarks>
     public string EndpointUrl { get; set; } = DefaultEndpointUrl;
 
     /// <summary>
@@ -65,28 +52,37 @@ public sealed class LiteRtOptions
     /// The key for the endpoint, or an empty text if the endpoint needs none.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// CAUTION: this value is a secret. Do not write it in the log.
-    /// </para>
-    /// <para>
-    /// This value is not in <c>appsettings.json</c>, and it must not go there,
-    /// because that file is in the repository. The endpoint is on the same
-    /// machine and usually needs no key. If a key is necessary, give it in the
-    /// environment with <c>GEMMA_LiteRt__ApiKey</c>. The systemd unit can read
-    /// it from a file that the repository does not hold.
-    /// </para>
+    /// CAUTION: this value is a secret. It must not go in
+    /// <c>appsettings.json</c>, because the repository holds that file. Give it
+    /// in <c>GEMMA_LiteRt__ApiKey</c>. Do not write it in the log.
     /// </remarks>
     public string ApiKey { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The maximum time for one translation, in seconds.
+    /// </summary>
+    /// <remarks>
+    /// A Raspberry Pi 5 is slow, and the correct value is not known before the
+    /// hardware is here. Thus the value is a setting and not a constant in the
+    /// code.
+    /// </remarks>
+    public int TimeoutSeconds { get; set; } = 120;
 
     /// <summary>
     /// Gets the address in the form that the API calls need.
     /// </summary>
     /// <remarks>
-    /// This is the C# form of <c>getNormalizedBaseUrl</c> in
-    /// <c>api.js</c>. It removes each slash at the end and puts <c>/v1</c>
-    /// at the end if it is not there. Thus <c>http://localhost:9379</c> and
-    /// <c>http://localhost:9379/v1/</c> give the same result.
+    /// This is the C# form of <c>getNormalizedBaseUrl</c> in <c>api.js</c>. The
+    /// address ends with a slash, thus <see cref="Uri"/> can add a relative
+    /// part to it correctly.
     /// </remarks>
+    /// <returns>The address, which ends with <c>/v1/</c>.</returns>
+    /// <exception cref="UriFormatException">The address is not a full address.</exception>
+    public Uri GetBaseUri() => new(GetBaseUrl() + "/", UriKind.Absolute);
+
+    /// <summary>
+    /// Gets the address as text, with no slash at the end.
+    /// </summary>
     /// <returns>The address, which ends with <c>/v1</c>.</returns>
     public string GetBaseUrl()
     {
@@ -106,4 +102,19 @@ public sealed class LiteRtOptions
 
         return url;
     }
+
+    /// <summary>
+    /// Gets the address in the form that a log line or the display can show.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: use this method, and not <see cref="GetBaseUrl"/>, for each
+    /// message. An address can hold a user and a password
+    /// (<c>http://user:secret@host</c>). This method removes them, and it
+    /// removes a query and a fragment.
+    /// </remarks>
+    /// <returns>The address with no user, no password, and no query.</returns>
+    public string GetSafeDisplayUrl()
+        => Uri.TryCreate(GetBaseUrl(), UriKind.Absolute, out Uri? uri)
+            ? uri.GetLeftPart(UriPartial.Path)
+            : "(the address is not valid)";
 }

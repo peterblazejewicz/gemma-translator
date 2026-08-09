@@ -37,19 +37,43 @@ public sealed class LiteRtOptionsValidator : IValidateOptions<LiteRtOptions>
 
         List<string> failures = [];
 
-        string baseUrl = options.GetBaseUrl();
+        // CAUTION: no message here shows options.EndpointUrl. That value can
+        // hold a password, and a failure message goes to the log.
+        const string endpointName =
+            $"{LiteRtOptions.SectionName}:{nameof(LiteRtOptions.EndpointUrl)}";
 
-        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out Uri? uri))
+        if (!Uri.TryCreate(options.GetBaseUrl(), UriKind.Absolute, out Uri? uri))
         {
-            failures.Add(
-                $"{LiteRtOptions.SectionName}:{nameof(LiteRtOptions.EndpointUrl)} " +
-                $"is not a full address. The value is \"{options.EndpointUrl}\".");
+            failures.Add($"{endpointName} is not a full address.");
         }
-        else if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+        else
         {
-            failures.Add(
-                $"{LiteRtOptions.SectionName}:{nameof(LiteRtOptions.EndpointUrl)} " +
-                $"must start with http or https. The value is \"{options.EndpointUrl}\".");
+            if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            {
+                failures.Add(
+                    $"{endpointName} must start with http or https. " +
+                    $"The scheme is \"{uri.Scheme}\".");
+            }
+
+            if (uri.UserInfo.Length != 0)
+            {
+                failures.Add(
+                    $"{endpointName} must hold no user and no password. " +
+                    $"Give the key in GEMMA_{LiteRtOptions.SectionName}__{nameof(LiteRtOptions.ApiKey)}.");
+            }
+
+            // A key on a cleartext connection to a different machine goes
+            // through the network where a person can read it. The appliance
+            // speaks to the local machine, thus this permits the usual
+            // condition and stops the dangerous one.
+            if (uri.Scheme == Uri.UriSchemeHttp
+                && !uri.IsLoopback
+                && options.ApiKey.Trim().Length != 0)
+            {
+                failures.Add(
+                    $"{endpointName} must use https, because the host is not the " +
+                    "local machine and a key is supplied.");
+            }
         }
 
         if (string.IsNullOrWhiteSpace(options.ModelName))
@@ -57,6 +81,13 @@ public sealed class LiteRtOptionsValidator : IValidateOptions<LiteRtOptions>
             failures.Add(
                 $"{LiteRtOptions.SectionName}:{nameof(LiteRtOptions.ModelName)} " +
                 "is empty. Give the name of the model, for example \"gemma4-e2b\".");
+        }
+
+        if (options.TimeoutSeconds is < 1 or > 600)
+        {
+            failures.Add(
+                $"{LiteRtOptions.SectionName}:{nameof(LiteRtOptions.TimeoutSeconds)} " +
+                $"must be 1 to 600. The value is {options.TimeoutSeconds}.");
         }
 
         return failures.Count == 0

@@ -21,42 +21,24 @@
 import React, { useState, useEffect } from "react"
 import TranslatorApp from "./TranslatorApp"
 import SettingsOverlay from "./components/SettingsOverlay"
-import { testConnectionAPI } from "./utils/api"
 
 // App shell: owns the global config (keyboardMode and themeColor persist in
 // localStorage), the settings overlay, and applies the theme by overriding
 // the --bg-black CSS variable.
 function App() {
-  // Global configuration
+  // Global configuration.
+  //
+  // endpointUrl, modelName, apiKey, useProxy and systemPrompt are gone: the
+  // C# LiteRtOptions holds them now, read from appsettings.json and the
+  // GEMMA_ environment variables. The connectivity probe went with them.
   const [config, setConfig] = useState({
-    endpointUrl: "http://localhost:9379/v1",
-    modelName: "gemma4-e2b",
-    apiKey: "",
     keyboardMode: localStorage.getItem("keyboardMode") || "landscape",
-    useProxy: true,
     enableTts: true,
     visualizerBars: 16,
-    systemPrompt: "Translator mode",
     themeColor: localStorage.getItem("themeColor") || "#ffa500",
   })
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-
-  const testConnection = async () => {
-    try {
-      await testConnectionAPI(
-        config.endpointUrl,
-        config.useProxy,
-        config.apiKey,
-      )
-    } catch (err) {
-      // Ignored: API test failure
-    }
-  }
-
-  useEffect(() => {
-    testConnection()
-  }, [])
 
   useEffect(() => {
     localStorage.setItem("keyboardMode", config.keyboardMode)

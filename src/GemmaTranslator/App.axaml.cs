@@ -66,7 +66,9 @@ public partial class App : Application
         // argument list of a log method, because the call operates also if the
         // level is off.
         ILogger<App> logger = provider.GetRequiredService<ILogger<App>>();
-        string endpoint = liteRt.GetBaseUrl();
+
+        // The safe form, because an address can hold a user and a password.
+        string endpoint = liteRt.GetSafeDisplayUrl();
         bool hasApiKey = liteRt.ApiKey.Length != 0;
 
         LogSettings(logger, endpoint, liteRt.ModelName, hasApiKey);
