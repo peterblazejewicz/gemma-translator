@@ -551,6 +551,14 @@ Write all prose in ASD-STE100 Simplified Technical English. This applies to:
 
 Do not apply STE to code, identifiers, command names, or log strings.
 
+**A comment on a security control is also not STE.** Write it in plain
+English. A control that stops an attack must say so in words that no person
+can misread: what it stops, what occurs without it, and that a person must not
+remove it. STE vocabulary makes such a comment vague, and a vague comment on a
+security control gets deleted by the next person who makes the code more
+simple. Example: `Configuration/LiteRtOptionsValidator.cs`, the test of
+`IsLoopback`.
+
 Obey this procedure:
 
 1. Use the `asd-ste100-dictionary` skill before you write prose.

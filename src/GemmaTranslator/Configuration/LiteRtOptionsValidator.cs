@@ -55,13 +55,22 @@ public sealed class LiteRtOptionsValidator : IValidateOptions<LiteRtOptions>
                     $"The scheme is \"{uri.Scheme}\".");
             }
 
-            // The server operates on the same machine. Upstream makes the same
-            // limit at `server.py:135`, where /proxy refuses each target that
-            // is not `localhost:9379`. Thus the software cannot send the
-            // speech of a person to a different machine, and no address in a
-            // file or in the environment can make it do that.
+            // SECURITY CONTROL. This is not a convenience check, and it is not
+            // a style preference. Do not weaken it into a warning, and do not
+            // add a setting that turns it off, without a decision from the
+            // owner of the project.
             //
-            // Uri.IsLoopback agrees for localhost, 127.0.0.1, and ::1.
+            // What it stops: this appliance records what people say and sends
+            // that text to the endpoint below. Without this check, anybody who
+            // can edit appsettings.json or set GEMMA_LiteRt__EndpointUrl can
+            // point the software at a machine they own, and every translated
+            // sentence goes to them. That is data exfiltration by
+            // configuration, and nothing on the display would show it.
+            //
+            // Upstream draws the same boundary at server.py:135, where /proxy
+            // rejects any target that is not localhost:9379.
+            //
+            // Uri.IsLoopback matches localhost, 127.0.0.1 and ::1.
             if (!uri.IsLoopback)
             {
                 failures.Add(
