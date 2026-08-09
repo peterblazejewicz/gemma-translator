@@ -614,3 +614,41 @@ Related files:
 | `CODEOWNERS` | The owners of this fork, and not the upstream maintainers. |
 | `CONTRIBUTING.md` | The procedure of this fork. The Google CLA does not apply. |
 
+---
+
+## 11. Comments
+
+**IMPORTANT: the upstream code has few comments. Do not make the ported code
+more dense.** Section 5.3 says that the move removes as much as it adds. A
+block of comments on each line breaks that rule, and it makes the repository
+read in two voices.
+
+Use the CUPID properties to make the decision. See section 5.1.
+
+**Remove a comment that:**
+
+- Tells .NET, C#, or Avalonia to a person who writes .NET. That person knows
+  the ecosystem. A comment that explains `AddHttpClient` or `[ObservableProperty]`
+  is not idiomatic, because it does not trust its reader.
+- Says again what the line below it says. This makes a second source of truth,
+  and the two then disagree. A comment of this class was **already incorrect**
+  before the first commit: it said that `IHttpClientFactory` controls the life
+  of the handler, and a singleton view model made that false.
+
+**Keep a comment that records what the code cannot show:**
+
+- A measured property of a machine that is not ours, with the date of the test.
+  Example: the server reads `Content-Length` only. You cannot see this in the
+  code, and the code looks incorrect without it.
+- A decision, its cost, and what it stops. Example: the lifetime of the handler
+  is infinite on purpose.
+- A trap that looks like a defect and is not.
+- A number that a person computed. Example: 105 pixels is 9 mm on this panel.
+
+The test: **remove the comment. If a competent .NET developer can then get the
+same knowledge from the code, the comment was noise. If that knowledge is gone,
+keep the comment.**
+
+An XML documentation comment on a public member is idiomatic .NET, thus
+`<summary>` stays. But a `<remarks>` block of ten lines is usually prose that
+belongs in a document, and not beside the code.
