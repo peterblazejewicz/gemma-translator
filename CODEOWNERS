@@ -1,1 +1,8 @@
-*       @alanvww @dmotz
+# The owners of the code in this fork.
+#
+# CAUTION: this is not the upstream file. The upstream file names the
+# maintainers of google-gemma/gemma-translator (@alanvww and @dmotz). Those
+# persons do not do the work in this fork, thus a request for a review must
+# not go to them.
+
+*       @peterblazejewicz

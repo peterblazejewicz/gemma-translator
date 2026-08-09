@@ -1,34 +1,63 @@
 # How to contribute
 
-We'd love to accept your patches and contributions to this project.
+This repository is a fork of
+[google-gemma/gemma-translator](https://github.com/google-gemma/gemma-translator).
+It moves the software from Python and React to C# on .NET with Avalonia UI.
 
-## Before you begin
+## CAUTION: this is not the upstream procedure
 
-### Sign our Contributor License Agreement
+The upstream project belongs to Google LLC. It has a Contributor License
+Agreement (CLA) and the Google open-source community guidelines. **This fork
+has no CLA and no such guidelines.** Do not sign a Google CLA for a change to
+this repository. A change here does not go to the upstream project.
 
-Contributions to this project must be accompanied by a
-[Contributor License Agreement](https://cla.developers.google.com/about) (CLA).
-You (or your employer) retain the copyright to your contribution; this simply
-gives us permission to use and redistribute your contributions as part of the
-project.
+If your change is for the Python software or for the React user interface, send
+it to the upstream project and obey the procedure of that project.
 
-If you or your current employer have already signed the Google CLA (even if it
-was for a different project), you probably don't need to do it again.
+## The licence of your contribution
 
-Visit <https://cla.developers.google.com/> to see your current agreements or to
-sign a new one.
+This repository stays under the Apache License, Version 2.0. See `LICENSE`.
 
-### Review our community guidelines
+You keep the copyright of your work. When you send a pull request, you agree
+that your work goes into this repository under Apache 2.0. Add your name to the
+copyright lines of each file that you make.
 
-This project follows
-[Google's Open Source Community Guidelines](https://opensource.google/conduct/).
+Each source file gets this header:
 
-## Contribution process
+```csharp
+// Copyright 2026 Google LLC
+// Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// ... (the full Apache 2.0 text)
+//
+// This file is part of a fork of google-gemma/gemma-translator and has
+// been modified.
+```
 
-### Code reviews
+The Google line stays because this fork is a derivative work of the upstream
+project. Section 4(c) of the licence makes this necessary. See `NOTICE`.
 
-All submissions, including submissions by project members, require review. We
-use GitHub pull requests for this purpose. Consult
-[GitHub Help](https://help.github.com/articles/about-pull-requests/) for more
-information on using pull requests.
+## Before you write the code
 
+Read `CLAUDE.md`. It holds the rules for all work here, and it is not a
+document for information only. These points give the most trouble to a new
+person:
+
+- All prose obeys ASD-STE100 Simplified Technical English. This applies to a
+  comment, a commit message, and the text of a pull request.
+- This repository has **no test project**, and that is a decision. Use
+  `dotnet build` and then operate the software.
+- C# code **replaces** upstream code in the same change. It does not go on top
+  of it.
+- Use the `avalonia-docs` server before you write Avalonia code.
+
+## The procedure
+
+1. Make your branch from `feat/dotnet-fork`, and not from `main`.
+2. Write the code, and remove the upstream code that it replaces.
+3. `dotnet build` must give no error and no warning.
+4. Operate the software and make sure that your change does what you say.
+5. Send a pull request to `feat/dotnet-fork`.
+
+`main` is a mirror of the upstream project. Do not commit your work to it.

@@ -551,9 +551,42 @@ Korean. The C# code must hold this set in one location only.
 
 ## 10. Licence headers
 
-Each source file in the upstream project has an Apache 2.0 header. This
-repository has a `CODEOWNERS` file and a contributor licence agreement (CLA)
-procedure.
+**IMPORTANT: the rule of this section changed on 2026-08-09. The rule before it said
+to copy the Google header to each new file. That rule was incorrect.** A file
+that you write is not the work of Google, and a Google line alone on it says
+that Google owns it.
 
-Add the same header to each new source file. Copy the text from
-`backend/server.py`, lines 1 to 13.
+This fork stays under the Apache License, Version 2.0. Section 4(c) of that
+licence says to keep each copyright notice of the upstream work in a derivative
+work. It does not say to add the notice of a different person to your work.
+
+The user selected one header for each file on 2026-08-09:
+
+```csharp
+// Copyright 2026 Google LLC
+// Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+//
+// ... the full Apache 2.0 text, 11 lines ...
+//
+// This file is part of a fork of google-gemma/gemma-translator and has
+// been modified.
+```
+
+The two lines go on each file, also on a file that has no upstream equivalent.
+The fork is a derivative work in full. This gives a small quantity of more
+attribution on some files, and it removes each judgement about one file. It
+does not say that your work is the work of Google.
+
+An `.axaml` file gets the same text in an XML comment before the root element.
+
+If a file is a port of one upstream file, add the location to the text, for
+example "It replaces translateText of frontend/src/utils/api.js".
+
+Related files:
+
+| File | Function |
+| --- | --- |
+| `LICENSE` | Apache 2.0. Do not change it. |
+| `NOTICE` | The origin of the fork, what changed, and the third-party parts. |
+| `CODEOWNERS` | The owners of this fork, and not the upstream maintainers. |
+| `CONTRIBUTING.md` | The procedure of this fork. The Google CLA does not apply. |

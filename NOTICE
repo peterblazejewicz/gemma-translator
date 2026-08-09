@@ -1,0 +1,43 @@
+gemma-translator (.NET fork)
+Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+
+This software includes work from Google LLC.
+
+  gemma-translator
+  Copyright 2026 Google LLC
+  https://github.com/google-gemma/gemma-translator
+  Licensed under the Apache License, Version 2.0
+
+--------------------------------------------------------------------------
+What this fork changes
+
+This repository is a fork of google-gemma/gemma-translator. The upstream
+software is a voice translator that operates offline on a Raspberry Pi. It
+uses Gemma for the translation, LiteRT-LM for the inference, and Moonshine
+for the voice.
+
+This fork keeps that function and changes the software that gives it:
+
+  - The core moves from Python to C# on .NET.
+  - The user interface moves from React to Avalonia UI, with the Linux DRM
+    backend and no desktop.
+  - New STL files make a case for different hardware.
+
+Each file that comes from the upstream work keeps the Google copyright line
+and gets a second line for this fork. A file that is new to this fork carries
+the two lines also, because the fork is a derivative work in full.
+
+The licence does not change. This fork stays under the Apache License,
+Version 2.0. See the LICENSE file.
+
+--------------------------------------------------------------------------
+Third-party components
+
+The software calls these components. It does not include their source.
+
+  LiteRT-LM (Google LLC) — Apache License, Version 2.0
+  Gemma model weights (Google LLC) — Apache License, Version 2.0
+  Moonshine (Useful Sensors) — Moonshine Community Licence
+
+The user interface shows "Powered by Moonshine AI", which the Moonshine
+licence conditions make necessary.
