@@ -55,6 +55,19 @@ public sealed class LiteRtOptionsValidator : IValidateOptions<LiteRtOptions>
                     $"The scheme is \"{uri.Scheme}\".");
             }
 
+            // The server operates on the same machine. Upstream makes the same
+            // limit at `server.py:135`, where /proxy refuses each target that
+            // is not `localhost:9379`. Thus the software cannot send the
+            // speech of a person to a different machine, and no address in a
+            // file or in the environment can make it do that.
+            //
+            // Uri.IsLoopback agrees for localhost, 127.0.0.1, and ::1.
+            if (!uri.IsLoopback)
+            {
+                failures.Add(
+                    $"{endpointName} must be on the local machine. " +
+                    "The software speaks to `litert-lm serve` on this machine only.");
+            }
         }
 
         if (string.IsNullOrWhiteSpace(options.ModelName))
