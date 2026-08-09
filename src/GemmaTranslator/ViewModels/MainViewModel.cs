@@ -336,12 +336,52 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
+        SaveForTest(recording);
+
         // The speech-to-text part has no C# replacement, thus the audio stops
         // here. The next slice gives it to Moonshine and puts the text in
         // SourceText.
         StatusText = string.Create(
             CultureInfo.InvariantCulture,
             $"Lane {lane}: {recording.Duration.TotalSeconds:F1} s, level {recording.PeakLevel:F2}. Speech-to-text comes later.");
+    }
+
+    /// <summary>
+    /// Writes the recording to a file, if the settings ask for it.
+    /// </summary>
+    /// <remarks>
+    /// This is for a test of the microphone with real speech. It is off if
+    /// <see cref="AudioOptions.SaveRecordingsTo"/> is empty.
+    /// </remarks>
+    /// <param name="recording">The audio.</param>
+    private void SaveForTest(Recording recording)
+    {
+        string directory = _audioOptions.SaveRecordingsTo?.Trim() ?? string.Empty;
+
+        if (directory.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(directory);
+
+            string name = string.Create(
+                CultureInfo.InvariantCulture,
+                $"recording-{DateTime.Now:yyyyMMdd-HHmmss-fff}.wav");
+
+            string path = Path.Combine(directory, name);
+
+            WavFile.Write(path, recording.Samples, _audioOptions.SampleRate);
+
+            LogRecordingSaved(_logger, path);
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            LogRecordingNotSaved(_logger, directory, exception);
+        }
     }
 
     /// <summary>
@@ -391,4 +431,14 @@ public sealed partial class MainViewModel : ObservableObject
         Level = LogLevel.Error,
         Message = "The microphone did not start.")]
     private static partial void LogCaptureFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The recording is in {path}. This is for a test only.")]
+    private static partial void LogRecordingSaved(ILogger logger, string path);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The software cannot write a recording in {directory}.")]
+    private static partial void LogRecordingNotSaved(ILogger logger, string directory, Exception exception);
 }

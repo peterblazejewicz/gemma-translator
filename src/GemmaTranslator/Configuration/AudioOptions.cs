@@ -57,6 +57,16 @@ public sealed class AudioOptions
     public int SampleRate { get; set; } = 16000;
 
     /// <summary>
+    /// A directory for a WAV file of each recording, or empty for none.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: this writes the speech of a person to the disk. It is for a
+    /// test of the microphone only. Keep it empty on an appliance that a
+    /// customer uses.
+    /// </remarks>
+    public string SaveRecordingsTo { get; set; } = string.Empty;
+
+    /// <summary>
     /// The shortest press that starts a recording, in milliseconds.
     /// </summary>
     /// <remarks>
