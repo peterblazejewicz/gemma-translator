@@ -90,13 +90,6 @@ public sealed partial class EvdevPushToTalk : IPushToTalk
         // level. The argument is for the Windows implementation.
         _ = topLevel;
 
-        if (IntPtr.Size != 8)
-        {
-            // The offsets of input_event are for a 64-bit system. On a 32-bit
-            // image the code would read the wrong bytes and give nonsense.
-            LogNot64Bit(_logger);
-            return;
-        }
 
         string[] devices;
 
@@ -322,8 +315,4 @@ public sealed partial class EvdevPushToTalk : IPushToTalk
         Message = "The software cannot continue to read the button {name}. That button does nothing now.")]
     private static partial void LogReadFailed(ILogger logger, string name, Exception exception);
 
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "This is not a 64-bit system. The buttons do nothing, because the record of an input event has different offsets.")]
-    private static partial void LogNot64Bit(ILogger logger);
 }

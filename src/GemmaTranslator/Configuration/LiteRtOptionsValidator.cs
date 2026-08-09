@@ -55,25 +55,6 @@ public sealed class LiteRtOptionsValidator : IValidateOptions<LiteRtOptions>
                     $"The scheme is \"{uri.Scheme}\".");
             }
 
-            if (uri.UserInfo.Length != 0)
-            {
-                failures.Add(
-                    $"{endpointName} must hold no user and no password. " +
-                    $"Give the key in GEMMA_{LiteRtOptions.SectionName}__{nameof(LiteRtOptions.ApiKey)}.");
-            }
-
-            // A key on a cleartext connection to a different machine goes
-            // through the network where a person can read it. The appliance
-            // speaks to the local machine, thus this permits the usual
-            // condition and stops the dangerous one.
-            if (uri.Scheme == Uri.UriSchemeHttp
-                && !uri.IsLoopback
-                && options.ApiKey.Trim().Length != 0)
-            {
-                failures.Add(
-                    $"{endpointName} must use https, because the host is not the " +
-                    "local machine and a key is supplied.");
-            }
         }
 
         if (string.IsNullOrWhiteSpace(options.ModelName))

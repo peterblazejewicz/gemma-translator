@@ -103,18 +103,4 @@ public sealed class LiteRtOptions
         return url;
     }
 
-    /// <summary>
-    /// Gets the address in the form that a log line or the display can show.
-    /// </summary>
-    /// <remarks>
-    /// CAUTION: use this method, and not <see cref="GetBaseUrl"/>, for each
-    /// message. An address can hold a user and a password
-    /// (<c>http://user:secret@host</c>). This method removes them, and it
-    /// removes a query and a fragment.
-    /// </remarks>
-    /// <returns>The address with no user, no password, and no query.</returns>
-    public string GetSafeDisplayUrl()
-        => Uri.TryCreate(GetBaseUrl(), UriKind.Absolute, out Uri? uri)
-            ? uri.GetLeftPart(UriPartial.Path)
-            : "(the address is not valid)";
 }

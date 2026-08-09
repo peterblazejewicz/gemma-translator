@@ -41,16 +41,16 @@ internal static class JsonEnvelopePrompt
     /// <param name="source">The language of the person who spoke.</param>
     /// <param name="target">The language of the other person.</param>
     /// <returns>The text of the system message.</returns>
+    // Two dollar signs make the interpolation {{ }}, thus a single brace is a
+    // literal brace. The message shows JSON to the model.
     public static string Make(Language source, Language target)
         => string.Create(
             CultureInfo.InvariantCulture,
-            // Two dollar signs make the interpolation {{ }}, thus a single
-            // brace is a literal brace. The message shows JSON to the model.
             $$"""
-              You are a high-performance translator. Your task is to translate text from {{source.PromptName}} into {{target.PromptName}}.
+              You are a high-performance translator. Your task is to translate text from {{source.Name}} into {{target.Name}}.
               You MUST format your response as a valid JSON object matching this structure:
               {
-                "translation": "High-quality, natural translation into {{target.PromptName}}"
+                "translation": "High-quality, natural translation into {{target.Name}}"
               }
               Do NOT return anything else except this JSON object. No Markdown block wraps (no ```json), no introductory text, no conversational text. Start directly with "{" and end directly with "}".
               """);

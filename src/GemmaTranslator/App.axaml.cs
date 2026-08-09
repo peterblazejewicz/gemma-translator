@@ -16,12 +16,10 @@
 // This file is part of a fork of google-gemma/gemma-translator and has
 // been modified.
 
-using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using GemmaTranslator.Configuration;
-using GemmaTranslator.Fonts;
 using GemmaTranslator.Services;
 using GemmaTranslator.ViewModels;
 using GemmaTranslator.Views;
@@ -37,9 +35,6 @@ namespace GemmaTranslator;
 /// </summary>
 public partial class App : Application
 {
-    // A static field, because the registration must not go away.
-    private static PosixSignalRegistration? _stopSignal;
-
     /// <inheritdoc/>
     public override void Initialize()
     {
@@ -77,16 +72,9 @@ public partial class App : Application
         // level is off.
         ILogger<App> logger = provider.GetRequiredService<ILogger<App>>();
 
-        // The safe form, because an address can hold a user and a password.
-        string endpoint = liteRt.GetSafeDisplayUrl();
         bool hasApiKey = liteRt.ApiKey.Length != 0;
 
-        LogSettings(logger, endpoint, liteRt.ModelName, hasApiKey);
-
-        // The fonts are the largest risk at the start on Raspberry Pi OS Lite.
-        // This line puts the condition of each font in the journal, because
-        // the appliance has no console. See Fonts/FontCheck.cs.
-        FontCheck.Run(logger);
+        LogSettings(logger, liteRt.ModelName, hasApiKey);
 
         // Open the microphone before the first press. A test measured 1.22 s
         // from the start of the device to the first sample with a Jabra
@@ -137,12 +125,6 @@ public partial class App : Application
             // The Raspberry Pi reads /dev/input, thus it needs no top level.
             provider.GetRequiredService<IPushToTalk>().Start(null);
 
-            // The Raspberry Pi has no exit of the application. systemd sends
-            // SIGTERM, thus this is the one location that can stop the
-            // microphone in an orderly manner.
-            _stopSignal = PosixSignalRegistration.Create(
-                PosixSignal.SIGTERM,
-                _ => provider.Dispose());
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -156,17 +138,12 @@ public partial class App : Application
     /// there. Do not put the key in the message.
     /// </remarks>
     /// <param name="logger">The logger.</param>
-    /// <param name="endpoint">The address of the server.</param>
     /// <param name="model">The name of the model.</param>
     /// <param name="hasApiKey">True if a key is supplied.</param>
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The LiteRT-LM endpoint is {endpoint} and the model is {model}. A key is supplied: {hasApiKey}.")]
-    private static partial void LogSettings(
-        ILogger logger,
-        string endpoint,
-        string model,
-        bool hasApiKey);
+        Message = "The model is {model}. A key is supplied: {hasApiKey}.")]
+    private static partial void LogSettings(ILogger logger, string model, bool hasApiKey);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

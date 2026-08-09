@@ -95,14 +95,7 @@ internal sealed record TranslationEnvelope(
 /// a naming policy here. The names are the names of a protocol that is not
 /// ours, thus a change to a C# name must not change the message.
 /// </para>
-/// <para>
-/// A model does not always obey the letters of a name, thus the comparison
-/// ignores the case. Upstream reads <c>parsed.translation</c> and gets nothing
-/// from <c>Translation</c>. This is one defect of upstream that the port does
-/// not copy.
-/// </para>
 /// </remarks>
-[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(ChatCompletionRequest))]
 [JsonSerializable(typeof(ChatCompletionResponse))]
 [JsonSerializable(typeof(TranslationEnvelope))]

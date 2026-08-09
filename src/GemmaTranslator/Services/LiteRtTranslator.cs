@@ -76,9 +76,6 @@ public sealed partial class LiteRtTranslator : ITranslator
 
         Uri url = new(_options.GetBaseUri(), "chat/completions");
 
-        // The address can hold a password. Each message uses the safe form.
-        string safeUrl = _options.GetSafeDisplayUrl();
-
         ChatCompletionRequest body = new(
             _options.ModelName,
             [
@@ -119,14 +116,14 @@ public sealed partial class LiteRtTranslator : ITranslator
         }
         catch (HttpRequestException exception)
         {
-            LogNoServer(_logger, safeUrl, exception);
+            LogNoServer(_logger, url.AbsoluteUri, exception);
             throw new TranslationException(
                 "The translation server did not answer.",
                 exception);
         }
         catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
-            LogTooSlow(_logger, safeUrl, _options.TimeoutSeconds, exception);
+            LogTooSlow(_logger, url.AbsoluteUri, _options.TimeoutSeconds, exception);
             throw new TranslationException(
                 "The translation server took too much time.",
                 exception);
@@ -144,7 +141,7 @@ public sealed partial class LiteRtTranslator : ITranslator
                 // The body goes to the log and not to the display. The person
                 // at the appliance cannot act on a Python traceback, and the
                 // text comes from a machine that we do not control.
-                LogBadStatus(_logger, status, safeUrl, errorBody);
+                LogBadStatus(_logger, status, url.AbsoluteUri, errorBody);
 
                 throw new TranslationException(
                     $"The translation server gave status {status}.");
@@ -167,7 +164,7 @@ public sealed partial class LiteRtTranslator : ITranslator
                 // InvalidOperationException comes from a character set in
                 // `Content-Type` that .NET does not know. One header of that
                 // shape stopped the software before this catch was here.
-                LogBadJson(_logger, safeUrl, exception);
+                LogBadJson(_logger, url.AbsoluteUri, exception);
                 throw new TranslationException(
                     "The translation server sent a body that is not JSON.",
                     exception);
@@ -185,7 +182,7 @@ public sealed partial class LiteRtTranslator : ITranslator
             // appliance then told the person that the operation was correct.
             if (string.IsNullOrWhiteSpace(modelText))
             {
-                LogNoAnswer(_logger, safeUrl);
+                LogNoAnswer(_logger, url.AbsoluteUri);
                 throw new TranslationException(
                     "The translation server gave an answer with no text.");
             }
@@ -198,7 +195,7 @@ public sealed partial class LiteRtTranslator : ITranslator
                 translation = modelText;
             }
 
-            int? tokens = completion?.Usage?.TotalTokens;
+            int tokens = completion?.Usage?.TotalTokens ?? 0;
 
             LogTranslated(_logger, source.Code, target.Code, duration.TotalSeconds, tokens);
 
@@ -242,7 +239,7 @@ public sealed partial class LiteRtTranslator : ITranslator
         string source,
         string target,
         double seconds,
-        int? tokens);
+        int tokens);
 
     [LoggerMessage(
         Level = LogLevel.Error,

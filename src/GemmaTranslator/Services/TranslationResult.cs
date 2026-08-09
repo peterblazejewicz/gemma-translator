@@ -24,16 +24,11 @@ namespace GemmaTranslator.Services;
 /// <param name="Translation">The text in the language of the other person.</param>
 /// <param name="Duration">The time that the call to the server took.</param>
 /// <param name="TotalTokens">
-/// The quantity of tokens that the model used, or <c>null</c> if the server
-/// sends no count.
+/// The quantity of tokens that the model used, or 0 if the server sends no
+/// count. `litert-lm serve` sends no <c>usage</c> object, thus it is 0 today.
+/// Upstream does the same at <c>api.js:149</c>.
 /// </param>
-/// <remarks>
-/// <c>null</c> and 0 are not the same. `litert-lm serve` sends no
-/// <c>usage</c> object, thus the value is always <c>null</c> today. A server
-/// that sends 0 said 0. Upstream cannot see this difference, because
-/// <c>api.js:149</c> makes each absent count a 0.
-/// </remarks>
 public sealed record TranslationResult(
     string Translation,
     TimeSpan Duration,
-    int? TotalTokens);
+    int TotalTokens);

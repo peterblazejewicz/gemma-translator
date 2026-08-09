@@ -193,19 +193,9 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
     /// </remarks>
     private void OpenDevice()
     {
-        // A device that is here and does not run is a device that went away.
-        // Each recording then gives 0 samples with no error.
-        if (_device is { IsRunning: true })
-        {
-            return;
-        }
-
         if (_device is not null)
         {
-            LogDeviceStopped(_logger);
-            AudioCaptureDevice old = _device;
-            _device = null;
-            CloseDevice(old);
+            return;
         }
 
         try
@@ -419,10 +409,6 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         Message = "The microphone did not open.")]
     private static partial void LogNoMicrophone(ILogger logger, Exception exception);
 
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "The microphone stopped. A person can have disconnected it.")]
-    private static partial void LogDeviceStopped(ILogger logger);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

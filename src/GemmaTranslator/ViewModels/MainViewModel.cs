@@ -204,10 +204,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// command, because the audio does not go to the translation until the
     /// speech-to-text slice.
     /// </remarks>
-    /// <param name="cancellationToken">Stops the translation.</param>
     /// <returns>The task of the operation.</returns>
-    [RelayCommand(IncludeCancelCommand = true, CanExecute = nameof(IsNotRecording))]
-    private async Task TranslateAsync(CancellationToken cancellationToken)
+    [RelayCommand(CanExecute = nameof(IsNotRecording))]
+    private async Task TranslateAsync()
     {
         if (string.IsNullOrWhiteSpace(SourceText))
         {
@@ -224,16 +223,11 @@ public sealed partial class MainViewModel : ObservableObject
         try
         {
             TranslationResult result = await _translator
-                .TranslateAsync(SourceText, Lane2Language, Lane1Language, cancellationToken)
+                .TranslateAsync(SourceText, Lane2Language, Lane1Language)
                 .ConfigureAwait(true);
 
             TranslatedText = result.Translation;
             StatusText = MakeStatus(result);
-        }
-        catch (OperationCanceledException)
-        {
-            TranslatedText = string.Empty;
-            StatusText = "(Stopped)";
         }
         catch (TranslationException exception)
         {
@@ -453,13 +447,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// <param name="result">The result of the translation.</param>
     /// <returns>The text for <see cref="StatusText"/>.</returns>
     private static string MakeStatus(TranslationResult result)
-        => result.TotalTokens is int tokens
-            ? string.Create(
-                CultureInfo.InvariantCulture,
-                $"Duration: {result.Duration.TotalSeconds:F2}s | Tokens: {tokens}")
-            : string.Create(
-                CultureInfo.InvariantCulture,
-                $"Duration: {result.Duration.TotalSeconds:F2}s");
+        => string.Create(
+            CultureInfo.InvariantCulture,
+            $"Duration: {result.Duration.TotalSeconds:F2}s | Tokens: {result.TotalTokens}");
 
     /// <summary>
     /// Writes the line that shows that the user interface started.
