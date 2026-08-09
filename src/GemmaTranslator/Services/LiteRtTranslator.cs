@@ -116,14 +116,14 @@ public sealed partial class LiteRtTranslator : ITranslator
         }
         catch (HttpRequestException exception)
         {
-            LogNoServer(_logger, url.AbsoluteUri, exception);
+            LogNoServer(_logger, exception);
             throw new TranslationException(
                 "The translation server did not answer.",
                 exception);
         }
         catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
-            LogTooSlow(_logger, url.AbsoluteUri, _options.TimeoutSeconds, exception);
+            LogTooSlow(_logger, _options.TimeoutSeconds, exception);
             throw new TranslationException(
                 "The translation server took too much time.",
                 exception);
@@ -141,7 +141,7 @@ public sealed partial class LiteRtTranslator : ITranslator
                 // The body goes to the log and not to the display. The person
                 // at the appliance cannot act on a Python traceback, and the
                 // text comes from a machine that we do not control.
-                LogBadStatus(_logger, status, url.AbsoluteUri, errorBody);
+                LogBadStatus(_logger, status, errorBody);
 
                 throw new TranslationException(
                     $"The translation server gave status {status}.");
@@ -164,7 +164,7 @@ public sealed partial class LiteRtTranslator : ITranslator
                 // InvalidOperationException comes from a character set in
                 // `Content-Type` that .NET does not know. One header of that
                 // shape stopped the software before this catch was here.
-                LogBadJson(_logger, url.AbsoluteUri, exception);
+                LogBadJson(_logger, exception);
                 throw new TranslationException(
                     "The translation server sent a body that is not JSON.",
                     exception);
@@ -182,7 +182,7 @@ public sealed partial class LiteRtTranslator : ITranslator
             // appliance then told the person that the operation was correct.
             if (string.IsNullOrWhiteSpace(modelText))
             {
-                LogNoAnswer(_logger, url.AbsoluteUri);
+                LogNoAnswer(_logger);
                 throw new TranslationException(
                     "The translation server gave an answer with no text.");
             }
@@ -243,36 +243,28 @@ public sealed partial class LiteRtTranslator : ITranslator
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The translation server at {url} did not answer.")]
-    private static partial void LogNoServer(ILogger logger, string url, Exception exception);
+        Message = "The translation server did not answer.")]
+    private static partial void LogNoServer(ILogger logger, Exception exception);
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The translation server at {url} took more than {seconds} seconds.")]
-    private static partial void LogTooSlow(
-        ILogger logger,
-        string url,
-        int seconds,
-        Exception exception);
+        Message = "The translation server took more than {seconds} seconds.")]
+    private static partial void LogTooSlow(ILogger logger, int seconds, Exception exception);
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The translation server at {url} gave status {status}. The body is: {body}")]
-    private static partial void LogBadStatus(
-        ILogger logger,
-        int status,
-        string url,
-        string body);
+        Message = "The translation server gave status {status}. The body is: {body}")]
+    private static partial void LogBadStatus(ILogger logger, int status, string body);
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The translation server at {url} sent a body that is not JSON.")]
-    private static partial void LogBadJson(ILogger logger, string url, Exception exception);
+        Message = "The translation server sent a body that is not JSON.")]
+    private static partial void LogBadJson(ILogger logger, Exception exception);
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The translation server at {url} gave an answer with no text.")]
-    private static partial void LogNoAnswer(ILogger logger, string url);
+        Message = "The translation server gave an answer with no text.")]
+    private static partial void LogNoAnswer(ILogger logger);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
