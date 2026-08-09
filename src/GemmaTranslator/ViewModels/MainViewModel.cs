@@ -16,13 +16,17 @@
 // This file is part of a fork of google-gemma/gemma-translator and has
 // been modified.
 
+using System.Diagnostics;
 using System.Globalization;
 using Avalonia.Media;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GemmaTranslator.Configuration;
 using GemmaTranslator.Fonts;
 using GemmaTranslator.Services;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace GemmaTranslator.ViewModels;
 
@@ -46,7 +50,11 @@ public sealed partial class MainViewModel : ObservableObject
     private const string ExampleText = "Where is the railway station?";
 
     private readonly ITranslator _translator;
+    private readonly IAudioCapture _capture;
+    private readonly AudioOptions _audioOptions;
     private readonly ILogger<MainViewModel> _logger;
+
+    private long _pressTicks;
 
     /// <summary>
     /// The language of lane 1, which is the person on the left.
@@ -89,17 +97,45 @@ public sealed partial class MainViewModel : ObservableObject
     private string _statusText = string.Empty;
 
     /// <summary>
+    /// The lane that records now, or 0.
+    /// </summary>
+    /// <remarks>
+    /// This is the condition of the operation and the value that the display
+    /// shows. The button of the other person does nothing while it is not 0.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsLane1Recording))]
+    [NotifyPropertyChangedFor(nameof(IsLane2Recording))]
+    private int _recordingLane;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="MainViewModel"/> class.
     /// </summary>
     /// <param name="translator">The translation service from the container.</param>
+    /// <param name="capture">The microphone from the container.</param>
+    /// <param name="pushToTalk">The two buttons from the container.</param>
+    /// <param name="audioOptions">The settings of the microphone.</param>
     /// <param name="logger">The logger from the container.</param>
-    public MainViewModel(ITranslator translator, ILogger<MainViewModel> logger)
+    public MainViewModel(
+        ITranslator translator,
+        IAudioCapture capture,
+        IPushToTalk pushToTalk,
+        IOptions<AudioOptions> audioOptions,
+        ILogger<MainViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(translator);
+        ArgumentNullException.ThrowIfNull(capture);
+        ArgumentNullException.ThrowIfNull(pushToTalk);
+        ArgumentNullException.ThrowIfNull(audioOptions);
         ArgumentNullException.ThrowIfNull(logger);
 
         _translator = translator;
+        _capture = capture;
+        _audioOptions = audioOptions.Value;
         _logger = logger;
+
+        pushToTalk.Changed += OnButtonChanged;
+        pushToTalk.Start();
 
         LogStarted(_logger, Lane1Language.Name, Lane2Language.Name);
     }
@@ -124,6 +160,20 @@ public sealed partial class MainViewModel : ObservableObject
     /// lane 1.
     /// </summary>
     public FontFamily TranslatedFont => AppFonts.For(Lane1Language);
+
+    /// <summary>
+    /// True while the person of lane 1 speaks.
+    /// </summary>
+    /// <remarks>
+    /// The display must show which person the software hears. The button is
+    /// a physical part and it gives no light.
+    /// </remarks>
+    public bool IsLane1Recording => RecordingLane == 1;
+
+    /// <summary>
+    /// True while the person of lane 2 speaks.
+    /// </summary>
+    public bool IsLane2Recording => RecordingLane == 2;
 
     /// <summary>
     /// Translates <see cref="SourceText"/> from lane 2 into lane 1.
@@ -190,6 +240,111 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// A button of a person went down or came up.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: the event can come on a thread that is not the thread of the
+    /// user interface. The Raspberry Pi reads the input device on its own
+    /// thread. Each write to a property must go to the correct thread, or
+    /// Avalonia throws.
+    /// </remarks>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="change">The lane, and the new condition of the button.</param>
+    private void OnButtonChanged(object? sender, PushToTalkChange change)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            HandleButton(change);
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(() => HandleButton(change));
+        }
+    }
+
+    /// <summary>
+    /// Does the work of one change of a button, on the thread of the user
+    /// interface.
+    /// </summary>
+    /// <param name="change">The lane, and the new condition of the button.</param>
+    private void HandleButton(PushToTalkChange change)
+    {
+        if (change.IsPressed)
+        {
+            StartRecording(change.Lane);
+        }
+        else
+        {
+            StopRecording(change.Lane);
+        }
+    }
+
+    private void StartRecording(int lane)
+    {
+        // The first press wins. The button of the other person does nothing
+        // until the full operation is complete, and not only until the
+        // recording stops.
+        if (RecordingLane != 0 || TranslateCommand.IsRunning)
+        {
+            LogButtonIgnored(_logger, lane);
+            return;
+        }
+
+        try
+        {
+            _capture.StartRecording();
+        }
+        catch (AudioCaptureException exception)
+        {
+            LogCaptureFailed(_logger, exception);
+            StatusText = exception.Message;
+            return;
+        }
+
+        _pressTicks = Stopwatch.GetTimestamp();
+        RecordingLane = lane;
+        TranslatedText = string.Empty;
+        StatusText = "Listening...";
+    }
+
+    private void StopRecording(int lane)
+    {
+        // A release for a lane that does not record is not an error. It occurs
+        // if a button was down when the software started, because the software
+        // did not see the press.
+        if (RecordingLane != lane)
+        {
+            return;
+        }
+
+        TimeSpan held = Stopwatch.GetElapsedTime(_pressTicks);
+
+        RecordingLane = 0;
+
+        Recording? recording = _capture.StopRecording();
+
+        if (held.TotalMilliseconds < _audioOptions.MinimumPressMilliseconds)
+        {
+            // A physical button in a public location gets an accidental touch.
+            LogPressTooShort(_logger, lane, held.TotalMilliseconds);
+            StatusText = string.Empty;
+            return;
+        }
+
+        if (recording is null)
+        {
+            return;
+        }
+
+        // The speech-to-text part has no C# replacement, thus the audio stops
+        // here. The next slice gives it to Moonshine and puts the text in
+        // SourceText.
+        StatusText = string.Create(
+            CultureInfo.InvariantCulture,
+            $"Lane {lane}: {recording.Duration.TotalSeconds:F1} s, level {recording.PeakLevel:F2}. Speech-to-text comes later.");
+    }
+
+    /// <summary>
     /// Makes the line that shows the time and the quantity of tokens.
     /// </summary>
     /// <param name="result">The result of the translation.</param>
@@ -221,4 +376,19 @@ public sealed partial class MainViewModel : ObservableObject
         Level = LogLevel.Warning,
         Message = "The translation did not occur.")]
     private static partial void LogTranslationFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The button of lane {lane} did nothing, because the software is occupied.")]
+    private static partial void LogButtonIgnored(ILogger logger, int lane);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The press on lane {lane} was {milliseconds:F0} ms, which is too short.")]
+    private static partial void LogPressTooShort(ILogger logger, int lane, double milliseconds);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The microphone did not start.")]
+    private static partial void LogCaptureFailed(ILogger logger, Exception exception);
 }

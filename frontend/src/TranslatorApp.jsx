@@ -22,13 +22,19 @@ import React, { useState, useEffect, useRef, useCallback } from "react"
 import LanguageLane from "./components/LanguageLane"
 import ResponseDrawer from "./components/ResponseDrawer"
 import Visualizer from "./components/Visualizer"
-import { useAudioRecorder } from "./hooks/useAudioRecorder"
 import { transcribeAudio, splitTextIntoSpeechChunks } from "./utils/api"
 import { playBlip } from "./utils/audio-blip"
 
 // Core orchestrator for the two-person kiosk translator.
-// Flow: hold a key → record mic (useAudioRecorder) → POST /api/stt (Moonshine)
-// → LLM translation via /proxy (Gemma, strict-JSON prompt) → /api/tts playback.
+//
+// The microphone, the two buttons, and the translation have moved to C#. Two
+// physical buttons drive the appliance now, so the keyboard handlers and the
+// "landscape" active-person mode are gone: that mode existed only because one
+// keyboard had to serve two people.
+//
+// What is left here is speech-to-text and text-to-speech. Nothing calls them,
+// because the audio that fed them is now captured in C#. CLAUDE.md section 5.3
+// keeps this code until those two slices land; then this file is deleted.
 
 // Languages offered on each lane's revolver; ttsLang selects the backend voice.
 const AVAILABLE_LANGUAGES = [
@@ -43,7 +49,6 @@ const AVAILABLE_LANGUAGES = [
 function TranslatorApp({ config }) {
   // UI State
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
-  const [activePerson, setActivePerson] = useState(1)
 
   // Translation State
   const [transcriptionData, setTranscriptionData] = useState({
@@ -62,21 +67,6 @@ function TranslatorApp({ config }) {
   // Language Lanes State
   const [lang1Index, setLang1Index] = useState(0)
   const [lang2Index, setLang2Index] = useState(1)
-  const [activeLaneRecording, setActiveLaneRecording] = useState(null) // 1 or 2
-
-  const { isRecording, startRecording, stopRecording, analyser, micError } =
-    useAudioRecorder()
-
-  useEffect(() => {
-    if (micError) {
-      setIsDrawerOpen(true)
-      setTranscriptionData({ source: "Microphone", text: "Access Failed" })
-      setTranslationData({
-        target: "Error",
-        text: `${micError} (HTTPS is required when accessing from remote devices)`,
-      })
-    }
-  }, [micError])
 
   const stopSpeaking = useCallback(() => {
     if (onlineAudioPlayerRef.current) {
@@ -134,7 +124,6 @@ function TranslatorApp({ config }) {
   // (the two lanes may never show the same language).
   const handleRotateLanguage = useCallback(
     (lane, direction) => {
-      if (isRecording) return
       const N = AVAILABLE_LANGUAGES.length
 
       playBlip("language")
@@ -149,41 +138,8 @@ function TranslatorApp({ config }) {
         setLang2Index(ni)
       }
     },
-    [lang1Index, lang2Index, isRecording],
+    [lang1Index, lang2Index],
   )
-
-  // Recording triggers
-  const handleRecordStart = useCallback(
-    async (lane) => {
-      if (isRecording) return
-      stopSpeaking()
-
-      setActivePerson((prev) => {
-        if (prev !== lane) playBlip("speaker")
-        return lane
-      })
-      setActiveLaneRecording(lane)
-      playBlip("ping")
-
-      const ok = await startRecording()
-      if (!ok) {
-        setActiveLaneRecording(null)
-      }
-    },
-    [isRecording, stopSpeaking, startRecording],
-  )
-
-  const handleRecordStop = useCallback(async () => {
-    if (!isRecording) return
-
-    const recordedLane = activeLaneRecording
-    setActiveLaneRecording(null)
-    const audioData = await stopRecording()
-
-    if (audioData) {
-      processTranslation(recordedLane, audioData.base64Data)
-    }
-  }, [isRecording, activeLaneRecording, stopRecording])
 
   // Translation Pipeline
   const processTranslation = async (lane, base64Data) => {
@@ -243,83 +199,6 @@ function TranslatorApp({ config }) {
     }
   }
 
-  // Push-to-talk keyboard control (two modes, see README):
-  // landscape = one "active person" driven by Space/Z/arrows;
-  // vertical   = independent per-lane keys (Z/X for record, arrows and -/+).
-  // keydown starts recording, keyup stops — e.repeat guards auto-repeat.
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) return
-      const key = e.key.toLowerCase()
-
-      if (config.keyboardMode === "landscape") {
-        if (key === " " || e.key === "Spacebar") {
-          e.preventDefault()
-          if (!isRecording) {
-            playBlip("speaker")
-            setActivePerson((p) => (p === 1 ? 2 : 1))
-          }
-        } else if (key === "z") {
-          e.preventDefault()
-          if (!e.repeat && !isRecording) handleRecordStart(activePerson)
-        } else if (e.key === "ArrowLeft") {
-          e.preventDefault()
-          handleRotateLanguage(activePerson, -1)
-        } else if (e.key === "ArrowRight") {
-          e.preventDefault()
-          handleRotateLanguage(activePerson, 1)
-        }
-      } else {
-        if (key === "z") {
-          e.preventDefault()
-          if (!e.repeat && !isRecording) handleRecordStart(1)
-        } else if (key === "x") {
-          e.preventDefault()
-          if (!e.repeat && !isRecording) handleRecordStart(2)
-        } else if (e.key === "ArrowLeft") {
-          e.preventDefault()
-          handleRotateLanguage(1, -1)
-        } else if (e.key === "ArrowRight") {
-          e.preventDefault()
-          handleRotateLanguage(1, 1)
-        } else if (key === "-" || key === "_") {
-          e.preventDefault()
-          handleRotateLanguage(2, -1)
-        } else if (key === "+" || key === "=") {
-          e.preventDefault()
-          handleRotateLanguage(2, 1)
-        }
-      }
-    }
-
-    const handleKeyUp = (e) => {
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) return
-      const key = e.key.toLowerCase()
-
-      if (config.keyboardMode === "landscape") {
-        if (key === "z" && isRecording) handleRecordStop()
-      } else {
-        if (key === "z" && activeLaneRecording === 1) handleRecordStop()
-        if (key === "x" && activeLaneRecording === 2) handleRecordStop()
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown)
-    window.addEventListener("keyup", handleKeyUp)
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown)
-      window.removeEventListener("keyup", handleKeyUp)
-    }
-  }, [
-    config.keyboardMode,
-    isRecording,
-    activePerson,
-    activeLaneRecording,
-    handleRecordStart,
-    handleRecordStop,
-    handleRotateLanguage,
-  ])
-
   return (
     <div className="translator-envelope">
       <ResponseDrawer
@@ -339,10 +218,8 @@ function TranslatorApp({ config }) {
             laneLabel="1"
             languages={AVAILABLE_LANGUAGES}
             currentIndex={lang1Index}
-            isRecording={activeLaneRecording === 1}
-            isActivePerson={
-              config.keyboardMode === "landscape" && activePerson === 1
-            }
+            isRecording={false}
+            isActivePerson={false}
             onRotate={(dir) => handleRotateLanguage(1, dir)}
           />
           <LanguageLane
@@ -350,18 +227,19 @@ function TranslatorApp({ config }) {
             laneLabel="2"
             languages={AVAILABLE_LANGUAGES}
             currentIndex={lang2Index}
-            isRecording={activeLaneRecording === 2}
-            isActivePerson={
-              config.keyboardMode === "landscape" && activePerson === 2
-            }
+            isRecording={false}
+            isActivePerson={false}
             onRotate={(dir) => handleRotateLanguage(2, dir)}
           />
         </div>
 
+        {/* The visualizer has no audio source now: the capture is in C# and
+            the Web Audio AnalyserNode went with the recorder hook. The C#
+            visualizer needs an FFT that we write. See CLAUDE.md. */}
         <Visualizer
-          activePerson={activePerson}
-          isRecording={isRecording}
-          analyser={analyser}
+          activePerson={1}
+          isRecording={false}
+          analyser={null}
           barsCount={parseInt(config.visualizerBars, 10)}
         />
       </main>

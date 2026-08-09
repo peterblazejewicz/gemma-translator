@@ -43,10 +43,19 @@
       The two lanes:      60 upstream, 135 here, 18.75 % of the height.
       The visualizer:     28 upstream,  63 here,  8.75 % of the height.
 
-    This view has no logic. The touch interaction model is not decided. The 135
-    pixels of the lanes give a touch target of approximately 11 mm on the
-    panel, which is sufficient for a finger.
+    Two physical buttons record, one for each person. The lane becomes bright
+    while the software hears that person. The 135 pixels of the lanes give a
+    touch target of approximately 11 mm, for the language selection that comes
+    later.
   -->
+
+  <UserControl.Styles>
+    <!-- A style class, and not a converter. Section 3.1 of CLAUDE.md says
+         that Avalonia uses a class and a selector where WPF uses a trigger. -->
+    <Style Selector="Border.recording">
+      <Setter Property="Background" Value="#1B3A57" />
+    </Style>
+  </UserControl.Styles>
 
   <Grid RowDefinitions="*,135,63" Background="#000000">
 
@@ -64,9 +73,9 @@
                     HorizontalAlignment="Center"
                     Spacing="18">
 
-          <!-- What the person said. The microphone does not operate, thus the
-               view model puts a constant example here. -->
-          <!-- The font comes from the language of the lane. Chinese and
+          <!-- What the person said. The speech-to-text part has no C# code
+               yet, thus this is still a constant example.
+               The font comes from the language of the lane. Chinese and
                Japanese use the same Han characters with a different correct
                shape, thus a fallback list cannot give the two at the same
                time. See Fonts/AppFonts.cs. -->
@@ -88,8 +97,10 @@
         </StackPanel>
       </ScrollViewer>
 
-      <!-- CAUTION: this button is temporary and the audio slice replaces it.
-           But the dimension is not temporary. The panel gives 11.6 pixels for
+      <!-- CAUTION: this button is temporary. The two physical buttons record
+           now, but the audio does not reach the translation until the
+           speech-to-text slice. Then this button goes away.
+           The dimension is not temporary. The panel gives 11.6 pixels for
            one millimetre (1280 pixels on 110.4 mm, datasheet page 3), and a
            finger needs 9 mm. Thus 105 pixels is the minimum for each control
            that a person touches. The control that comes after this button
@@ -128,9 +139,12 @@
          one half of the width. Lane 1 is the person on the left. -->
     <Grid Grid.Row="1" ColumnDefinitions="*,*">
 
+      <!-- The lane becomes bright while the software hears that person. The
+           button is a physical part and it gives no light. -->
       <Border Grid.Column="0"
               BorderBrush="#333338"
-              BorderThickness="0,1,1,0">
+              BorderThickness="0,1,1,0"
+              Classes.recording="{Binding IsLane1Recording}">
         <StackPanel VerticalAlignment="Center"
                     HorizontalAlignment="Center"
                     Spacing="6">
@@ -146,7 +160,8 @@
 
       <Border Grid.Column="1"
               BorderBrush="#333338"
-              BorderThickness="0,1,0,0">
+              BorderThickness="0,1,0,0"
+              Classes.recording="{Binding IsLane2Recording}">
         <StackPanel VerticalAlignment="Center"
                     HorizontalAlignment="Center"
                     Spacing="6">

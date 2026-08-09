@@ -22,9 +22,12 @@ import React, { useState, useEffect } from "react"
 import TranslatorApp from "./TranslatorApp"
 import SettingsOverlay from "./components/SettingsOverlay"
 
-// App shell: owns the global config (keyboardMode and themeColor persist in
-// localStorage), the settings overlay, and applies the theme by overriding
-// the --bg-black CSS variable.
+// App shell: owns the global config (themeColor persists in localStorage),
+// the settings overlay, and applies the theme by overriding the --bg-black
+// CSS variable.
+//
+// keyboardMode is gone with the keyboard handlers: two physical buttons drive
+// the appliance, so there is no active-person mode to choose.
 function App() {
   // Global configuration.
   //
@@ -32,17 +35,12 @@ function App() {
   // C# LiteRtOptions holds them now, read from appsettings.json and the
   // GEMMA_ environment variables. The connectivity probe went with them.
   const [config, setConfig] = useState({
-    keyboardMode: localStorage.getItem("keyboardMode") || "landscape",
     enableTts: true,
     visualizerBars: 16,
     themeColor: localStorage.getItem("themeColor") || "#ffa500",
   })
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-
-  useEffect(() => {
-    localStorage.setItem("keyboardMode", config.keyboardMode)
-  }, [config.keyboardMode])
 
   useEffect(() => {
     if (config.themeColor) {

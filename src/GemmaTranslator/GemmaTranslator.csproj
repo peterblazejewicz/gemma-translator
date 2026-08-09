@@ -33,6 +33,12 @@
     <!-- CLAUDE.md section 3.2 selects CommunityToolkit.Mvvm, not ReactiveUI. -->
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 
+    <!-- The audio capture. SoundFlow is a managed layer on miniaudio (MIT).
+         miniaudio converts the format in native code, thus the software asks
+         for 16 kHz mono F32 and writes no resampler. The package holds the
+         native library for win-x64 and for linux-arm64. -->
+    <PackageReference Include="SoundFlow" Version="1.4.1" />
+
     <!-- The dependency injection container. See ServiceRegistration.cs. The
          software uses the container only. It does not use the generic host,
          because Avalonia has its own lifetime. -->

@@ -116,6 +116,24 @@ public static class ServiceRegistration
                 AllowAutoRedirect = false,
             });
 
+        services.AddOptions<AudioOptions>()
+            .Bind(configuration.GetSection(AudioOptions.SectionName));
+
+        services.AddSingleton<IAudioCapture, SoundFlowAudioCapture>();
+
+        // CAUTION: this is the one true difference of the platform in the
+        // software. Avalonia gives no key event on the Raspberry Pi, because
+        // the DRM backend raises a pointer event and a touch event only. Thus
+        // Linux reads /dev/input and Windows uses the keys of Avalonia.
+        if (OperatingSystem.IsLinux())
+        {
+            services.AddSingleton<IPushToTalk, EvdevPushToTalk>();
+        }
+        else
+        {
+            services.AddSingleton<IPushToTalk, KeyboardPushToTalk>();
+        }
+
         // The view models.
         services.AddSingleton<MainViewModel>();
 

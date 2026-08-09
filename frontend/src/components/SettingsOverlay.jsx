@@ -142,20 +142,6 @@ export default function SettingsOverlay({
           type in a text field. See section 5.3 of CLAUDE.md.
         */}
 
-        <div className="form-group">
-          <label>Keyboard Mode</label>
-          <select
-            value={config.keyboardMode}
-            onChange={(e) => handleChange("keyboardMode", e.target.value)}
-          >
-            <option value="landscape">
-              Landscape — active person (Space / Z / ← →)
-            </option>
-            <option value="vertical">
-              Vertical — two-hand (Z / X / ← → / − +)
-            </option>
-          </select>
-        </div>
 
         <div className="form-row-checkboxes">
           <label className="checkbox-container">

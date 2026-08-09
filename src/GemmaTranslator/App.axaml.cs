@@ -17,10 +17,12 @@
 // been modified.
 
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using GemmaTranslator.Configuration;
 using GemmaTranslator.Fonts;
+using GemmaTranslator.Services;
 using GemmaTranslator.ViewModels;
 using GemmaTranslator.Views;
 using Microsoft.Extensions.Configuration;
@@ -79,14 +81,37 @@ public partial class App : Application
         // the appliance has no console. See Fonts/FontCheck.cs.
         FontCheck.Run(provider.GetRequiredService<ILogger<App>>());
 
+        // Open the microphone before the first press. A test measured 1.22 s
+        // from the start of the device to the first sample with a Jabra
+        // Speak2 40, thus a device that opens at the press loses the first
+        // word. The line in the log also names the microphone that the
+        // software selected.
+        try
+        {
+            provider.GetRequiredService<IAudioCapture>().Prepare();
+        }
+        catch (AudioCaptureException exception)
+        {
+            // The software continues. A person can connect the microphone
+            // after the start, and the first press opens it again.
+            LogNoMicrophoneAtStart(logger, exception);
+        }
+
         MainViewModel viewModel = provider.GetRequiredService<MainViewModel>();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow
+            MainWindow window = new()
             {
                 DataContext = viewModel,
             };
+
+            // The keys of the two people arrive at the top level, because
+            // Avalonia sends a key to the control that has the focus and this
+            // view has no control that takes the focus.
+            AttachKeyboard(provider, window);
+
+            desktop.MainWindow = window;
 
             // The container holds each service that must be disposed, for
             // example the audio device. Windows can stop the software, thus
@@ -95,15 +120,36 @@ public partial class App : Application
         }
         else if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
         {
-            singleView.MainView = new MainSingleView
+            MainSingleView view = new()
             {
                 DataContext = viewModel,
             };
+
+            singleView.MainView = view;
 
             // The Raspberry Pi has no exit. systemd stops the process.
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Gives the top level to the keyboard source of the buttons.
+    /// </summary>
+    /// <remarks>
+    /// This is plumbing and not logic, thus it does not break the rule of
+    /// section 3.2 that keeps logic out of a view. The class owns the
+    /// behaviour, and this method gives it the top level that has the keys.
+    /// The Raspberry Pi uses <c>EvdevPushToTalk</c>, which needs no top level.
+    /// </remarks>
+    /// <param name="provider">The container.</param>
+    /// <param name="topLevel">The window, or the single view.</param>
+    private static void AttachKeyboard(IServiceProvider provider, TopLevel topLevel)
+    {
+        if (provider.GetRequiredService<IPushToTalk>() is KeyboardPushToTalk keyboard)
+        {
+            keyboard.Attach(topLevel);
+        }
     }
 
     /// <summary>
@@ -125,4 +171,9 @@ public partial class App : Application
         string endpoint,
         string model,
         bool hasApiKey);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The microphone did not open at the start. The software tries again at the first press.")]
+    private static partial void LogNoMicrophoneAtStart(ILogger logger, Exception exception);
 }
