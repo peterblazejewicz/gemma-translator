@@ -63,11 +63,6 @@ public sealed partial class KeyboardPushToTalk : IPushToTalk
     public event EventHandler<PushToTalkChange>? Changed;
 
     /// <inheritdoc/>
-    public void Start()
-    {
-        // Nothing to do. The keys arrive when a caller gives the top level.
-    }
-
     /// <summary>
     /// Listens to the keys of one top level.
     /// </summary>
@@ -80,9 +75,13 @@ public sealed partial class KeyboardPushToTalk : IPushToTalk
     /// before a control gets it.
     /// </remarks>
     /// <param name="topLevel">The window, or the single view.</param>
-    public void Attach(TopLevel topLevel)
+    public void Start(TopLevel? topLevel)
     {
-        ArgumentNullException.ThrowIfNull(topLevel);
+        if (topLevel is null)
+        {
+            LogNoTopLevel(_logger);
+            return;
+        }
 
         _topLevel = topLevel;
 
@@ -119,6 +118,11 @@ public sealed partial class KeyboardPushToTalk : IPushToTalk
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
+        if (IsTextControl(e.Source))
+        {
+            return;
+        }
+
         int lane = LaneOf(e.Key);
         if (lane == 0)
         {
@@ -138,6 +142,11 @@ public sealed partial class KeyboardPushToTalk : IPushToTalk
 
     private void OnKeyUp(object? sender, KeyEventArgs e)
     {
+        if (IsTextControl(e.Source))
+        {
+            return;
+        }
+
         int lane = LaneOf(e.Key);
         if (lane == 0)
         {
@@ -153,6 +162,25 @@ public sealed partial class KeyboardPushToTalk : IPushToTalk
 
         Changed?.Invoke(this, new PushToTalkChange(lane, IsPressed: false));
     }
+
+    /// <summary>
+    /// Says if a control takes text.
+    /// </summary>
+    /// <remarks>
+    /// The handler tunnels on the top level, thus it sees each key before a
+    /// control. With no test, a person could not type Z or X in any field of
+    /// this software. Upstream has the same guard at
+    /// <c>TranslatorApp.jsx:252</c>.
+    /// </remarks>
+    /// <param name="source">The source of the event.</param>
+    /// <returns>True if the key belongs to that control.</returns>
+    private static bool IsTextControl(object? source)
+        => source is TextBox or AutoCompleteBox;
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The buttons have no top level, thus no key arrives.")]
+    private static partial void LogNoTopLevel(ILogger logger);
 
     [LoggerMessage(
         Level = LogLevel.Information,

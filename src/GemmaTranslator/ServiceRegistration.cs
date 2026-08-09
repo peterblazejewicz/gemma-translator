@@ -119,6 +119,8 @@ public static class ServiceRegistration
         services.AddOptions<AudioOptions>()
             .Bind(configuration.GetSection(AudioOptions.SectionName));
 
+        services.AddSingleton<IValidateOptions<AudioOptions>, AudioOptionsValidator>();
+
         services.AddSingleton<IAudioCapture, SoundFlowAudioCapture>();
 
         // CAUTION: this is the one true difference of the platform in the
@@ -137,12 +139,9 @@ public static class ServiceRegistration
         // The view models.
         services.AddSingleton<MainViewModel>();
 
-        // The parts that touch the hardware come later: the audio capture, the
-        // speech-to-text part, and the text-to-speech part.
-        //
-        // Each one gets an interface, because Windows and the Raspberry Pi get
-        // different code and a different native library. See section 5.2 of
-        // CLAUDE.md.
+        // The speech-to-text part and the text-to-speech part come later.
+        // Each one gets an interface only if Windows and the Raspberry Pi
+        // need different code. See section 5.2 of CLAUDE.md.
         return services;
     }
 }

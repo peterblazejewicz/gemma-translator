@@ -32,24 +32,50 @@ namespace GemmaTranslator.Services;
 /// Records the microphone with miniaudio, through SoundFlow.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The software asks for 16 kHz, one channel, and F32. miniaudio converts from
 /// the format of the device in native code, thus the Jabra at 48 kHz needs no
 /// work here.
+/// </para>
+/// <para>
+/// CAUTION: <see cref="OnAudioProcessed"/> operates on the audio thread of
+/// miniaudio, which has a high priority. It must take no lock and it must make
+/// no memory. Thus the buffer has a fixed dimension that the software makes
+/// one time, and the flags are volatile. A lock in that method gave a
+/// deadlock: <c>ma_device_stop</c> waits for the audio thread, and the audio
+/// thread waited for the lock that the caller of <c>Dispose</c> held.
+/// </para>
 /// </remarks>
 public sealed partial class SoundFlowAudioCapture : IAudioCapture
 {
     private readonly AudioOptions _options;
     private readonly ILogger<SoundFlowAudioCapture> _logger;
-    private readonly Lock _lock = new();
-    private readonly List<float> _samples = [];
+
+    // This lock is for the life of the device only. The audio thread never
+    // takes it. See the remark on the class.
+    private readonly Lock _deviceLock = new();
+
+    // One buffer, made one time. The audio thread writes in it and it never
+    // increases. See AudioOptions.MaximumRecordingSeconds.
+    private readonly float[] _buffer;
 
     private MiniAudioEngine? _engine;
     private AudioCaptureDevice? _device;
     private long _startTicks;
+    private int _deviceSampleRate;
 
-    // The device stays open and it runs. This flag says if the samples go in
-    // the buffer. See Prepare for the cause.
-    private bool _accumulating;
+    // The audio thread writes these and the thread of the user interface reads
+    // them. They are volatile, thus no lock is necessary.
+    // Two flags, and not one. _sessionOpen says that a person holds a button.
+    // _accumulating says that the samples still go in the buffer. The buffer
+    // becomes full before the person releases the button, thus the second
+    // becomes false first. With one flag, StopRecording gave nothing back at
+    // that moment and no line said that the limit operated.
+    private volatile bool _sessionOpen;
+    private volatile bool _accumulating;
+    private volatile bool _reachedLimit;
+    private volatile int _written;
+    private volatile int _peakBits;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SoundFlowAudioCapture"/> class.
@@ -65,24 +91,15 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
 
         _options = options.Value;
         _logger = logger;
-    }
 
-    /// <inheritdoc/>
-    public bool IsRecording
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _accumulating;
-            }
-        }
+        _buffer = new float[_options.SampleRate * _options.MaximumRecordingSeconds];
+        _deviceSampleRate = _options.SampleRate;
     }
 
     /// <inheritdoc/>
     public void Prepare()
     {
-        lock (_lock)
+        lock (_deviceLock)
         {
             OpenDevice();
         }
@@ -91,20 +108,26 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
     /// <inheritdoc/>
     public void StartRecording()
     {
-        lock (_lock)
+        lock (_deviceLock)
         {
-            if (_accumulating)
+            if (_sessionOpen)
             {
                 return;
             }
 
-            // The device usually opens at the start. This call is for the
-            // condition where the first attempt did not operate, for example
-            // if a person connected the Jabra after the start.
-            OpenDevice();
+            // CAUTION: this does not open a device that went away. That work
+            // takes 1.22 s and it would stop the display of a machine that a
+            // person touches. Prepare opens the device at the start.
+            if (_device is null)
+            {
+                throw new AudioCaptureException("The microphone is not open.");
+            }
 
-            _samples.Clear();
+            _written = 0;
+            _peakBits = 0;
+            _reachedLimit = false;
             _startTicks = Stopwatch.GetTimestamp();
+            _sessionOpen = true;
             _accumulating = true;
         }
     }
@@ -112,47 +135,155 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
     /// <inheritdoc/>
     public Recording? StopRecording()
     {
-        lock (_lock)
+        bool wasOpen = _sessionOpen;
+        _sessionOpen = false;
+        _accumulating = false;
+
+        if (!wasOpen)
         {
-            if (!_accumulating)
-            {
-                return null;
-            }
-
-            _accumulating = false;
-
-            TimeSpan duration = Stopwatch.GetElapsedTime(_startTicks);
-
-            float[] samples = [.. _samples];
-            _samples.Clear();
-
-            float peak = 0f;
-            foreach (float sample in samples)
-            {
-                float value = Math.Abs(sample);
-                if (value > peak)
-                {
-                    peak = value;
-                }
-            }
-
-            // A peak near 0 means that the software recorded silence. On the
-            // appliance this is the sign that it opened the wrong device.
-            LogStopped(_logger, duration.TotalSeconds, samples.Length, peak);
-
-            return new Recording(samples, duration, peak);
+            return null;
         }
+
+        TimeSpan duration = Stopwatch.GetElapsedTime(_startTicks);
+
+        // A callback that operates now can write some more samples. It cannot
+        // write outside the buffer, thus this copy is safe.
+        int written = _written;
+        float[] samples = _buffer.AsSpan(0, written).ToArray();
+        float peak = BitConverter.Int32BitsToSingle(_peakBits);
+
+        LogStopped(_logger, duration.TotalSeconds, written, peak, _deviceSampleRate);
+
+        if (_reachedLimit)
+        {
+            LogReachedLimit(_logger, _options.MaximumRecordingSeconds);
+        }
+
+        return new Recording(samples, duration, peak, _deviceSampleRate, _reachedLimit);
     }
 
     /// <inheritdoc/>
     public void Dispose()
     {
-        lock (_lock)
+        AudioCaptureDevice? device;
+        MiniAudioEngine? engine;
+
+        // CAUTION: take the device out of the field inside the lock, and speak
+        // to miniaudio outside it. `ma_device_stop` waits for the audio
+        // thread, and that thread must not wait for this lock.
+        lock (_deviceLock)
         {
-            Release();
-            _engine?.Dispose();
+            _sessionOpen = false;
+            _accumulating = false;
+            device = _device;
+            engine = _engine;
+            _device = null;
             _engine = null;
         }
+
+        CloseDevice(device);
+        engine?.Dispose();
+    }
+
+    /// <summary>
+    /// Opens the microphone and starts it, if it does not run.
+    /// </summary>
+    /// <remarks>
+    /// The caller holds <see cref="_deviceLock"/>.
+    /// </remarks>
+    private void OpenDevice()
+    {
+        // A device that is here and does not run is a device that went away.
+        // Each recording then gives 0 samples with no error.
+        if (_device is { IsRunning: true })
+        {
+            return;
+        }
+
+        if (_device is not null)
+        {
+            LogDeviceStopped(_logger);
+            AudioCaptureDevice old = _device;
+            _device = null;
+            CloseDevice(old);
+        }
+
+        try
+        {
+            _engine ??= new MiniAudioEngine();
+            _engine.UpdateAudioDevicesInfo();
+
+            DeviceInfo info = SelectDevice(_engine.CaptureDevices);
+
+            AudioFormat format = new()
+            {
+                Format = SampleFormat.F32,
+                Channels = 1,
+                SampleRate = _options.SampleRate,
+            };
+
+            AudioCaptureDevice device =
+                _engine.InitializeCaptureDevice(info, format, new MiniAudioDeviceConfig());
+
+            device.OnAudioProcessed += OnAudioProcessed;
+            device.Start();
+
+            // CAUTION: the format above is a request. This is the format that
+            // the machine gave. A log line that shows the request only hides a
+            // machine that gives 48 kHz, and then the speech is not what
+            // Moonshine needs.
+            _deviceSampleRate = device.Format.SampleRate;
+            _device = device;
+
+            LogStarted(
+                _logger,
+                info.Name ?? "(no name)",
+                _options.SampleRate,
+                device.Format.SampleRate,
+                device.Format.Channels);
+
+            if (device.Format.SampleRate != _options.SampleRate || device.Format.Channels != 1)
+            {
+                LogFormatIsDifferent(
+                    _logger,
+                    _options.SampleRate,
+                    device.Format.SampleRate,
+                    device.Format.Channels);
+            }
+        }
+        catch (Exception exception) when (exception is not AudioCaptureException)
+        {
+            LogNoMicrophone(_logger, exception);
+            throw new AudioCaptureException("The microphone did not open.", exception);
+        }
+    }
+
+    /// <summary>
+    /// Stops one device and releases it.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: the caller must not hold <see cref="_deviceLock"/>.
+    /// </remarks>
+    /// <param name="device">The device, or <c>null</c>.</param>
+    private void CloseDevice(AudioCaptureDevice? device)
+    {
+        if (device is null)
+        {
+            return;
+        }
+
+        device.OnAudioProcessed -= OnAudioProcessed;
+
+        try
+        {
+            device.Stop();
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            LogStopFailed(_logger, exception);
+        }
+
+        device.Dispose();
     }
 
     /// <summary>
@@ -164,10 +295,10 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
     /// <see cref="AudioOptions.PreferredDeviceName"/> for the cause.
     /// </remarks>
     /// <param name="devices">Each capture device that the machine has.</param>
-    /// <returns>The device, or <c>null</c> to let the backend select.</returns>
-    private DeviceInfo? SelectDevice(DeviceInfo[] devices)
+    /// <returns>The device to open.</returns>
+    private DeviceInfo SelectDevice(DeviceInfo[] devices)
     {
-        if (devices is null || devices.Length == 0)
+        if (devices.Length == 0)
         {
             throw new AudioCaptureException("The machine has no microphone.");
         }
@@ -185,8 +316,6 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
                 }
             }
 
-            // The name is in the settings and no device has it. This is a
-            // condition that a person must correct, thus it goes in the log.
             LogPreferredNotFound(_logger, wanted, devices.Length);
         }
 
@@ -201,100 +330,89 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         return devices[0];
     }
 
-    private void OnAudioProcessed(Span<float> samples, Capability capability)
-    {
-        if (capability != Capability.Record)
-        {
-            return;
-        }
-
-        lock (_lock)
-        {
-            // The device runs always. The samples go in the buffer only
-            // between the press and the release of a button.
-            if (_accumulating)
-            {
-                _samples.AddRange(samples);
-            }
-        }
-    }
-
     /// <summary>
-    /// Opens the microphone and starts it, if it is not open.
+    /// Takes the samples from the audio thread of miniaudio.
     /// </summary>
     /// <remarks>
-    /// The caller holds the lock.
+    /// CAUTION: this operates on a thread with a high priority. It takes no
+    /// lock, it makes no memory, and it does no work that has no limit.
     /// </remarks>
-    private void OpenDevice()
+    /// <param name="samples">The new samples.</param>
+    /// <param name="capability">The type of the device.</param>
+    private void OnAudioProcessed(Span<float> samples, Capability capability)
     {
-        if (_device is not null)
+        if (!_accumulating)
         {
             return;
         }
 
-        try
+        int at = _written;
+        int room = _buffer.Length - at;
+
+        if (room <= 0)
         {
-            _engine ??= new MiniAudioEngine();
-            _engine.UpdateAudioDevicesInfo();
-
-            DeviceInfo? info = SelectDevice(_engine.CaptureDevices);
-
-            AudioFormat format = new()
-            {
-                Format = SampleFormat.F32,
-                Channels = 1,
-                SampleRate = _options.SampleRate,
-            };
-
-            // DeviceConfig is abstract. The MiniAudio backend needs its own
-            // config type.
-            _device = _engine.InitializeCaptureDevice(info, format, new MiniAudioDeviceConfig());
-            _device.OnAudioProcessed += OnAudioProcessed;
-            _device.Start();
-
-            LogStarted(_logger, info?.Name ?? "(the default device)", _options.SampleRate);
+            // The button did not come up. This limit is the one protection
+            // against a recording with no end. The view model sees the flag
+            // and it gives the lane back.
+            _reachedLimit = true;
+            _accumulating = false;
+            return;
         }
-        catch (Exception exception) when (exception is not AudioCaptureException)
-        {
-            Release();
-            LogNoMicrophone(_logger, exception);
-            throw new AudioCaptureException("The microphone did not open.", exception);
-        }
-    }
 
-    private void Release()
-    {
-        if (_device is not null)
-        {
-            _device.OnAudioProcessed -= OnAudioProcessed;
+        Span<float> taken = samples[..Math.Min(room, samples.Length)];
+        taken.CopyTo(_buffer.AsSpan(at));
 
-            try
+        // The peak comes from this same loop, thus StopRecording does not
+        // examine each sample again while the audio thread waits.
+        float peak = BitConverter.Int32BitsToSingle(_peakBits);
+
+        foreach (float sample in taken)
+        {
+            float value = Math.Abs(sample);
+
+            if (value > peak)
             {
-                _device.Stop();
+                peak = value;
             }
-            catch (Exception exception)
-            {
-                LogStopFailed(_logger, exception);
-            }
-
-            _device.Dispose();
-            _device = null;
         }
+
+        _peakBits = BitConverter.SingleToInt32Bits(peak);
+        _written = at + taken.Length;
     }
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The recording started on {device} at {sampleRate} Hz.")]
-    private static partial void LogStarted(ILogger logger, string device, int sampleRate);
+        Message = "The microphone is {device}. The software asked for {wanted} Hz and the machine gave {actual} Hz with {channels} channel(s).")]
+    private static partial void LogStarted(
+        ILogger logger,
+        string device,
+        int wanted,
+        int actual,
+        int channels);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "CAUTION: the microphone gave {actual} Hz with {channels} channel(s), and the software asked for {wanted} Hz with one channel. The speech-to-text part needs the correct rate.")]
+    private static partial void LogFormatIsDifferent(
+        ILogger logger,
+        int wanted,
+        int actual,
+        int channels);
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The recording stopped after {seconds:F2} s with {samples} samples. The largest level is {peak:F3}.")]
+        Message = "The recording stopped after {seconds:F2} s with {samples} samples at {sampleRate} Hz. The largest level is {peak:F3}.")]
     private static partial void LogStopped(
         ILogger logger,
         double seconds,
         int samples,
-        float peak);
+        float peak,
+        int sampleRate);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The recording came to the limit of {seconds} s. A button can be down mechanically.")]
+    private static partial void LogReachedLimit(ILogger logger, int seconds);
 
     [LoggerMessage(
         Level = LogLevel.Error,
@@ -302,8 +420,13 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
     private static partial void LogNoMicrophone(ILogger logger, Exception exception);
 
     [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The microphone stopped. A person can have disconnected it.")]
+    private static partial void LogDeviceStopped(ILogger logger);
+
+    [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "No microphone has \"{wanted}\" in its name. The machine has {count} devices. The software uses the default device, which can record silence.")]
+        Message = "No microphone has \"{wanted}\" in its name. The machine has {count} devices. The software uses the default device, which can record no sound.")]
     private static partial void LogPreferredNotFound(ILogger logger, string wanted, int count);
 
     [LoggerMessage(

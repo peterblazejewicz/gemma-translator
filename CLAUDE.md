@@ -415,6 +415,42 @@ Obey these rules:
   is not complete must keep the upstream part, or the software stops.
 - Tell the user which upstream code you removed, and where the new code is.
 
+### 5.4 Do not make a function that upstream does not have
+
+**IMPORTANT: this fork is a port. It is not new software.** If
+`google-gemma/gemma-translator` does not do it, this software does not do it,
+until the user says to add it.
+
+Before you write a part that is new, do this:
+
+1. Find the same function in the upstream code. Give the file and the line.
+2. If you cannot find it, **stop and speak to the user.**
+
+The user must agree to each new function. A subagent must not agree, and this
+document must not agree. The user is explicit about a new function, and the
+commit message must say that the function is new and who asked for it.
+
+**What was incorrect on 2026-08-09.** The audio slice added a class that wrote
+the audio of each person to a WAV file. It looked correct: it was off, it had a CAUTION
+comment, and it made a good test possible. But:
+
+- Upstream **never writes audio to a disk**. `server.py:207-219` makes the WAV
+  in memory with `io.BytesIO` and sends it in the HTTP response. Each other
+  `write` in that file is `self.wfile.write`, which is the socket. The one
+  `open()` reads a static file to send it.
+- In the European Union the speech of a person is personal data. An appliance
+  in a public location cannot keep it without the agreement of the person.
+  Thus the function was not only new, it was not permitted.
+
+The user removed it. Section 5.3 says that the move removes as much as it
+adds; this section says that the move adds nothing that upstream does not
+have.
+
+A diagnostic that gives a **number** is not a new function: a quantity of
+samples, a level, the name of a device, or a rate. Those are the same class as
+a line in a log. A diagnostic that keeps the **content** of what a person said
+is a new function, and it needs the agreement of the user.
+
 Example: the endpoint, the model, and the key are one small slice.
 `LiteRtOptions` replaces the three text fields of `SettingsOverlay.jsx`, thus
 the three text fields go away in the same change. The other fields of that file

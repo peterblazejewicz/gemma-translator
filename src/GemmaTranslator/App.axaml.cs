@@ -16,8 +16,8 @@
 // This file is part of a fork of google-gemma/gemma-translator and has
 // been modified.
 
+using System.Runtime.InteropServices;
 using Avalonia;
-using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using GemmaTranslator.Configuration;
@@ -37,6 +37,9 @@ namespace GemmaTranslator;
 /// </summary>
 public partial class App : Application
 {
+    // A static field, because the registration must not go away.
+    private static PosixSignalRegistration? _stopSignal;
+
     /// <inheritdoc/>
     public override void Initialize()
     {
@@ -65,6 +68,10 @@ public partial class App : Application
         // appliance has no settings screen that can correct it later.
         LiteRtOptions liteRt = provider.GetRequiredService<IOptions<LiteRtOptions>>().Value;
 
+        // The same reason: a rate of 0 or a minimum press of 99999 ms gives an
+        // appliance that does nothing and shows no cause.
+        _ = provider.GetRequiredService<IOptions<AudioOptions>>().Value;
+
         // The values go in a local first. CA1873 does not permit a call in the
         // argument list of a log method, because the call operates also if the
         // level is off.
@@ -79,7 +86,7 @@ public partial class App : Application
         // The fonts are the largest risk at the start on Raspberry Pi OS Lite.
         // This line puts the condition of each font in the journal, because
         // the appliance has no console. See Fonts/FontCheck.cs.
-        FontCheck.Run(provider.GetRequiredService<ILogger<App>>());
+        FontCheck.Run(logger);
 
         // Open the microphone before the first press. A test measured 1.22 s
         // from the start of the device to the first sample with a Jabra
@@ -109,7 +116,7 @@ public partial class App : Application
             // The keys of the two people arrive at the top level, because
             // Avalonia sends a key to the control that has the focus and this
             // view has no control that takes the focus.
-            AttachKeyboard(provider, window);
+            provider.GetRequiredService<IPushToTalk>().Start(window);
 
             desktop.MainWindow = window;
 
@@ -127,29 +134,18 @@ public partial class App : Application
 
             singleView.MainView = view;
 
-            // The Raspberry Pi has no exit. systemd stops the process.
+            // The Raspberry Pi reads /dev/input, thus it needs no top level.
+            provider.GetRequiredService<IPushToTalk>().Start(null);
+
+            // The Raspberry Pi has no exit of the application. systemd sends
+            // SIGTERM, thus this is the one location that can stop the
+            // microphone in an orderly manner.
+            _stopSignal = PosixSignalRegistration.Create(
+                PosixSignal.SIGTERM,
+                _ => provider.Dispose());
         }
 
         base.OnFrameworkInitializationCompleted();
-    }
-
-    /// <summary>
-    /// Gives the top level to the keyboard source of the buttons.
-    /// </summary>
-    /// <remarks>
-    /// This is plumbing and not logic, thus it does not break the rule of
-    /// section 3.2 that keeps logic out of a view. The class owns the
-    /// behaviour, and this method gives it the top level that has the keys.
-    /// The Raspberry Pi uses <c>EvdevPushToTalk</c>, which needs no top level.
-    /// </remarks>
-    /// <param name="provider">The container.</param>
-    /// <param name="topLevel">The window, or the single view.</param>
-    private static void AttachKeyboard(IServiceProvider provider, TopLevel topLevel)
-    {
-        if (provider.GetRequiredService<IPushToTalk>() is KeyboardPushToTalk keyboard)
-        {
-            keyboard.Attach(topLevel);
-        }
     }
 
     /// <summary>

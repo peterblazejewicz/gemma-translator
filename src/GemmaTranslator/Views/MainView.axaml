@@ -55,8 +55,18 @@
     <Style Selector="Border.recording">
       <Setter Property="Background" Value="#1B3A57" />
     </Style>
+
+    <!-- The border of the full surface. A person who is not the speaker must
+         see from a distance that the microphone is in operation. The Jabra has
+         a light of its own, but it is on always because the software keeps the
+         device open. See IAudioCapture.Prepare. -->
+    <Style Selector="Border.microphoneLive">
+      <Setter Property="BorderBrush" Value="#D03030" />
+      <Setter Property="BorderThickness" Value="6" />
+    </Style>
   </UserControl.Styles>
 
+  <Panel>
   <Grid RowDefinitions="*,135,63" Background="#000000">
 
     <!-- The response area, which upstream calls the ResponseDrawer.
@@ -191,5 +201,11 @@
     </Border>
 
   </Grid>
+
+  <!-- This border is on top of the layout and it takes no touch. -->
+  <Border Classes.microphoneLive="{Binding IsRecording}"
+          BorderThickness="0"
+          IsHitTestVisible="False" />
+  </Panel>
 
 </UserControl>

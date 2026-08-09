@@ -34,9 +34,9 @@ namespace GemmaTranslator.ViewModels;
 /// The data of the main view.
 /// </summary>
 /// <remarks>
-/// The translation part operates. The speech-to-text part, the audio capture,
-/// and the text-to-speech part come later. Until the microphone operates,
-/// <see cref="SourceText"/> holds a constant example.
+/// The microphone and the two buttons operate. The speech-to-text part and the
+/// text-to-speech part come later, thus the audio does not go to the
+/// translation and <see cref="SourceText"/> holds a constant example.
 /// </remarks>
 public sealed partial class MainViewModel : ObservableObject
 {
@@ -55,6 +55,11 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly ILogger<MainViewModel> _logger;
 
     private long _pressTicks;
+
+    // The same limit as the buffer, on the side of the user interface. The
+    // buffer protects the memory; this gives the lane back. A release can go
+    // away, and then nothing else ends the recording.
+    private DispatcherTimer? _limitTimer;
 
     /// <summary>
     /// The language of lane 1, which is the person on the left.
@@ -106,6 +111,8 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsLane1Recording))]
     [NotifyPropertyChangedFor(nameof(IsLane2Recording))]
+    [NotifyPropertyChangedFor(nameof(IsRecording))]
+    [NotifyCanExecuteChangedFor(nameof(TranslateCommand))]
     private int _recordingLane;
 
     /// <summary>
@@ -134,8 +141,10 @@ public sealed partial class MainViewModel : ObservableObject
         _audioOptions = audioOptions.Value;
         _logger = logger;
 
+        // The view model listens only. App starts the buttons, because the
+        // Windows implementation needs the top level and that does not exist
+        // when the container makes this class.
         pushToTalk.Changed += OnButtonChanged;
-        pushToTalk.Start();
 
         LogStarted(_logger, Lane1Language.Name, Lane2Language.Name);
     }
@@ -176,17 +185,28 @@ public sealed partial class MainViewModel : ObservableObject
     public bool IsLane2Recording => RecordingLane == 2;
 
     /// <summary>
+    /// True while the software hears a person.
+    /// </summary>
+    /// <remarks>
+    /// The display shows a border on the full surface. A person who is not the
+    /// speaker must see from a distance that the microphone is in operation.
+    /// The Jabra has a light of its own, but that light is on always, because
+    /// the software keeps the device open. See IAudioCapture.Prepare.
+    /// </remarks>
+    public bool IsRecording => RecordingLane != 0;
+
+    /// <summary>
     /// Translates <see cref="SourceText"/> from lane 2 into lane 1.
     /// </summary>
     /// <remarks>
     /// The direction is the direction of upstream: the person who speaks is
     /// the source, and the other person is the target. A tap starts this
-    /// command now, and the audio slice replaces the tap with the end of the
-    /// speech.
+    /// command, because the audio does not go to the translation until the
+    /// speech-to-text slice.
     /// </remarks>
     /// <param name="cancellationToken">Stops the translation.</param>
     /// <returns>The task of the operation.</returns>
-    [RelayCommand(IncludeCancelCommand = true)]
+    [RelayCommand(IncludeCancelCommand = true, CanExecute = nameof(IsNotRecording))]
     private async Task TranslateAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(SourceText))
@@ -240,6 +260,48 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Starts the timer that ends a recording with no end.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: this is the one protection against a release that does not
+    /// come. The limit of the buffer stops the memory from increasing, but
+    /// only this gives the lane back. Without it the appliance shows a lane
+    /// that is bright and it refuses the other person for ever.
+    /// </remarks>
+    /// <param name="lane">The lane that records.</param>
+    private void StartLimitTimer(int lane)
+    {
+        StopLimitTimer();
+
+        _limitTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(_audioOptions.MaximumRecordingSeconds),
+        };
+
+        _limitTimer.Tick += (_, _) =>
+        {
+            LogLimitTimer(_logger, lane, _audioOptions.MaximumRecordingSeconds);
+            StopRecording(lane);
+        };
+
+        _limitTimer.Start();
+    }
+
+    /// <summary>
+    /// Stops the timer of the limit.
+    /// </summary>
+    private void StopLimitTimer()
+    {
+        _limitTimer?.Stop();
+        _limitTimer = null;
+    }
+
+    /// <summary>
+    /// True if no person speaks. The temporary button uses this.
+    /// </summary>
+    private bool IsNotRecording => RecordingLane == 0;
+
+    /// <summary>
     /// A button of a person went down or came up.
     /// </summary>
     /// <remarks>
@@ -254,11 +316,38 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (Dispatcher.UIThread.CheckAccess())
         {
-            HandleButton(change);
+            HandleButtonSafely(change);
         }
         else
         {
-            Dispatcher.UIThread.Post(() => HandleButton(change));
+            Dispatcher.UIThread.Post(() => HandleButtonSafely(change));
+        }
+    }
+
+    /// <summary>
+    /// Does the work of one change of a button, and catches each error.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: the catch is the same protection that <c>TranslateAsync</c>
+    /// has, for the same cause. This method operates in a callback of the
+    /// dispatcher, thus an error that goes out of it has no catch and the
+    /// process stops. The appliance has no keyboard: the display becomes
+    /// black, systemd starts the software, and the same button stops it again.
+    /// </remarks>
+    /// <param name="change">The lane, and the new condition of the button.</param>
+    private void HandleButtonSafely(PushToTalkChange change)
+    {
+        try
+        {
+            HandleButton(change);
+        }
+#pragma warning disable CA1031 // The appliance must not stop. See the remark.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            LogButtonFailed(_logger, change.Lane, exception);
+            RecordingLane = 0;
+            StatusText = "The microphone did not operate.";
         }
     }
 
@@ -305,6 +394,8 @@ public sealed partial class MainViewModel : ObservableObject
         RecordingLane = lane;
         TranslatedText = string.Empty;
         StatusText = "Listening...";
+
+        StartLimitTimer(lane);
     }
 
     private void StopRecording(int lane)
@@ -319,6 +410,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         TimeSpan held = Stopwatch.GetElapsedTime(_pressTicks);
 
+        StopLimitTimer();
         RecordingLane = 0;
 
         Recording? recording = _capture.StopRecording();
@@ -327,7 +419,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             // A physical button in a public location gets an accidental touch.
             LogPressTooShort(_logger, lane, held.TotalMilliseconds);
-            StatusText = string.Empty;
+            StatusText = "Hold the button while you speak.";
             return;
         }
 
@@ -336,7 +428,16 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        SaveForTest(recording);
+#if DEBUG
+#endif
+
+        if (recording.ReachedLimit)
+        {
+            StatusText = string.Create(
+                CultureInfo.InvariantCulture,
+                $"The recording came to the limit of {_audioOptions.MaximumRecordingSeconds} s.");
+            return;
+        }
 
         // The speech-to-text part has no C# replacement, thus the audio stops
         // here. The next slice gives it to Moonshine and puts the text in
@@ -344,44 +445,6 @@ public sealed partial class MainViewModel : ObservableObject
         StatusText = string.Create(
             CultureInfo.InvariantCulture,
             $"Lane {lane}: {recording.Duration.TotalSeconds:F1} s, level {recording.PeakLevel:F2}. Speech-to-text comes later.");
-    }
-
-    /// <summary>
-    /// Writes the recording to a file, if the settings ask for it.
-    /// </summary>
-    /// <remarks>
-    /// This is for a test of the microphone with real speech. It is off if
-    /// <see cref="AudioOptions.SaveRecordingsTo"/> is empty.
-    /// </remarks>
-    /// <param name="recording">The audio.</param>
-    private void SaveForTest(Recording recording)
-    {
-        string directory = _audioOptions.SaveRecordingsTo?.Trim() ?? string.Empty;
-
-        if (directory.Length == 0)
-        {
-            return;
-        }
-
-        try
-        {
-            Directory.CreateDirectory(directory);
-
-            string name = string.Create(
-                CultureInfo.InvariantCulture,
-                $"recording-{DateTime.Now:yyyyMMdd-HHmmss-fff}.wav");
-
-            string path = Path.Combine(directory, name);
-
-            WavFile.Write(path, recording.Samples, _audioOptions.SampleRate);
-
-            LogRecordingSaved(_logger, path);
-        }
-        catch (Exception exception) when (
-            exception is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            LogRecordingNotSaved(_logger, directory, exception);
-        }
     }
 
     /// <summary>
@@ -432,13 +495,16 @@ public sealed partial class MainViewModel : ObservableObject
         Message = "The microphone did not start.")]
     private static partial void LogCaptureFailed(ILogger logger, Exception exception);
 
+
     [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "The recording is in {path}. This is for a test only.")]
-    private static partial void LogRecordingSaved(ILogger logger, string path);
+        Level = LogLevel.Error,
+        Message = "The button of lane {lane} gave an error.")]
+    private static partial void LogButtonFailed(ILogger logger, int lane, Exception exception);
+
+
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The software cannot write a recording in {directory}.")]
-    private static partial void LogRecordingNotSaved(ILogger logger, string directory, Exception exception);
+        Message = "The button of lane {lane} did not come up in {seconds} s. The software ends the recording and gives the lane back.")]
+    private static partial void LogLimitTimer(ILogger logger, int lane, int seconds);
 }

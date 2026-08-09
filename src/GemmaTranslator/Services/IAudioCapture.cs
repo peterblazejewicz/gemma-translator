@@ -30,7 +30,21 @@ namespace GemmaTranslator.Services;
 /// The largest value in the recording, from 0 to 1. A value near 0 says that
 /// the microphone heard nothing.
 /// </param>
-public sealed record Recording(float[] Samples, TimeSpan Duration, float PeakLevel);
+/// <param name="SampleRate">
+/// The rate that the machine gave, which is not always the rate that the
+/// software asked for.
+/// </param>
+/// <param name="ReachedLimit">
+/// True if the recording came to
+/// <see cref="Configuration.AudioOptions.MaximumRecordingSeconds"/>. Then the
+/// button did not come up, and the audio is not complete.
+/// </param>
+public sealed record Recording(
+    float[] Samples,
+    TimeSpan Duration,
+    float PeakLevel,
+    int SampleRate,
+    bool ReachedLimit);
 
 /// <summary>
 /// Records the microphone.
@@ -44,11 +58,6 @@ public sealed record Recording(float[] Samples, TimeSpan Duration, float PeakLev
 /// </remarks>
 public interface IAudioCapture : IDisposable
 {
-    /// <summary>
-    /// Gets a value that shows if a recording is in operation.
-    /// </summary>
-    bool IsRecording { get; }
-
     /// <summary>
     /// Opens the microphone before the first press.
     /// </summary>

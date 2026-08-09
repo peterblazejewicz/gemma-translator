@@ -17,6 +17,8 @@
 // been modified. It replaces the keydown and keyup handlers of
 // TranslatorApp.jsx, lines 250 to 312.
 
+using Avalonia.Controls;
+
 namespace GemmaTranslator.Services;
 
 /// <summary>
@@ -58,5 +60,16 @@ public interface IPushToTalk : IDisposable
     /// <summary>
     /// Starts to listen to the buttons.
     /// </summary>
-    void Start();
+    /// <remarks>
+    /// CAUTION: the top level is a part of the contract, and it is not a
+    /// property of one platform. Windows needs it, because Avalonia sends a
+    /// key to the control that has the focus and this view has no such
+    /// control. The Raspberry Pi does not use it. If this argument is not
+    /// here, a caller that has the interface only cannot make the software
+    /// operate on Windows, and a cast to one class is necessary.
+    /// </remarks>
+    /// <param name="topLevel">
+    /// The window or the single view, or <c>null</c> if there is none.
+    /// </param>
+    void Start(TopLevel? topLevel);
 }

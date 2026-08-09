@@ -57,16 +57,6 @@ public sealed class AudioOptions
     public int SampleRate { get; set; } = 16000;
 
     /// <summary>
-    /// A directory for a WAV file of each recording, or empty for none.
-    /// </summary>
-    /// <remarks>
-    /// CAUTION: this writes the speech of a person to the disk. It is for a
-    /// test of the microphone only. Keep it empty on an appliance that a
-    /// customer uses.
-    /// </remarks>
-    public string SaveRecordingsTo { get; set; } = string.Empty;
-
-    /// <summary>
     /// The shortest press that starts a recording, in milliseconds.
     /// </summary>
     /// <remarks>
@@ -74,4 +64,25 @@ public sealed class AudioOptions
     /// press that is shorter than this value does nothing.
     /// </remarks>
     public int MinimumPressMilliseconds { get; set; } = 250;
+
+    /// <summary>
+    /// The longest recording, in seconds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// CAUTION: this value is the one protection against a button that stays
+    /// down. A release can go away: a thread that reads the device can stop,
+    /// or a button can be mechanically down. The software then records the
+    /// room and the memory increases at 64 KB each second, which is 5.5 GB
+    /// each day on a machine with 8 GB that holds a model of 2.4 GB.
+    /// </para>
+    /// <para>
+    /// The buffer has this dimension and the software makes it one time at the
+    /// start. Thus the memory of the software does not increase, and a defect
+    /// in the buttons cannot stop the appliance. 120 s is much longer than one
+    /// person speaks, thus the limit does not operate in usual conditions.
+    /// </para>
+    /// </remarks>
+    public int MaximumRecordingSeconds { get; set; } = 120;
+
 }
