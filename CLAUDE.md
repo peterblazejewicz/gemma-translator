@@ -117,6 +117,40 @@ Notes:
   use a variable font. Noto Sans CJK is usually a variable OTF, so use the
   static instances.
 
+#### The fonts are done. Do not change this work without a cause.
+
+The software supplies 5 static Noto fonts in
+`src/GemmaTranslator/Assets/Fonts/`, approximately 18 MB. The software does not
+use a font of the system, thus Raspberry Pi OS Lite cannot stop it.
+
+| Part | File |
+| --- | --- |
+| The collection | `Fonts/GemmaFontCollection.cs` |
+| The default family and the fallbacks | `Fonts/AppFonts.cs` |
+| The check at the start | `Fonts/FontCheck.cs` |
+
+Three points that a change must keep:
+
+1. **`FontManagerOptions.DefaultFamilyName` is the value that stops the
+   error at the start.** With no value, Avalonia asks the system, and Pi OS
+   Lite can give none.
+2. **The fallbacks cannot do all the work.** Chinese and Japanese use the
+   same Han characters at U+4E00 to U+9FFF, and the correct shape is not the
+   same. A fallback gives one font for one range of characters. Thus the
+   display gives the font for each area from the language of the lane. See
+   `AppFonts.For`. The fallbacks are for a character of a different
+   language only.
+3. **Each font must be static.** A file with an `fvar` table is a variable
+   font, and Avalonia does not use it. The download must come from the
+   `SubsetOTF` directory of `noto-cjk`, and not from `Variable`.
+
+**How to make sure of this work on Windows.** Windows has a font for each of
+these languages, thus text on the display is not proof.
+`GlyphTypeface.FamilyName` gives the font that Avalonia selected. `FontCheck`
+writes it at each start. If each line gives the name of a Noto font, the
+software uses no font of the system, and the Raspberry Pi gives the
+same result.
+
 **Avalonia is not WPF.** Do not think that a WPF pattern operates. These are
 the errors that occur most frequently:
 
