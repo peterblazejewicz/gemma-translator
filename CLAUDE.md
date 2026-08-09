@@ -322,8 +322,31 @@ These subagents do the inspection:
 
 | Subagent | Use it for |
 | --- | --- |
+| `cupid-reviewer` | The five CUPID properties. **Use it in each adversarial review.** |
 | `dotnet-skills:code-reviewer` | Correct operation. Readability. The architecture. The security. The speed. |
 | `dotnet-skills:security-auditor` | The proxy, the static server, and the audio device access. |
+
+#### The CUPID framework
+
+The user selected the CUPID framework on 2026-08-09. It comes from Daniel
+Terhorst-North, and the documents are at `https://cupid.dev/`. The five properties
+are Composable, Unix philosophy, Predictable, Idiomatic, and Domain-based.
+
+`cupid-reviewer` is a permanent role in each adversarial review. Its definition
+is in `.claude/agents/cupid-reviewer.md`.
+
+**IMPORTANT: a CUPID property is a centred set, and it is not a rule.** A rule
+gives compliance or no compliance. A property gives a direction of travel. Thus
+a result must give the direction and the first step, and not a judgement.
+
+Two properties do not agree with the conditions of this fork. Do not correct
+this without a decision from the user:
+
+- **Predictable** usually gets its strength from tests. Section 5.2 permits no
+  test project. Thus clarity and the log do this work.
+- **Domain-based** prefers a directory tree of the domain. The `Services`,
+  `ViewModels`, and `Views` tree is a tree of technical types, which each .NET
+  developer expects. The idiom and the domain fight here.
 
 ### 5.2 No test project
 
@@ -590,3 +613,4 @@ Related files:
 | `NOTICE` | The origin of the fork, what changed, and the third-party parts. |
 | `CODEOWNERS` | The owners of this fork, and not the upstream maintainers. |
 | `CONTRIBUTING.md` | The procedure of this fork. The Google CLA does not apply. |
+
