@@ -71,4 +71,21 @@
     <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      The fonts go in the assembly. Raspberry Pi OS Lite can have no font for
+      Arabic and none for Chinese, Japanese, or Korean, and Avalonia then
+      throws at the start. See Fonts/GemmaFontCollection.cs.
+
+      The glob takes the font files only. EmbeddedFontCollection reads each
+      file of the directory, thus OFL.txt must not go in it.
+    -->
+    <AvaloniaResource Include="Assets\Fonts\*.ttf" />
+    <AvaloniaResource Include="Assets\Fonts\*.otf" />
+
+    <!-- The licence of the fonts goes beside the binary, as the SIL Open Font
+         License makes necessary. -->
+    <Content Include="Assets\Fonts\OFL.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

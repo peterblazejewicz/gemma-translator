@@ -17,8 +17,10 @@
 // been modified.
 
 using System.Globalization;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GemmaTranslator.Fonts;
 using GemmaTranslator.Services;
 using Microsoft.Extensions.Logging;
 
@@ -55,12 +57,14 @@ public sealed partial class MainViewModel : ObservableObject
     /// the position of a lane is a property of the layout.
     /// </remarks>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TranslatedFont))]
     private Language _lane1Language = Languages.FromCode("ja");
 
     /// <summary>
     /// The language of lane 2, which is the person on the right.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SourceFont))]
     private Language _lane2Language = Languages.FromCode("en");
 
     /// <summary>
@@ -104,6 +108,22 @@ public sealed partial class MainViewModel : ObservableObject
     /// The text that the Moonshine licence conditions make necessary.
     /// </summary>
     public static string Attribution => "Powered by Moonshine AI";
+
+    /// <summary>
+    /// The font for <see cref="SourceText"/>, which is the language of lane 2.
+    /// </summary>
+    /// <remarks>
+    /// The display gives the font for each area, because a fallback list
+    /// cannot give the correct shape for Chinese and for Japanese at the same
+    /// time. See <see cref="AppFonts.For(Language)"/>.
+    /// </remarks>
+    public FontFamily SourceFont => AppFonts.For(Lane2Language);
+
+    /// <summary>
+    /// The font for <see cref="TranslatedText"/>, which is the language of
+    /// lane 1.
+    /// </summary>
+    public FontFamily TranslatedFont => AppFonts.For(Lane1Language);
 
     /// <summary>
     /// Translates <see cref="SourceText"/> from lane 2 into lane 1.

@@ -19,6 +19,7 @@
 using Avalonia;
 using Avalonia.LinuxFramebuffer;
 using Avalonia.Platform;
+using GemmaTranslator.Fonts;
 
 namespace GemmaTranslator;
 
@@ -73,9 +74,13 @@ internal static class Program
     /// is public and it has no other work in it.
     /// </remarks>
     /// <returns>The builder of the application.</returns>
+    // The software supplies its own fonts and does not use a font of the
+    // operating system. See Fonts/AppFonts.cs.
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            .ConfigureFonts(static fontManager => fontManager.AddFontCollection(new GemmaFontCollection()))
+            .With(AppFonts.MakeOptions())
             .LogToTrace();
 
     /// <summary>

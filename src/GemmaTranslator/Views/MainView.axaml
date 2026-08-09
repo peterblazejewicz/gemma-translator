@@ -66,7 +66,12 @@
 
           <!-- What the person said. The microphone does not operate, thus the
                view model puts a constant example here. -->
+          <!-- The font comes from the language of the lane. Chinese and
+               Japanese use the same Han characters with a different correct
+               shape, thus a fallback list cannot give the two at the same
+               time. See Fonts/AppFonts.cs. -->
           <TextBlock Text="{Binding SourceText}"
+                     FontFamily="{Binding SourceFont}"
                      FontSize="36"
                      Opacity="0.55"
                      TextWrapping="Wrap"
@@ -75,6 +80,7 @@
 
           <!-- The translation, which the LiteRT-LM server makes. -->
           <TextBlock Text="{Binding TranslatedText}"
+                     FontFamily="{Binding TranslatedFont}"
                      FontSize="44"
                      TextWrapping="Wrap"
                      TextAlignment="Center"

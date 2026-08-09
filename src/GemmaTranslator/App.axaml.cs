@@ -20,6 +20,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using GemmaTranslator.Configuration;
+using GemmaTranslator.Fonts;
 using GemmaTranslator.ViewModels;
 using GemmaTranslator.Views;
 using Microsoft.Extensions.Configuration;
@@ -72,6 +73,11 @@ public partial class App : Application
         bool hasApiKey = liteRt.ApiKey.Length != 0;
 
         LogSettings(logger, endpoint, liteRt.ModelName, hasApiKey);
+
+        // The fonts are the largest risk at the start on Raspberry Pi OS Lite.
+        // This line puts the condition of each font in the journal, because
+        // the appliance has no console. See Fonts/FontCheck.cs.
+        FontCheck.Run(provider.GetRequiredService<ILogger<App>>());
 
         MainViewModel viewModel = provider.GetRequiredService<MainViewModel>();
 

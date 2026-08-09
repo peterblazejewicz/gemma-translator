@@ -41,3 +41,21 @@ The software calls these components. It does not include their source.
 
 The user interface shows "Powered by Moonshine AI", which the Moonshine
 licence conditions make necessary.
+
+--------------------------------------------------------------------------
+Fonts
+
+This software includes the font files below. They are in the assembly, and
+`src/GemmaTranslator/Assets/Fonts/OFL.txt` holds their licence.
+
+  Noto Sans, Noto Sans Arabic
+  Noto Sans JP, Noto Sans SC, Noto Sans KR
+  Copyright the Noto Project Authors (https://github.com/notofonts)
+  Licensed under the SIL Open Font License, Version 1.1
+
+The SIL Open Font License permits this use. The software does not sell the
+fonts, and the reserved font names do not change.
+
+The software supplies these fonts because Raspberry Pi OS Lite can have no
+font for Arabic and none for Chinese, Japanese, or Korean. With no font,
+Avalonia stops at the start.
