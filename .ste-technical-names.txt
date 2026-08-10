@@ -159,6 +159,44 @@ opus
 sonnet
 fable
 
+# --- CAD and OpenSCAD (section 12 of CLAUDE.md) ---
+# manifold - the topology term for a surface with no hole and no self
+#            intersection. It is also the name of the OpenSCAD engine.
+# module   - the OpenSCAD keyword for a part of the source.
+# iso      - the isometric view.
+# insert - part of "heat-set insert", the name of the brass part that a hot
+#          iron puts in a printed boss to give it a metal thread.
+# screw  - a screw (n), the fastener. Also "screw bore", "screw boss", and
+#          "screw terminals". The dictionary approves the verb "screw" only.
+insert
+screw
+# well - the circular hole in the deck that holds the speakerphone. It is the
+#        term of the source design and the name in the code (WELL_RI, well_2d).
+#        The dictionary approves "well" as an adverb only.
+# intake - the plate in the floor that draws cooling air into the enclosure.
+#          It is the name in the code (INTAKE_POS, intake()). The dictionary
+#          does not have this word.
+well
+intake
+openscad
+scad
+bosl2
+cad
+cgal
+manifold
+mesh
+facet
+facets
+geometry
+slicer
+boolean
+module
+png
+3mf
+iso
+gui
+powershell
+
 # --- Domain terms of this project ---
 case
 lane
@@ -170,3 +208,26 @@ offline
 layout
 portrait
 landscape
+
+# pogo - a spring-loaded contact pin. The X1201 supplies the Pi through four
+#        of them. It is the vendor name for the part.
+pogo
+
+# --- names of the enclosure, added 2026-08-10 ---
+#
+# switch      - a switch (n) is a component that a person operates. The
+#               dictionary refuses "to switch" (v) and gives SET (v). This is
+#               the same class of false result as file, log, and request above.
+#               The appliance has three: two push-to-talk and one for the
+#               electrical supply.
+# cover glass - the glass at the front of the display module. It is the name
+#               that the Raspberry Pi document uses, and the perimeter of the
+#               module is bare cover glass, which is what the rebate carries.
+# rebate      - a step at the top of a wall that a part sits in. It is the
+#               name of the feature in woodwork and in a machine shop.
+# chamfer     - a face at 45 degrees at an edge. It is the name of the feature
+#               in a machine shop.
+switch
+cover glass
+rebate
+chamfer

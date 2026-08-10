@@ -1,18 +1,15 @@
 # =============================================================================
 # gemma-translator .gitignore
-# This fork is being migrated from Python + React to .NET 10 / C# / Avalonia
-# UI (targeting Raspberry Pi / Linux ARM64). Rules for the legacy Python
-# backend and React frontend are kept below until the migration is complete.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Node.js / React frontend (legacy, still present during migration)
+# Node.js / React frontend
 # -----------------------------------------------------------------------------
 node_modules/
 dist/
 
 # -----------------------------------------------------------------------------
-# Python backend (legacy, still present during migration)
+# Python backend
 # -----------------------------------------------------------------------------
 venv/
 __pycache__/
@@ -58,7 +55,7 @@ server.log
 coverage/
 
 # =============================================================================
-# .NET / C# (new backend/UI stack)
+# .NET / C#
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -146,6 +143,14 @@ ipch/
 packages/*
 !packages/build/
 .nuget/
+
+# =============================================================================
+# CAD / OpenSCAD
+# notes/ holds the datasheets, the images, the renders and the files for a
+# slicer. Git holds none of it. The .scad source in cad/ and the files for the
+# printer in stl/ stay tracked.
+# =============================================================================
+notes/
 
 # -----------------------------------------------------------------------------
 # OS cruft
