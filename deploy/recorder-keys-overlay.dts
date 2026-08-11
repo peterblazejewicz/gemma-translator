@@ -1,0 +1,105 @@
+// Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+// SPDX-License-Identifier: Apache-2.0
+
+// The device tree overlay of the appliance. It gives three signals to Linux:
+// the two push-to-talk buttons, and the mains line of the X1201 UPS.
+
+// deploy/README.md gives the wiring, the installation, and the measurement
+// that made each value below. deploy-pi.sh does the installation.
+
+// CAUTION: do not keep a dtoverlay=gpio-key line or a dtoverlay=gpio-charger
+// line for GPIO6, GPIO17 or GPIO27. One pin has one owner, thus the second
+// driver does not start. See section 8.3 of deploy/README.md.
+
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2835";
+
+    // The pin configuration goes first. Each overlay that Raspberry Pi
+    // supplies does this, thus this file does the same.
+    fragment@0 {
+        target = <&gpio>;
+        __overlay__ {
+
+            // CAUTION: brcm,function = <0> is not "input" on the RP1 of a
+            // Raspberry Pi 5. The values 0 and 1 both give the GPIO function.
+            // gpiolib makes the direction after this, from the driver.
+            button_pins: button_pins {
+                brcm,pins = <17 27>;
+                brcm,function = <0>;
+                brcm,pull = <2>;            // up. The button goes to ground.
+            };
+
+            // CAUTION: the pull is DOWN here, and that is a safety decision.
+            // The X1201 drives this line, thus the pull gives the value only
+            // when the board is not in contact. With a pull up that fault
+            // reads "mains present", and the cells then go empty with no
+            // message. See section 8.7 of deploy/README.md.
+            mains_pin: mains_pin {
+                brcm,pins = <6>;
+                brcm,function = <0>;
+                brcm,pull = <1>;            // down
+            };
+        };
+    };
+
+    fragment@1 {
+        target-path = "/";
+        __overlay__ {
+
+            // CAUTION: the label of THIS node becomes the name of the input
+            // device, and the udev rule finds the device by that name. The
+            // label of a key node below is a different property. See section
+            // 8.1 of deploy/README.md.
+            recorder_keys {
+                compatible = "gpio-keys";
+                label = "recorder-buttons";
+                pinctrl-names = "default";
+                pinctrl-0 = <&button_pins>;
+                status = "okay";
+
+                // This value is the quiet time after the last change of the
+                // voltage. It is not the length of the bounce. RP1 has no
+                // debounce in its hardware, thus a large value makes a delay,
+                // and the delay removes the start of the speech. A
+                // measurement of these buttons gives less than 4 ms of
+                // bounce. See section 8.4 of deploy/README.md.
+                key_speaker1 {
+                    label = "SPEAKER_1";
+                    linux,code = <183>;         // KEY_F13
+                    gpios = <&gpio 17 1>;       // 1 = active low
+                    debounce-interval = <10>;
+                };
+
+                key_speaker2 {
+                    label = "SPEAKER_2";
+                    linux,code = <184>;         // KEY_F14
+                    gpios = <&gpio 27 1>;
+                    debounce-interval = <10>;
+                };
+            };
+
+            // The mains line is a level and not a button, thus it goes to
+            // gpio-charger. That driver makes
+            // /sys/class/power_supply/mains/online.
+            //
+            // CAUTION: pinctrl-names is necessary here. The gpio-charger
+            // overlay of Raspberry Pi OS does not have it, thus its pull does
+            // nothing and it gives no error. See section 8.2 of
+            // deploy/README.md.
+            mains {
+                compatible = "gpio-charger";
+                charger-type = "mains";
+                pinctrl-names = "default";
+                pinctrl-0 = <&mains_pin>;
+                status = "okay";
+
+                // High is mains and low is battery, thus this line has no
+                // active low flag. See section 8.7 of deploy/README.md.
+                gpios = <&gpio 6 0>;
+            };
+        };
+    };
+};

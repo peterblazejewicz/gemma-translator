@@ -33,7 +33,7 @@
     The skeleton of the user interface, for a landscape surface of 1280 x 720.
 
     The panel is 720 x 1280 in native portrait. The DRM startup turns it 90
-    degrees. See Program.cs and section 4.2 of CLAUDE.md.
+    degrees. See Program.cs.
 
     The structure is the structure of the upstream user interface, which
     style.css line 68 calls "hardcoded 480x320 landscape". The heights keep the
@@ -50,8 +50,8 @@
   -->
 
   <UserControl.Styles>
-    <!-- A style class, and not a converter. Section 3.1 of CLAUDE.md says
-         that Avalonia uses a class and a selector where WPF uses a trigger. -->
+    <!-- A style class, and not a converter. Avalonia uses a class and a
+         selector where WPF uses a trigger. -->
     <Style Selector="Border.recording">
       <Setter Property="Background" Value="#1B3A57" />
     </Style>

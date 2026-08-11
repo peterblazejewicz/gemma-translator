@@ -35,6 +35,11 @@ import { playBlip } from "./utils/audio-blip"
 // What is left here is speech-to-text and text-to-speech. Nothing calls them,
 // because the audio that fed them is now captured in C#. CLAUDE.md section 5.3
 // keeps this code until those two slices land; then this file is deleted.
+//
+// CAUTION: a third part is still here. Lane 1 and lane 2 rotate their language
+// from the two arrows on the display: handleRotateLanguage below, through the
+// onRotate of LanguageLane. No C# replaces that. Do not delete this file for
+// the two slices alone.
 
 // Languages offered on each lane's revolver; ttsLang selects the backend voice.
 const AVAILABLE_LANGUAGES = [

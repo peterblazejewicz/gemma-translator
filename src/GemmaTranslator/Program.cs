@@ -55,7 +55,7 @@ internal static class Program
             // If the display shows the user interface upside down, change this
             // to Rotation270. The correct value depends on the side that the
             // DSI cable goes out. You cannot know it before the hardware is
-            // here. See section 4.2 of CLAUDE.md.
+            // here.
             return builder.StartLinuxDrm(args, card: null, options: new DrmOutputOptions
             {
                 Scaling = 1.0,

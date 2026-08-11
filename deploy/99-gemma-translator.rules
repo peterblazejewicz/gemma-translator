@@ -1,0 +1,46 @@
+# Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+# SPDX-License-Identifier: Apache-2.0
+#
+# ---------------------------------------------------------------------------
+# SECURITY CONTROL. The text here is plain English on purpose, and not
+# Simplified Technical English. See section 8 of CLAUDE.md.
+# ---------------------------------------------------------------------------
+#
+# This rule gives the appliance account ONE input device, by owner. That is
+# what lets the account stay out of group "input". Do not replace OWNER= with
+# GROUP="input", and do not put the service account in group "input".
+#
+# What group "input" would grant, and why you must not use it: read access to
+# every input device on this machine, including devices that do not exist yet.
+# On Debian every /dev/input/event* node is already 0660 root:input, so any
+# member of that group can read the touchscreen, and every keystroke from any
+# USB keyboard somebody plugs in later, including a password typed at the
+# console. This appliance stands in a public place and already records what
+# people say. A process that can also read every key is a keylogger, and
+# nothing in this software needs one. Widen this rule and the appliance
+# becomes one, with nothing on the display to show it.
+#
+# The match below is pinned to the kernel's device topology on purpose, not to
+# the device name. A USB device supplies its own name string, so anyone with
+# thirty seconds of physical access could plug in a gadget that calls itself
+# "recorder-buttons". Nothing plugged into a USB port can claim to be a
+# platform device named recorder_keys bound to the gpio-keys driver.
+#
+# ---------------------------------------------------------------------------
+#
+# CAUTION: do not add ATTRS{name}=="recorder-buttons" to the rule below. It
+# looks like one more test, and it makes the full rule agree with no device.
+#
+# udev examines the parents of a device for SUBSYSTEMS, DRIVERS, KERNELS and
+# ATTRS, and all of these keys in one rule must agree on the same parent. The
+# name is a property of the inputN device, but the driver and the name of the
+# node are properties of its parent.
+#
+# Thus no parent can agree with the two keys together. The rule agrees with no
+# device, and udev gives no error. See section 8.5 of deploy/README.md.
+#
+# KERNELS is the name of the node in deploy/recorder-keys-overlay.dts. If you
+# give that node a different name, change this value also. deploy-pi.sh puts
+# the account of the systemd unit in the position of {{USER}}.
+
+SUBSYSTEM=="input", KERNEL=="event*", SUBSYSTEMS=="platform", DRIVERS=="gpio-keys", KERNELS=="recorder_keys", SYMLINK+="input/recorder-buttons", OWNER="{{USER}}", GROUP="root", MODE="0400"

@@ -14,8 +14,8 @@
 // limitations under the License.
 //
 // This file is part of a fork of google-gemma/gemma-translator and has
-// been modified. It replaces the keydown and keyup handlers of
-// TranslatorApp.jsx, lines 250 to 312.
+// been modified. It replaces the record keys of handleKeyDown and
+// handleKeyUp, in upstream/main:frontend/src/TranslatorApp.jsx.
 
 using Avalonia.Controls;
 
@@ -38,8 +38,8 @@ public sealed record PushToTalkChange(int Lane, bool IsPressed);
 /// occupied. Those are rules of the operation, and they are in the view model.
 /// </para>
 /// <para>
-/// CAUTION: this is a true difference of the platform, thus it obeys section
-/// 5.2 of CLAUDE.md. Avalonia gives no key event on the Raspberry Pi: the DRM
+/// CAUTION: this interface is here for a true difference of the platform, and
+/// not for a fake. Avalonia gives no key event on the Raspberry Pi: the DRM
 /// backend of <c>Avalonia.LinuxFramebuffer</c> 12.1.1 can raise a pointer
 /// event and a touch event only, and <c>RawKeyEventArgs</c> is not in that
 /// assembly. Thus Windows uses the keys of Avalonia and the Raspberry Pi reads

@@ -14,61 +14,70 @@
 // limitations under the License.
 //
 // This file is part of a fork of google-gemma/gemma-translator and has
-// been modified. It replaces the keydown and keyup handlers of
-// TranslatorApp.jsx, lines 250 to 312.
+// been modified. It replaces the record keys of handleKeyDown and
+// handleKeyUp, in upstream/main:frontend/src/TranslatorApp.jsx.
 
+using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Microsoft.Extensions.Logging;
 
 namespace GemmaTranslator.Services;
 
 /// <summary>
-/// The buttons, from the input devices of Linux.
+/// The two buttons, from one input device of Linux.
 /// </summary>
 /// <remarks>
 /// <para>
 /// CAUTION: this class is necessary because Avalonia gives no key event on the
 /// Raspberry Pi. The DRM backend of <c>Avalonia.LinuxFramebuffer</c> 12.1.1
 /// gives a pointer event and a touch event only. <c>RawKeyEventArgs</c> is not
-/// in that assembly, thus <c>KeyDown</c> never occurs.
+/// in that assembly, thus <c>KeyDown</c> does not occur.
 /// </para>
 /// <para>
-/// The two buttons come to Linux as key events, because the device tree makes
-/// them keys:
-/// </para>
-/// <code>
-/// dtoverlay=gpio-key,gpio=17,active_low=1,gpio_pull=up,label=SPEAKER_1,keycode=183
-/// dtoverlay=gpio-key,gpio=27,active_low=1,gpio_pull=up,label=SPEAKER_2,keycode=184
-/// </code>
-/// <para>
-/// The software opens the two devices with these names only. It does not open
-/// each device of <c>/dev/input</c>. A keyboard and the touch screen are
-/// different devices, and this software must not read them: the appliance is
-/// in a public location, and a process that reads each key is a hazard that no
-/// function here needs.
+/// SECURITY CONTROL. This class opens one path, and that path is a symlink
+/// that udev makes for the GPIO button harness. Do not change it to a scan of
+/// /dev/input, do not fall back to matching on the reported device name, and
+/// do not put the service account in group "input".
 /// </para>
 /// <para>
-/// CAUTION: the software finds the devices one time, at the start. A button
-/// harness that a person connects later is not found. This is acceptable
-/// because the buttons are on the GPIO header and they are there when the
-/// machine starts.
+/// What that would give away: every /dev/input/event* node on this machine is
+/// 0660 root:input by default, so any member of that group can read the
+/// touchscreen and every keystroke from any USB keyboard somebody plugs in
+/// later, including a password typed at a console. This appliance stands in a
+/// public place and already records what people say. Widen this and it becomes
+/// a keylogger, and nothing on the display would show it.
+/// </para>
+/// <para>
+/// The udev rule matches the kernel device topology and not the reported name,
+/// because a USB device supplies its own name string and can claim to be the
+/// button harness. See <c>deploy/99-gemma-translator.rules</c>.
+/// </para>
+/// <para>
+/// CAUTION: the software opens the device one time, at the start. A harness
+/// that a person connects subsequently is not found. This is permitted because
+/// the buttons are on the GPIO header and they are there when the machine
+/// starts.
 /// </para>
 /// </remarks>
 public sealed partial class EvdevPushToTalk : IPushToTalk
 {
-    // struct input_event on 64-bit Linux: two 8-byte values for the time,
-    // then __u16 type, __u16 code, __s32 value.
-    private const int EventSize = 24;
-    private const ushort EvKey = 0x01;
+    /// <summary>
+    /// The one device that this class opens.
+    /// </summary>
+    /// <remarks>
+    /// The udev rule of <c>deploy/99-gemma-translator.rules</c> makes this
+    /// symlink. The number of an event device is not the same after each
+    /// start, thus the software must not use one.
+    /// </remarks>
+    private const string DevicePath = "/dev/input/recorder-buttons";
 
+    private const ushort EvKey = 0x01;
     private const ushort KeyF13 = 183;
     private const ushort KeyF14 = 184;
 
-    private const string Speaker1 = "SPEAKER_1";
-    private const string Speaker2 = "SPEAKER_2";
-
     private readonly ILogger<EvdevPushToTalk> _logger;
-    private readonly List<FileStream> _streams = [];
+
+    private FileStream? _stream;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EvdevPushToTalk"/> class.
@@ -90,118 +99,68 @@ public sealed partial class EvdevPushToTalk : IPushToTalk
         // level. The argument is for the Windows implementation.
         _ = topLevel;
 
+        // CAUTION: a second call opens the device again. Each open of an
+        // input device makes its own reader in the kernel, and each reader
+        // gets each event. Thus the software then gets each press two times.
+        //
+        // The test is _stream, which is not null only after an open that
+        // operates. Thus a call after a failure can try again.
+        if (_stream is not null)
+        {
+            LogAlreadyStarted(_logger, DevicePath);
+            return;
+        }
 
-        string[] devices;
+        FileStream stream;
 
         try
         {
-            devices = Directory.GetFiles("/dev/input", "event*");
+            stream = new FileStream(DevicePath, FileMode.Open, FileAccess.Read);
+        }
+        catch (FileNotFoundException)
+        {
+            // The appliance has no console. This line is the first thing to
+            // read if a button does nothing.
+            LogDeviceMissing(_logger, DevicePath);
+            return;
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException)
         {
-            LogNoInputDirectory(_logger, exception);
+            LogDeviceNotOpen(_logger, DevicePath, exception.Message);
             return;
         }
 
-        int opened = 0;
+        _stream = stream;
 
-        foreach (string path in devices)
+        LogDeviceOpen(_logger, DevicePath);
+
+        // CAUTION: this thread is a background thread and it stops with the
+        // process. A blocking read cannot be stopped: neither a cancellation
+        // token nor a close of the handle interrupts it. Thus Dispose does not
+        // stop this thread, and no method of this class can.
+        Thread thread = new(() => ReadLoop(stream))
         {
-            string name = ReadDeviceName(path);
+            IsBackground = true,
+            Name = "evdev push-to-talk",
+        };
 
-            if (name is not (Speaker1 or Speaker2))
-            {
-                continue;
-            }
-
-            FileStream stream;
-
-            try
-            {
-                stream = new FileStream(path, FileMode.Open, FileAccess.Read);
-            }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException)
-            {
-                LogDeviceNotOpen(_logger, name, path, exception.Message);
-                continue;
-            }
-
-            _streams.Add(stream);
-            opened++;
-
-            LogDeviceOpen(_logger, name, path);
-
-            // CAUTION: this thread is a background thread and it stops with
-            // the process. A blocking read cannot be stopped: neither a
-            // cancellation token nor a close of the handle interrupts it. Thus
-            // this class has no Dispose that stops the threads, because such a
-            // method could not do what its name says.
-            Thread thread = new(() => ReadLoop(stream, name))
-            {
-                IsBackground = true,
-                Name = $"evdev {name}",
-            };
-
-            thread.Start();
-        }
-
-        // The appliance has no console. These lines are the first thing to
-        // read if a button does nothing.
-        if (opened == 0)
-        {
-            LogNoButtons(_logger, devices.Length, Speaker1, Speaker2);
-        }
-        else if (opened < 2)
-        {
-            LogOneButton(_logger, opened);
-        }
+        thread.Start();
     }
 
     /// <inheritdoc/>
     public void Dispose()
     {
-        // The threads stop with the process. See the remark in Start. This
-        // closes the handles that no thread waits on.
-        foreach (FileStream stream in _streams)
-        {
-            try
-            {
-                stream.Dispose();
-            }
-            catch (IOException)
-            {
-                // A thread can wait on this handle. The process stops soon.
-            }
-        }
-
-        _streams.Clear();
-    }
-
-    /// <summary>
-    /// Reads the name of one input device.
-    /// </summary>
-    /// <remarks>
-    /// The name is the <c>label</c> of the <c>gpio-key</c> overlay. It is a
-    /// plain file in sysfs, thus this needs no <c>EVIOCGNAME</c> and no
-    /// P/Invoke.
-    /// </remarks>
-    /// <param name="path">The path of the device, for example /dev/input/event3.</param>
-    /// <returns>The name, or an empty text.</returns>
-    private static string ReadDeviceName(string path)
-    {
-        try
-        {
-            return File
-                .ReadAllText($"/sys/class/input/{Path.GetFileName(path)}/device/name")
-                .Trim();
-        }
-        catch (Exception exception) when (
-            exception is IOException or UnauthorizedAccessException)
-        {
-            return string.Empty;
-        }
+        // CAUTION: this method does nothing on purpose, and that is not an
+        // omission.
+        //
+        // The reader thread is in a blocking read that no method can stop. See
+        // the CAUTION in Start. A close of the stream does not stop that
+        // thread. It makes the next read give an error. The software then
+        // writes a line at level Error for a stop that is correct.
+        //
+        // The one caller is the exit of the process, thus the system takes the
+        // file back immediately after this.
     }
 
     /// <summary>
@@ -216,103 +175,133 @@ public sealed partial class EvdevPushToTalk : IPushToTalk
         _ => 0,
     };
 
-    private void ReadLoop(FileStream stream, string name)
+    private void ReadLoop(FileStream stream)
     {
-        byte[] buffer = new byte[EventSize];
+        byte[] buffer = new byte[InputEvent.Size];
 
-        try
+        while (true)
         {
-            while (true)
+            try
             {
-                int read = 0;
+                stream.ReadExactly(buffer);
+            }
+            catch (Exception exception) when (
+                exception is IOException or ObjectDisposedException)
+            {
+                // The device is gone. A read gives no more data, thus the
+                // thread stops here.
+                //
+                // CAUTION: the filter is narrow on purpose. An error of a
+                // different type is a defect of this software. It goes out of
+                // this thread, the process stops, and systemd starts it again.
+                // A wide filter makes a defect look like a fault of the
+                // hardware.
+                LogReadFailed(_logger, DevicePath, exception);
+                return;
+            }
 
-                while (read < EventSize)
-                {
-                    int count = stream.Read(buffer, read, EventSize - read);
+            InputEvent inputEvent = MemoryMarshal.Read<InputEvent>(buffer);
 
-                    if (count == 0)
-                    {
-                        return;
-                    }
+            if (inputEvent.Type != EvKey)
+            {
+                continue;
+            }
 
-                    read += count;
-                }
+            // 0 is up and 1 is down. 2 is autorepeat, and a person who holds
+            // one button makes one press and not many.
+            if (inputEvent.Value is not (0 or 1))
+            {
+                continue;
+            }
 
-                ushort type = BitConverter.ToUInt16(buffer, 16);
-                ushort code = BitConverter.ToUInt16(buffer, 18);
-                int value = BitConverter.ToInt32(buffer, 20);
+            int lane = LaneOf(inputEvent.Code);
 
-                if (type != EvKey)
-                {
-                    continue;
-                }
+            if (lane == 0)
+            {
+                continue;
+            }
 
-                // 2 is autorepeat. A person holds one button, and that is one
-                // press and not many.
-                if (value is not (0 or 1))
-                {
-                    continue;
-                }
-
-                int lane = LaneOf(code);
-
-                if (lane == 0)
-                {
-                    continue;
-                }
-
-                Changed?.Invoke(this, new PushToTalkChange(lane, value == 1));
+            try
+            {
+                Changed?.Invoke(this, new PushToTalkChange(lane, inputEvent.Value == 1));
+            }
+#pragma warning disable CA1031 // The appliance must not stop. See the remark.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                // This catch is insurance and it is not a live path today.
+                // The one subscriber posts to the dispatcher and returns
+                // immediately. Thus its error comes on the thread of the user
+                // interface. A subscriber that does its work here would give
+                // its error here.
+                //
+                // CAUTION: an event goes to each subscriber in sequence. A
+                // subscriber that gives an error stops the subscribers after
+                // it, thus this event can go to no subscriber.
+                LogSubscriberFailed(_logger, exception);
             }
         }
-#pragma warning disable CA1031 // The appliance must not stop. See the remark.
-        catch (Exception exception)
-#pragma warning restore CA1031
-        {
-            // CAUTION: this catch takes each type on purpose. Changed calls
-            // the code of a subscriber on this thread. An error with no catch
-            // on a background thread stops the process, and then the display
-            // of the appliance becomes black. The recording continues until
-            // AudioOptions.MaximumRecordingSeconds stops it.
-            LogReadFailed(_logger, name, exception);
-        }
+    }
+
+    /// <summary>
+    /// One record of <c>/dev/input/event*</c>, which is <c>struct
+    /// input_event</c> of Linux.
+    /// </summary>
+    /// <remarks>
+    /// The two values of the time are 8 bytes each on a 64-bit machine, thus
+    /// the record is 24 bytes. This software has no 32-bit target. The
+    /// software does not use the time: <c>MainViewModel</c> measures the press
+    /// with <c>Stopwatch</c>, which is monotonic.
+    /// </remarks>
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct InputEvent
+    {
+        /// <summary>The size of one record, in bytes.</summary>
+        public const int Size = 24;
+
+        /// <summary>The seconds of the time of the event.</summary>
+        public readonly long Seconds;
+
+        /// <summary>The microseconds of the time of the event.</summary>
+        public readonly long Microseconds;
+
+        /// <summary>The type of the event. 1 is a key.</summary>
+        public readonly ushort Type;
+
+        /// <summary>The code of the key.</summary>
+        public readonly ushort Code;
+
+        /// <summary>0 is up, 1 is down, and 2 is autorepeat.</summary>
+        public readonly int Value;
     }
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The button {name} is at {path}.")]
-    private static partial void LogDeviceOpen(ILogger logger, string name, string path);
+        Message = "The two buttons are at {path}.")]
+    private static partial void LogDeviceOpen(ILogger logger, string path);
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "No button is here. The software examined {count} input devices and none has the name {speaker1} or {speaker2}. Examine the dtoverlay lines of /boot/firmware/config.txt.")]
-    private static partial void LogNoButtons(
-        ILogger logger,
-        int count,
-        string speaker1,
-        string speaker2);
+        Message = "There is no {path}, thus the two buttons do nothing. Install the device tree overlay and the udev rule. See deploy/recorder-keys-overlay.dts.")]
+    private static partial void LogDeviceMissing(ILogger logger, string path);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The device {path} did not open: {reason} The udev rule gives this device to the account of the service.")]
+    private static partial void LogDeviceNotOpen(ILogger logger, string path, string reason);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The software found {opened} button of the 2. One person cannot speak.")]
-    private static partial void LogOneButton(ILogger logger, int opened);
+        Message = "Start came again for {path}. This class opens the device one time only, thus this call does nothing.")]
+    private static partial void LogAlreadyStarted(ILogger logger, string path);
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The software cannot read /dev/input. The user must be in the group that the udev rule gives.")]
-    private static partial void LogNoInputDirectory(ILogger logger, Exception exception);
+        Message = "The software cannot continue to read the buttons at {path}. They do nothing now.")]
+    private static partial void LogReadFailed(ILogger logger, string path, Exception exception);
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The button {name} at {path} did not open: {reason}")]
-    private static partial void LogDeviceNotOpen(
-        ILogger logger,
-        string name,
-        string path,
-        string reason);
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "The software cannot continue to read the button {name}. That button does nothing now.")]
-    private static partial void LogReadFailed(ILogger logger, string name, Exception exception);
-
+        Message = "A subscriber of the buttons gave an error. The subscribers after it did not get this event.")]
+    private static partial void LogSubscriberFailed(ILogger logger, Exception exception);
 }

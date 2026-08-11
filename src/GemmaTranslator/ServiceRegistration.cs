@@ -31,9 +31,10 @@ namespace GemmaTranslator;
 /// software.
 /// </summary>
 /// <remarks>
-/// Section 3.2 of CLAUDE.md makes this a rule. Do not make a service or a view
-/// model with <c>new</c> in a view. Get it from the container, and give each
-/// dependency to the constructor.
+/// Do not make a service or a view model with <c>new</c> in a view. Get it
+/// from the container, and give each dependency to the constructor. The
+/// container is the one location that selects an implementation for the
+/// platform, thus a view that makes its own gets the wrong one.
 /// </remarks>
 public static class ServiceRegistration
 {
@@ -141,7 +142,7 @@ public static class ServiceRegistration
 
         // The speech-to-text part and the text-to-speech part come later.
         // Each one gets an interface only if Windows and the Raspberry Pi
-        // need different code. See section 5.2 of CLAUDE.md.
+        // need different code.
         return services;
     }
 }

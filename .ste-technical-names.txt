@@ -231,3 +231,29 @@ switch
 cover glass
 rebate
 chamfer
+
+# --- names of the GPIO configuration ---
+#
+# momentary   - a momentary switch. It is the name of the type of the
+#               component. The dictionary gives MOMENTARILY (adv), which is a
+#               different part of speech.
+# interrupt   - an interrupt (n) of the processor, which /proc/interrupts
+#               counts. The dictionary refuses "to interrupt" (v). This is the
+#               same class of false result as file, log, and request above.
+# register    - a register (n) of a device on the I2C bus. The dictionary
+#               refuses "to register" (v).
+# state       - a state (n): the "state of charge" of a cell, and a state of
+#               pinctrl. The dictionary refuses "to state" (v).
+# fuel gauge  - the class of the device that measures the charge of a cell. It
+#               is the name that Maxim and the Linux kernel both use.
+# significant - part of "most significant byte", the name of the sequence of
+#               the bytes of a value.
+# repeated    - part of "repeated start", the name of the operation of I2C
+#               that reads a register.
+momentary
+interrupt
+register
+state
+fuel gauge
+significant
+repeated

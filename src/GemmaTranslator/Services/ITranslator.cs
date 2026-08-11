@@ -30,8 +30,8 @@ namespace GemmaTranslator.Services;
 /// <c>ServiceRegistration.cs</c>, and not a change at each call.
 /// </para>
 /// <para>
-/// See section 5.2 of CLAUDE.md. An interface is for a different platform or a
-/// different distribution, not for a fake.
+/// An interface is for a different platform or a different distribution, and
+/// not for a fake.
 /// </para>
 /// </remarks>
 public interface ITranslator

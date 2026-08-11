@@ -14,8 +14,8 @@
 // limitations under the License.
 //
 // This file is part of a fork of google-gemma/gemma-translator and has
-// been modified. It replaces the keydown and keyup handlers of
-// TranslatorApp.jsx, lines 250 to 312.
+// been modified. It replaces the record keys of handleKeyDown and
+// handleKeyUp, in upstream/main:frontend/src/TranslatorApp.jsx.
 
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -44,7 +44,7 @@ public sealed partial class KeyboardPushToTalk : IPushToTalk
     private readonly ILogger<KeyboardPushToTalk> _logger;
 
     // Avalonia repeats KeyDown while a key stays down. Upstream guards this
-    // with `e.repeat` at TranslatorApp.jsx:264. This set does the same work.
+    // with `e.repeat` in handleKeyDown. This set does the same work.
     private readonly HashSet<Key> _down = [];
 
     private TopLevel? _topLevel;
@@ -170,7 +170,7 @@ public sealed partial class KeyboardPushToTalk : IPushToTalk
     /// The handler tunnels on the top level, thus it sees each key before a
     /// control. With no test, a person could not type Z or X in any field of
     /// this software. Upstream has the same guard at
-    /// <c>TranslatorApp.jsx:252</c>.
+    /// <c>handleKeyDown</c> and <c>handleKeyUp</c>.
     /// </remarks>
     /// <param name="source">The source of the event.</param>
     /// <returns>True if the key belongs to that control.</returns>

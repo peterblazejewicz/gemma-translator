@@ -149,8 +149,26 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         // A callback that operates now can write some more samples. It cannot
         // write outside the buffer, thus this copy is safe.
         int written = _written;
-        float[] samples = _buffer.AsSpan(0, written).ToArray();
-        float peak = BitConverter.Int32BitsToSingle(_peakBits);
+        float[] samples;
+        float peak;
+
+        try
+        {
+            samples = _buffer.AsSpan(0, written).ToArray();
+            peak = BitConverter.Int32BitsToSingle(_peakBits);
+        }
+        finally
+        {
+            // SECURITY CONTROL. Do not remove this to save a memset. Without
+            // it the speech of the last person stays in this buffer for the
+            // life of the process. This appliance keeps no recording, and this
+            // line is part of what makes that true.
+            //
+            // The finally makes the clear come also when the copy above does
+            // not operate. No later call can do it: StopRecording gives null
+            // when no session is open.
+            Array.Clear(_buffer);
+        }
 
         LogStopped(_logger, duration.TotalSeconds, written, peak, _deviceSampleRate);
 
@@ -175,6 +193,11 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         {
             _sessionOpen = false;
             _accumulating = false;
+
+            // A person can hold a button while the software stops. Then no
+            // StopRecording occurs and the buffer keeps the speech.
+            Array.Clear(_buffer);
+
             device = _device;
             engine = _engine;
             _device = null;

@@ -275,7 +275,11 @@ public sealed partial class MainViewModel : ObservableObject
         _limitTimer.Tick += (_, _) =>
         {
             LogLimitTimer(_logger, lane, _audioOptions.MaximumRecordingSeconds);
-            StopRecording(lane);
+
+            // A release that the person did not make. It goes through
+            // HandleButtonSafely, which is the one entry that catches. An
+            // error out of a Tick has no catch, and the process stops.
+            HandleButtonSafely(new PushToTalkChange(lane, IsPressed: false));
         };
 
         _limitTimer.Start();
@@ -340,8 +344,49 @@ public sealed partial class MainViewModel : ObservableObject
 #pragma warning restore CA1031
         {
             LogButtonFailed(_logger, change.Lane, exception);
+            DiscardRecording();
+        }
+    }
+
+    /// <summary>
+    /// Stops the microphone and the timer after an error, and lets the samples
+    /// go.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: each path that makes <see cref="RecordingLane"/> 0 must also
+    /// stop the microphone. With 0 alone the release of the button finds no
+    /// lane and does nothing. The session then stays open and the buffer keeps
+    /// the speech.
+    /// </remarks>
+    private void DiscardRecording()
+    {
+        try
+        {
+            StopLimitTimer();
+
+            using Recording? discarded = _capture.StopRecording();
+        }
+#pragma warning disable CA1031 // An error out of this method stops the process.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            LogDiscardFailed(_logger, exception);
+        }
+
+        // CAUTION: these two are properties of the toolkit, and not fields.
+        // Each one raises PropertyChanged, and Avalonia then applies a style on
+        // this thread. Thus each one can throw, and this method operates in a
+        // catch.
+        try
+        {
             RecordingLane = 0;
             StatusText = "The microphone did not operate.";
+        }
+#pragma warning disable CA1031 // An error out of this method stops the process.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            LogDiscardFailed(_logger, exception);
         }
     }
 
@@ -407,7 +452,7 @@ public sealed partial class MainViewModel : ObservableObject
         StopLimitTimer();
         RecordingLane = 0;
 
-        Recording? recording = _capture.StopRecording();
+        using Recording? recording = _capture.StopRecording();
 
         if (held.TotalMilliseconds < _audioOptions.MinimumPressMilliseconds)
         {
@@ -421,9 +466,6 @@ public sealed partial class MainViewModel : ObservableObject
         {
             return;
         }
-
-#if DEBUG
-#endif
 
         if (recording.ReachedLimit)
         {
@@ -484,6 +526,11 @@ public sealed partial class MainViewModel : ObservableObject
         Level = LogLevel.Error,
         Message = "The microphone did not start.")]
     private static partial void LogCaptureFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The microphone stopped, but the software did not complete the work after it. The buffer can keep the speech of a person.")]
+    private static partial void LogDiscardFailed(ILogger logger, Exception exception);
 
 
     [LoggerMessage(

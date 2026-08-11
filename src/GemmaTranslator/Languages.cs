@@ -52,8 +52,8 @@ public sealed record Language(
 /// gives no error.
 /// </para>
 /// <para>
-/// This class is the one location. Section 9.1 of CLAUDE.md makes this a rule.
-/// To add a language, add one item to <see cref="All"/>.
+/// This class is the one location. To add a language, add one item to
+/// <see cref="All"/>.
 /// </para>
 /// </remarks>
 public static class Languages

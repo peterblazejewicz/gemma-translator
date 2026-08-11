@@ -44,7 +44,19 @@ public sealed record Recording(
     TimeSpan Duration,
     float PeakLevel,
     int SampleRate,
-    bool ReachedLimit);
+    bool ReachedLimit) : IDisposable
+{
+    /// <summary>
+    /// Clears the samples.
+    /// </summary>
+    /// <remarks>
+    /// SECURITY CONTROL. The caller owns this speech. Use a <c>using</c>
+    /// statement, and put the work that needs the samples in that block.
+    /// Without this, each recording leaves an array of speech in the heap
+    /// until a later allocation takes that memory.
+    /// </remarks>
+    public void Dispose() => Array.Clear(Samples);
+}
 
 /// <summary>
 /// Records the microphone.
