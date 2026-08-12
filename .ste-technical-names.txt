@@ -251,6 +251,12 @@ chamfer
 # repeated    - part of "repeated start", the name of the operation of I2C
 #               that reads a register.
 #
+# swap        - swap (n), the memory facility of Linux. It is the name in
+#               /proc/swaps, in swapon, and in the Mechanism value of
+#               /etc/rpi/swap.conf. The dictionary refuses "to swap" (v). This
+#               is the same class of false result as file, log, and request.
+swap
+
 # guard       - the low battery guard, which is the name of the component in
 #               deploy/gemma-battery-guard.sh, in the name of its unit, and in
 #               its Description. The dictionary refuses "to guard" (v). This is

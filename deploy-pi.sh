@@ -37,7 +37,7 @@ if [ "$(uname -s)" != "Linux" ]; then
     echo "[WARNING] Current OS: $(uname -s)."
 fi
 
-echo "[1/9] Installing OS dependencies..."
+echo "[1/10] Installing OS dependencies..."
 if command -v apt-get &> /dev/null; then
     sudo apt-get update
     # device-tree-compiler makes the overlay of step 2. i2c-tools is for the
@@ -65,7 +65,7 @@ if [ -n "$NODE_MAJOR" ] && [ "$NODE_MAJOR" -lt 18 ] 2>/dev/null; then
     echo "[WARNING] Step 3 (npm build) may fail. Please upgrade Node.js first."
 fi
 
-echo "[2/9] Installing the GPIO overlay and the udev rule..."
+echo "[2/10] Installing the GPIO overlay and the udev rule..."
 # The two push-to-talk buttons on GPIO17 and GPIO27, and the mains line of the
 # X1201 UPS on GPIO6. See deploy/recorder-keys-overlay.dts.
 BOOT_DIR="/boot/firmware"
@@ -171,17 +171,17 @@ if [ -f "$UDEV_TEMPLATE" ]; then
     fi
 fi
 
-echo "[3/9] Running backend environment setup..."
+echo "[3/10] Running backend environment setup..."
 "${PROJECT_DIR}/setup.sh"
 
-echo "[4/9] Installing frontend dependencies & building production UI..."
+echo "[4/10] Installing frontend dependencies & building production UI..."
 npm --prefix "${PROJECT_DIR}/frontend" install
 npm --prefix "${PROJECT_DIR}/frontend" run build
 
-echo "[5/9] Downloading LiteRT model..."
+echo "[5/10] Downloading LiteRT model..."
 "${PROJECT_DIR}/download_model.sh"
 
-echo "[6/9] Installing the low battery guard..."
+echo "[6/10] Installing the low battery guard..."
 # The guard stops the machine when the voltage of the cells stays low. Without
 # it, the cells go empty, the Raspberry Pi loses its electrical supply in one
 # moment, and the SD card can become defective in the middle of a write.
@@ -209,7 +209,38 @@ else
     exit 1
 fi
 
-echo "[7/9] Registering systemd service..."
+echo "[7/10] Setting the swap of the appliance to zram with no file..."
+# The default mechanism of rpi-swap is zram+file. zram then writes cold pages
+# to /var/swap on the SD card. A page can hold the speech of a person, and a
+# page on the card stays after the machine loses its electrical supply. No part
+# of the software can remove that copy.
+#
+# zram with no file keeps the same quantity of swap in the memory, thus it
+# costs no headroom on each board.
+SWAP_CONF_DIR="/etc/rpi/swap.conf.d"
+SWAP_CONF="${SWAP_CONF_DIR}/99-gemma-translator.conf"
+
+if [ -d /etc/rpi ]; then
+    sudo mkdir -p "$SWAP_CONF_DIR"
+    printf '%s
+'         '# Gemma Translator appliance.'         '#'         '# zram only, with no file. The default is zram+file, which writes cold'         '# pages to /var/swap on the SD card. A page can hold the speech of a'         '# person, and a page on the card stays after the machine stops.'         '[Main]'         'Mechanism=zram'         | sudo tee "$SWAP_CONF" > /dev/null
+    sudo chmod 644 "$SWAP_CONF"
+    sudo systemctl daemon-reload
+
+    # The generator makes the unit again at a daemon-reload, but a zram device
+    # that is in operation keeps the file that it has. The machine must start
+    # again to remove it.
+    if [ "$(cat /sys/block/zram0/backing_dev 2>/dev/null)" != "none" ]; then
+        REBOOT_NEEDED=1
+    fi
+
+    echo "[INFO] swap: ${SWAP_CONF}"
+else
+    echo "[INFO] This machine has no /etc/rpi, thus it does not use rpi-swap."
+    echo "[INFO] Examine the swap yourself: a file on the card can keep speech."
+fi
+
+echo "[8/10] Registering systemd service..."
 SERVICE_FILE="/etc/systemd/system/gemma-translator.service"
 TEMPLATE_FILE="${PROJECT_DIR}/deploy/gemma-translator.service"
 
@@ -224,7 +255,7 @@ if [ -f "$TEMPLATE_FILE" ]; then
     sudo systemctl enable gemma-translator.service
     sudo systemctl restart gemma-translator.service
 
-    echo "[8/9] Configuring GUI kiosk autostart..."
+    echo "[9/10] Configuring GUI kiosk autostart..."
     LXSESSION_DIR="/home/${CURRENT_USER}/.config/lxsession/rpd-x"
     AUTOSTART_FILE="${LXSESSION_DIR}/autostart"
     if [ -d "$LXSESSION_DIR" ] || [ -f "/etc/xdg/lxsession/rpd-x/autostart" ]; then
@@ -239,7 +270,7 @@ if [ -f "$TEMPLATE_FILE" ]; then
         echo "[INFO] LXDE rpd-x session not detected. Skipping LXDE autostart config."
     fi
 
-    echo "[9/9] Systemd service configured and started."
+    echo "[10/10] Systemd service configured and started."
     systemctl status --no-pager gemma-translator.service || true
 else
     echo "[ERROR] Template file ${TEMPLATE_FILE} not found."

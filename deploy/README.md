@@ -394,6 +394,54 @@ more to the card.**
 
 ---
 
+## 10. The swap of the appliance
+
+`deploy-pi.sh` writes `/etc/rpi/swap.conf.d/99-gemma-translator.conf` in its
+step 7:
+
+```ini
+[Main]
+Mechanism=zram
+```
+
+Raspberry Pi OS gives `zram+file`. zram then writes cold pages to `/var/swap`
+on the SD card:
+
+```
+$ cat /sys/block/zram0/backing_dev
+/dev/loop0
+$ losetup -a
+/dev/loop0: []: (/var/swap)
+```
+
+**CAUTION: a page can hold the speech of a person, and a page on the card stays
+after the machine loses its electrical supply. No part of the software can
+remove that copy: it is not in the memory of the software.**
+
+`Mechanism=zram` gives the same quantity of swap, in the memory, thus it costs
+no headroom. After the machine starts again:
+
+```
+$ cat /sys/block/zram0/backing_dev
+none
+$ losetup -a
+$ ls -l /var/swap
+ls: cannot access '/var/swap': No such file or directory
+$ cat /proc/swaps
+/dev/zram0    partition   2097136   0   100
+```
+
+The unit `rpi-remove-swap-file@var-swap.service` of Raspberry Pi OS removes the
+file. The generator starts that unit when the mechanism does not make it
+necessary.
+
+`/sys/block/zram0/bd_stat` gives the count of the pages that went to the card.
+The first write comes 180 minutes after the machine starts, and each 24 hours
+after that. Thus a machine that starts again frequently can give 0, and the
+condition continues to be there.
+
+---
+
 ## 8. Measured properties
 
 These are the results that are not easy to see, and that give an incorrect
