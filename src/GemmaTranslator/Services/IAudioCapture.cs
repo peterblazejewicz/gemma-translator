@@ -75,9 +75,9 @@ public interface IAudioCapture : IDisposable
     /// </summary>
     /// <remarks>
     /// <para>
-    /// CAUTION: a test on 2026-08-09 measured 1.22 s from the start of the
-    /// device to the first sample with a Jabra Speak2 40. If the software
-    /// opens the device at the press, each person loses the first word.
+    /// CAUTION: the Jabra Speak2 40 gives 1.22 s from the start of the device
+    /// to the first sample. If the software opens the device at the press,
+    /// each person loses the first word.
     /// </para>
     /// <para>
     /// The software calls this at the start, thus the device is ready before

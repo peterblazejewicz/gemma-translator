@@ -112,9 +112,8 @@ public static class ServiceRegistration
             {
                 // An OpenAI endpoint does not redirect. With the default,
                 // status 307 sends the text that the person spoke to a machine
-                // that the operator did not select. A test on 2026-08-09 shows
-                // that .NET removes the Authorization header on a redirect but
-                // sends the body.
+                // that the operator did not select. .NET removes the
+                // Authorization header on a redirect, and it sends the body.
                 AllowAutoRedirect = false,
             });
 

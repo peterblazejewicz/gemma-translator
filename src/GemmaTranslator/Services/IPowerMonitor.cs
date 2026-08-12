@@ -47,8 +47,7 @@ public sealed record PowerState(bool? MainsOnline, CellCharge? Cells);
 /// </summary>
 /// <remarks>
 /// <para>
-/// NEW FUNCTION. Upstream has no UPS and no battery. Peter Blazejewicz asked
-/// for this signal.
+/// NEW FUNCTION. Upstream has no UPS and no battery.
 /// </para>
 /// <para>
 /// This interface gives numbers only. It starts no shutdown and it changes no

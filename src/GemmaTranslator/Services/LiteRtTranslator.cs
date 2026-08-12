@@ -89,7 +89,7 @@ public sealed partial class LiteRtTranslator : ITranslator
         // HttpClient sends `Transfer-Encoding: chunked` and no
         // `Content-Length`. The server of `litert-lm serve` is a simple Python
         // HTTP server: it reads `Content-Length` only, it gets no body, and it
-        // answers `400 Invalid JSON`. A test on 2026-08-09 confirmed this.
+        // answers `400 Invalid JSON`.
         string json = JsonSerializer.Serialize(
             body,
             OpenAiJsonContext.Default.ChatCompletionRequest);
