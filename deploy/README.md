@@ -466,20 +466,89 @@ To remove it:
 sudo gpasswd -d "$USER" input
 ```
 
-**CAUTION: this step has no test on this hardware.**
+This step has a test on this hardware. After the command, the account opens
+the touchscreen and the buttons, and it opens no other device:
 
-Avalonia reads the touchscreen through libinput. libinput is not installed on
-this machine, and the software of this fork has not started on it.
+```
+/dev/input/event10   OPEN rw   Goodix Capacitive TouchScreen
+/dev/input/event4    OPEN ro   recorder-buttons
+/dev/input/event0    denied    QTIL Jabra Speak2 40 UC
+/dev/input/event2    denied    QTIL Jabra Speak2 40 UC Consumer Control
+/dev/input/event5    denied    pwr_button
+/dev/input/event6    denied    vc4-hdmi-0
+```
 
-Thus nobody has seen that the touchscreen continues to operate after this
-command. Do this step when the software first starts on the appliance, and
-prepare to put the membership back:
+libinput 1.28.1 continues to operate. It writes a line for each device that it
+cannot open, and it adds the touchscreen:
+
+```
+$ libinput debug-events
+Failed to open /dev/input/event0 (Permission denied)
+...
+-event10  DEVICE_ADDED   Goodix Capacitive TouchScreen  seat0 default group1  cap:kt ntouches 5 calib
+```
+
+**These 9 lines are the control in operation and they are not a fault.** Each
+one is a device with `root:input` as the owner and the group: the four nodes
+of the Jabra Speak2 40, the button of the Raspberry Pi 5, and the four nodes
+of HDMI. The appliance uses no one of them.
+
+A touch of the display then gives `TOUCH_DOWN`, `TOUCH_MOTION` and `TOUCH_UP`,
+with two fingers at the same time in slot 0 and slot 1.
+
+To put the membership back:
 
 ```bash
 sudo gpasswd -a "$USER" input
 ```
 
-### 8.11 `video=` goes in `cmdline.txt`, and it turns the console only
+### 8.11 A node of 0400 stops libinput
+
+The rule for the buttons gives mode `0400` and the rule for the touchscreen
+gives mode `0600`. This is not an error.
+
+libinput opens each device that it controls read-write. Thus a node of `0400`
+gives this line, and the touchscreen does nothing:
+
+```
+Failed to open /dev/input/event10 (Permission denied)
+```
+
+The measurement, with the account that owns the node:
+
+| Node | `O_RDONLY` | `O_RDWR` |
+| --- | --- | --- |
+| mode `0400` | OK | Permission denied |
+| mode `0600` | OK | OK |
+
+`EvdevPushToTalk` opens the buttons read-only, thus the buttons keep `0400`.
+
+The rule for the buttons also gives `ENV{LIBINPUT_IGNORE_DEVICE}="1"`. libinput
+then does not try the device and it writes no line for it:
+
+```
+$ udevadm info /dev/input/event4 | grep LIBINPUT
+E: LIBINPUT_IGNORE_DEVICE=1
+```
+
+Without this property libinput writes `Failed to open /dev/input/event4` at
+each start. That line is for the one device that the software reads itself,
+thus it gives an incorrect signal to a person who examines the buttons.
+
+**CAUTION: group `input` is not the cause of this condition, and a person who
+examines it can think that it is.** The touchscreen at `0400` does not operate
+with the membership of that group and without it.
+
+### 8.12 The touchscreen gives the coordinates of the panel
+
+The touchscreen gives x from 0 to 720 and y from 0 to 1280, which is the
+native portrait of the panel.
+
+The `video=` parameter of section 8.13 does not change these values, and no
+overlay in this configuration changes them. Avalonia changes them with
+`DrmOutputOptions.Orientation`, with the image.
+
+### 8.13 `video=` goes in `cmdline.txt`, and it turns the console only
 
 The panel is native portrait, 720 × 1280. The appliance operates in landscape.
 
@@ -524,7 +593,7 @@ If the text on the display is in landscape and inverted, change 270 to 90.
 and not the console, thus a console that turns is an aid to a person who does
 maintenance.
 
-### 8.12 The overlay of the panel selects a different DSI interface
+### 8.14 The overlay of the panel selects a different DSI interface
 
 `vc4-kms-dsi-ili9881-5inch` has a `rotation` parameter, which is the one
 control of the kernel that could turn the image for DRM. To give a parameter

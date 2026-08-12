@@ -149,6 +149,25 @@ if [ -f "$UDEV_TEMPLATE" ]; then
     sudo udevadm control --reload
     sudo udevadm trigger --subsystem-match=input
     echo "[INFO] udev rule: ${UDEV_FILE}"
+
+    # The two rules above give this account the buttons and the touchscreen by
+    # owner, thus it needs no membership of group "input". That group reads
+    # each /dev/input/event* node, because each node is 0660 root:input. This
+    # includes the microphone of the Jabra, the button of the Raspberry Pi, and
+    # a USB keyboard that a person connects after this installation.
+    #
+    # Raspberry Pi OS puts the first account of the machine in that group. Thus
+    # this step removes a membership that the image gives, and not one that
+    # this project gives. See section 8.10 of deploy/README.md.
+    if id -nG "$CURRENT_USER" | tr ' ' '\n' | grep -qx input; then
+        sudo gpasswd -d "$CURRENT_USER" input
+        echo "[INFO] Removed ${CURRENT_USER} from group input."
+        echo "[INFO] A session that is open keeps the group of its start. The"
+        echo "[INFO] change is complete after the next start of the machine."
+        REBOOT_NEEDED=1
+    else
+        echo "[INFO] ${CURRENT_USER} is not in group input."
+    fi
 fi
 
 echo "[3/8] Running backend environment setup..."
