@@ -43,35 +43,58 @@ internal static class Program
         if (args.Contains("--drm"))
         {
             SilenceConsole();
-
-            // card: null lets Avalonia find the card. Give "/dev/dri/card1" to
-            // select one card.
-            //
-            // The panel is native portrait at 720 x 1280. The appliance
-            // operates in landscape, as upstream does, thus Avalonia turns the
-            // output and the software gets a surface of 1280 x 720. Avalonia
-            // adjusts the touch coordinates with it, which is necessary
-            // because the touchscreen gives the coordinates of the panel.
-            //
-            // The value comes from the console of the machine. The console is
-            // correct with "video=DSI-1:720x1280@60,rotate=270" in
-            // cmdline.txt. Raspberry Pi gives that value in degrees clockwise,
-            // and SurfaceOrientation is also degrees clockwise, thus the two
-            // agree at 270.
-            //
-            // CAUTION: this comes from the console and not from a test of this
-            // software on the panel. The DRM backend makes its own plane, thus
-            // the rotation of the console does not apply to it. If the display
-            // shows the user interface inverted, change this one value to
-            // Rotation90.
-            return builder.StartLinuxDrm(args, card: null, options: new DrmOutputOptions
-            {
-                Scaling = 1.0,
-                Orientation = SurfaceOrientation.Rotation270,
-            });
+            return StartOnPanel(builder, args);
         }
 
         return builder.StartWithClassicDesktopLifetime(args);
+    }
+
+    /// <summary>
+    /// Starts the software on the panel of the appliance.
+    /// </summary>
+    /// <param name="builder">The builder from <see cref="BuildAvaloniaApp"/>.</param>
+    /// <param name="args">The arguments of the command.</param>
+    /// <returns>The exit code.</returns>
+    private static int StartOnPanel(AppBuilder builder, string[] args)
+    {
+        // Avalonia opens each /dev/dri/card[0-9]+ in the sequence that the
+        // directory gives and takes the first one that opens. This account can
+        // open each card of this machine, thus that sequence would decide which
+        // card gets the user interface. The udev rule of
+        // deploy/99-gemma-translator.rules gives this name to the card of the
+        // panel, as it gives a name to the buttons and to the touchscreen.
+        const string panelCard = "/dev/dri/appliance-panel";
+
+        // This test comes before Avalonia, because Avalonia has no logger here
+        // and the appliance has no console. Without it a machine with no rule
+        // gives a native error with no cause in it.
+        if (!File.Exists(panelCard))
+        {
+            throw new InvalidOperationException(
+                $"There is no {panelCard}. Put in deploy/99-gemma-translator.rules, "
+                + "then examine the result with: ls -l /dev/dri/");
+        }
+
+        // The panel is native portrait at 720 x 1280 and the appliance operates
+        // in landscape, thus Avalonia turns the output and the software gets a
+        // surface of 1280 x 720. It moves the touch coordinates with the image,
+        // which is necessary because the touchscreen gives the coordinates of
+        // the panel.
+        //
+        // CAUTION: this value and the `rotate=` of cmdline.txt are 180 degrees
+        // apart. A person who makes the two the same gets an image that is
+        // upside down. The DRM backend makes its own plane, thus what turns the
+        // console does not apply to it.
+        //
+        // TO BE UNDERSTOOD: this value agrees with the console and with no
+        // other thing, and a person selected the value of the console by an
+        // examination of the display. Thus the two can be upside down together.
+        // See section 8.15 of deploy/README.md.
+        return builder.StartLinuxDrm(args, card: panelCard, options: new DrmOutputOptions
+        {
+            Scaling = 1.0,
+            Orientation = SurfaceOrientation.Rotation90,
+        });
     }
 
     /// <summary>

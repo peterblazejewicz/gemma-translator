@@ -29,7 +29,7 @@ public sealed class AudioOptions
     public const string SectionName = "Audio";
 
     /// <summary>
-    /// A part of the name of the microphone to select.
+    /// A part of the name of the audio device to select.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -40,9 +40,10 @@ public sealed class AudioOptions
     /// <b>records silence</b>, with no error and no line in the log.
     /// </para>
     /// <para>
-    /// The appliance gives "Jabra" here. The value is empty on Windows, thus
-    /// the operating system continues to select the device that a person
-    /// selected.
+    /// One appsettings.json goes to the two machines, thus Windows gets this
+    /// value also. To get the device that a person selected on Windows, give
+    /// an empty value in GEMMA_Audio__PreferredDeviceName, which the software
+    /// reads after the file.
     /// </para>
     /// </remarks>
     public string PreferredDeviceName { get; set; } = string.Empty;

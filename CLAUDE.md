@@ -95,12 +95,14 @@ return builder.StartLinuxDrm(args, card: null, options: new DrmOutputOptions
 
 Notes:
 
-- `card: null` lets Avalonia find the card. Give `/dev/dri/card1` to select
-  one card.
+- `card: null` is not sufficient. Avalonia opens each `/dev/dri/card[0-9]+` in
+  the sequence of the directory and takes the first one that opens. This
+  machine has three, and the account can open each one. `Program.cs` gives the
+  path of `by-path`, which holds the address of the DSI controller.
 - `DrmOutputOptions.Orientation` turns the output in software. The panel is
-  native portrait and the appliance operates in landscape, thus the value is
-  `Rotation90`. Touch coordinates change with the orientation automatically.
-  See section 4.2.
+  native portrait and the appliance operates in landscape. A measurement on the
+  panel gives `Rotation90`. Touch coordinates change with the orientation
+  automatically. See section 4.2.
 - A console cursor blinks on top of the user interface. The documents give a
   `SilenceConsole` method that stops this.
 - Touch operates automatically through `libinput` with DRM.
@@ -126,7 +128,6 @@ use a font of the system, thus Raspberry Pi OS Lite cannot stop it.
 | --- | --- |
 | The collection | `Fonts/GemmaFontCollection.cs` |
 | The default family and the fallbacks | `Fonts/AppFonts.cs` |
-| The check at the start | `Fonts/FontCheck.cs` |
 
 Three points that a change must keep:
 
@@ -143,12 +144,19 @@ Three points that a change must keep:
    font, and Avalonia does not use it. The download must come from the
    `SubsetOTF` directory of `noto-cjk`, and not from `Variable`.
 
-**How to make sure of this work on Windows.** Windows has a font for each of
-these languages, thus text on the display is not proof.
-`GlyphTypeface.FamilyName` gives the font that Avalonia selected. `FontCheck`
-writes it at each start. If each line gives the name of a Noto font, the
-software uses no font of the system, and the Raspberry Pi gives the
-same result.
+**Windows cannot make sure of this work.** Windows has a font for each of these
+languages, thus text on the display is not proof.
+
+**The Raspberry Pi does not give the proof either, and this is not closed.**
+`fc-list :lang=ar` on the appliance gives 4 faces of DejaVu, thus Pi OS Lite
+has a font for Arabic. It has none for Japanese, Chinese, or Korean.
+
+The software started on the appliance and it showed text. Each character of
+that display is Latin, and DejaVu has each one. Thus the display shows that the
+software starts, and it does not show which font gave the glyphs.
+
+To close this, put one character of Japanese and one of Arabic on the display,
+or write the name that `GlyphTypeface.FamilyName` gives at the start.
 
 **Avalonia is not WPF.** Do not think that a WPF pattern operates. These are
 the errors that occur most frequently:
@@ -269,10 +277,18 @@ landscape.**
 Avalonia turns the output in software with an offscreen framebuffer and a
 shader. It adjusts the touch coordinates automatically.
 
-The correct value is `Rotation90` or `Rotation270`. Which one is correct
-depends on the side that the DSI cable goes out, and you cannot know it before
-the hardware is here. If the display shows the user interface upside down,
-change the one value in `Program.cs`.
+**CAUTION: this value and the `rotate=` of `cmdline.txt` are 180 degrees
+apart.** With `Rotation90` the user interface agrees with the console, and with
+`Rotation270` it is inverted against it. A person who makes the two values the
+same gets an image that is upside down. See section 8.15 of
+`deploy/README.md`.
+
+**TO BE UNDERSTOOD: the two agree with each other and with no other thing.** A
+person selected the value of the console by an examination of the display, and
+this value agrees with that one. Thus the two can be upside down together. The
+enclosure gives the correct answer, and `cad/dims.scad` says two times that the
+two ends of the display module are not told apart. Only a photograph of the
+module in the case, with the DSI cable in view, closes this.
 
 Landscape keeps the upstream proportions, thus the layout is a move and not new
 work. The upstream heights of the 320 pixels, and the heights here:

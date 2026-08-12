@@ -394,6 +394,119 @@ more to the card.**
 
 ---
 
+### 8.15 The software and the console do not use the same value
+
+`cmdline.txt` has `video=DSI-1:720x1280@60,rotate=270` and the text of the
+console is correct with it. See section 8.13.
+
+The software gives `SurfaceOrientation.Rotation90`. With that value the user
+interface agrees with the console, and with `Rotation270` it is inverted
+against it.
+
+**TO BE UNDERSTOOD: the two agree with each other and with no other thing.**
+
+A person looked at the display and selected the value of the console, and this
+value agrees with that one. Thus the two can be upside down together.
+
+`cad/dims.scad` says two times that the two ends of the display module are not
+told apart. Only a photograph of the module in the case, with the DSI cable in
+view, closes this.
+
+**CAUTION: the two values are 180 degrees apart. A person who makes them agree
+gets an image that is upside down.** The DRM backend makes its own plane, thus
+what turns the console does not apply to it.
+
+Touch cannot give this measurement.
+
+The two values are 180 degrees apart, and Avalonia moves the touch coordinates
+with the image in the two conditions. Thus a touch operates with the correct
+value and with the incorrect value. Only the image shows which value is
+correct.
+
+### 8.16 Avalonia takes the first card that opens
+
+Avalonia opens each `/dev/dri/card[0-9]+` in the sequence that the directory
+gives, and it takes the first one that opens. It does not examine the
+connectors.
+
+This machine has three cards, and the account can open each one:
+
+```
+$ ls -l /dev/dri/by-path/
+platform-1f00118000.dsi-card  -> ../card0   drm-rp1-dsi   the panel
+platform-1002000000.v3d-card  -> ../card1   v3d           no display
+platform-axi:gpu-card         -> ../card2   vc4-drm       HDMI, no connection
+```
+
+Thus `card: null` is a chance. With card1 the software stops in the enumeration
+of the resources. With card2 it stops and says:
+
+```
+Unable to find connected DRM connector
+```
+
+The number of a card comes from the sequence of the drivers, and that sequence
+can change at each start. `Program.cs` gives the path of `by-path`, which holds
+the address of the DSI controller. This is section 8.6 again, for a card.
+
+### 8.17 The names of the packages of Mesa on Debian 13
+
+The documents of Avalonia give `libegl1-mesa`. **That package is not on
+trixie**, and `apt-get` stops and says that it cannot find the package. The correct
+names:
+
+```bash
+sudo apt-get install -y libgbm1 libegl1 libegl-mesa0 libgl1-mesa-dri libgles2
+```
+
+`libinput10`, `libdrm2`, `libfontconfig1` and `libicu76` come with the image. `libicu76` is necessary, because `InvariantGlobalization` is `false`.
+
+`kmscube` gives the proof that the stack operates, before the software starts:
+
+```
+$ kmscube -D /dev/dri/by-path/platform-1f00118000.dsi-card
+EGL version 1.5, vendor "Mesa Project"
+OpenGL ES 3.1 Mesa 25.0.7
+renderer: "V3D 7.1.7.0"   vendor: "Broadcom"
+```
+
+**The account needs no `sudo` for this, and the software needs none.** The
+documents of Avalonia give `sudo ./app --drm`. The account is in group `video`,
+which opens the card. Software that opens a card when no other software holds
+it becomes the master of that card, and the console does not hold it.
+
+### 8.18 The default capture device moves
+
+`PreferredDeviceName` in `appsettings.json` gives `Jabra`. With no name the
+software asks for the default device of the machine, and that gave:
+
+```
+Unable to init device Default Audio Device. Result: InvalidArgs
+```
+
+**TO BE UNDERSTOOD: the cause is not known.** The default device gave a
+microphone in one measurement and gave this error in each measurement after it,
+with the same card and the same sequence of the devices. No software held
+the device, thus a second reader is not the cause.
+
+What is known is the result. On one machine, with no other change:
+
+| `PreferredDeviceName` | Reads | Result |
+| --- | --- | --- |
+| empty | 5 | The error above, each time |
+| `Jabra` | 3 | The device opens, each time |
+
+```
+The microphone is Jabra Speak2 40 UC, USB Audio. The software asked for
+16000 Hz and the machine gave 16000 Hz with 1 channel(s).
+```
+
+The name is a part of the name of the device, and not the full name. The
+sequence is: the name of the settings, then the default device, then the first
+device. Thus a machine with no such device continues to operate.
+
+---
+
 ## 10. The swap of the appliance
 
 `deploy-pi.sh` writes `/etc/rpi/swap.conf.d/99-gemma-translator.conf` in its

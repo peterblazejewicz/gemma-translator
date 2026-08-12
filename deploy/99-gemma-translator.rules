@@ -79,3 +79,27 @@ SUBSYSTEM=="input", KERNEL=="event*", SUBSYSTEMS=="platform", DRIVERS=="gpio-key
 # the buttons keep the tighter mode.
 
 SUBSYSTEM=="input", KERNEL=="event*", SUBSYSTEMS=="i2c", DRIVERS=="Goodix-TS", ATTRS{name}=="gt911", SYMLINK+="input/appliance-touchscreen", OWNER="{{USER}}", GROUP="root", MODE="0600"
+
+# The DRM card of the display panel.
+#
+# Avalonia opens each /dev/dri/card[0-9]+ in directory order and takes the
+# first one that opens. This machine has three and the account can open all of
+# them, so that order decides which one the appliance draws on. Only one of
+# them has the panel: the other two are the GPU with no display and the vc4
+# with an unplugged HDMI. The numbers come from driver probe order and can
+# change on any boot.
+#
+# This rule gives that card a name, exactly as the two rules above give the
+# buttons and the touchscreen a name. Program.cs then opens a name instead of
+# a number.
+#
+# The match is on the driver and not on the address, so it still finds the
+# panel if the ribbon moves to the other DSI connector. deploy/README.md
+# section 8.14 records that the DSI address depends on which interface the
+# overlay selects, which is why the address is the wrong thing to pin to.
+#
+# No OWNER and no MODE here on purpose. The node must stay root:video: the
+# account reads it through group video, which is what lets the appliance run
+# without root.
+
+SUBSYSTEM=="drm", KERNEL=="card*", SUBSYSTEMS=="platform", DRIVERS=="drm-rp1-dsi", SYMLINK+="dri/appliance-panel"
