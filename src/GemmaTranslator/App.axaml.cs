@@ -157,6 +157,6 @@ public partial class App : Application
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The microphone did not open at the start. The software tries again at the first press.")]
+        Message = "The microphone did not open at the start. Each press gives an error until a person starts the software again.")]
     private static partial void LogNoMicrophoneAtStart(ILogger logger, Exception exception);
 }

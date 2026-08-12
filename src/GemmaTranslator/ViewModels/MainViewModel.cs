@@ -424,10 +424,16 @@ public sealed partial class MainViewModel : ObservableObject
         }
         catch (AudioCaptureException exception)
         {
-            LogCaptureFailed(_logger, exception);
+            LogCaptureFailed(_logger, lane, exception);
             StatusText = exception.Message;
             return;
         }
+
+        // The lane goes in the log here, and not in the audio service, which
+        // has no lane. Without this line each press of the two buttons gives
+        // the same text, thus the journal cannot say that the second button
+        // operates.
+        LogRecordingStarted(_logger, lane);
 
         _pressTicks = Stopwatch.GetTimestamp();
         RecordingLane = lane;
@@ -523,9 +529,14 @@ public sealed partial class MainViewModel : ObservableObject
     private static partial void LogPressTooShort(ILogger logger, int lane, double milliseconds);
 
     [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The recording started for lane {lane}.")]
+    private static partial void LogRecordingStarted(ILogger logger, int lane);
+
+    [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The microphone did not start.")]
-    private static partial void LogCaptureFailed(ILogger logger, Exception exception);
+        Message = "The microphone did not start for lane {lane}.")]
+    private static partial void LogCaptureFailed(ILogger logger, int lane, Exception exception);
 
     [LoggerMessage(
         Level = LogLevel.Error,

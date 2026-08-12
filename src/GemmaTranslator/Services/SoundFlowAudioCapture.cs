@@ -329,7 +329,11 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
                 }
             }
 
-            LogPreferredNotFound(_logger, wanted, devices.Length);
+            string names = string.Join(
+                ", ",
+                devices.Select(static device => device.Name ?? "(no name)"));
+
+            LogPreferredNotFound(_logger, wanted, names);
         }
 
         foreach (DeviceInfo device in devices)
@@ -435,8 +439,8 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "No microphone has \"{wanted}\" in its name. The machine has {count} devices. The software uses the default device, which can record no sound.")]
-    private static partial void LogPreferredNotFound(ILogger logger, string wanted, int count);
+        Message = "No microphone has \"{wanted}\" in its name. The machine gives: {names}. The software uses the default device, which can record no sound.")]
+    private static partial void LogPreferredNotFound(ILogger logger, string wanted, string names);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
