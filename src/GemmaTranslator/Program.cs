@@ -49,17 +49,25 @@ internal static class Program
             //
             // The panel is native portrait at 720 x 1280. The appliance
             // operates in landscape, as upstream does, thus Avalonia turns the
-            // output 90 degrees and the software gets a surface of 1280 x 720.
-            // Avalonia adjusts the touch coordinates automatically.
+            // output and the software gets a surface of 1280 x 720. Avalonia
+            // adjusts the touch coordinates with it, which is necessary
+            // because the touchscreen gives the coordinates of the panel.
             //
-            // If the display shows the user interface upside down, change this
-            // to Rotation270. The correct value depends on the side that the
-            // DSI cable goes out. You cannot know it before the hardware is
-            // here.
+            // The value comes from the console of the machine. The console is
+            // correct with "video=DSI-1:720x1280@60,rotate=270" in
+            // cmdline.txt. Raspberry Pi gives that value in degrees clockwise,
+            // and SurfaceOrientation is also degrees clockwise, thus the two
+            // agree at 270.
+            //
+            // CAUTION: this comes from the console and not from a test of this
+            // software on the panel. The DRM backend makes its own plane, thus
+            // the rotation of the console does not apply to it. If the display
+            // shows the user interface inverted, change this one value to
+            // Rotation90.
             return builder.StartLinuxDrm(args, card: null, options: new DrmOutputOptions
             {
                 Scaling = 1.0,
-                Orientation = SurfaceOrientation.Rotation90,
+                Orientation = SurfaceOrientation.Rotation270,
             });
         }
 
