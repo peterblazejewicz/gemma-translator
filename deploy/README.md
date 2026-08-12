@@ -478,3 +478,72 @@ prepare to put the membership back:
 ```bash
 sudo gpasswd -a "$USER" input
 ```
+
+### 8.11 `video=` goes in `cmdline.txt`, and it turns the console only
+
+The panel is native portrait, 720 × 1280. The appliance operates in landscape.
+
+`video=` is a parameter of the command line of the kernel. It goes at the end
+of the one line of `/boot/firmware/cmdline.txt`. The same text in `config.txt`
+does nothing, and it gives no error:
+
+```
+$ tr -d '\0' < /proc/device-tree/chosen/bootargs | grep -o 'video=[^ ]*'
+$ cat /sys/class/graphics/fbcon/rotate
+0
+```
+
+With the parameter in `cmdline.txt`, the kernel reads it:
+
+```
+$ tr -d '\0' < /proc/device-tree/chosen/bootargs | grep -o 'video=[^ ]*'
+video=DSI-1:720x1280@60,rotate=270
+$ cat /sys/class/graphics/fbcon/rotate
+1
+```
+
+**CAUTION: this parameter turns the text console and no more.** With the
+parameter in operation, the connector and the frame buffer keep the dimensions
+of the panel:
+
+```
+$ cat /sys/class/drm/card0/card0-DSI-1/modes
+720x1280
+$ cat /sys/class/graphics/fb0/virtual_size
+720,1280
+```
+
+Software that writes to DRM makes its own plane. Thus it gets a surface of
+720 × 1280 and it must turn the image itself. Avalonia does this with
+`DrmOutputOptions.Orientation`. The two rotations do not touch each other,
+because Avalonia does not read the console.
+
+If the text on the display is in landscape and inverted, change 270 to 90.
+
+`deploy-pi.sh` does not write this parameter. The appliance shows the software
+and not the console, thus a console that turns is an aid to a person who does
+maintenance.
+
+### 8.12 The overlay of the panel selects a different DSI interface
+
+`vc4-kms-dsi-ili9881-5inch` has a `rotation` parameter, which is the one
+control of the kernel that could turn the image for DRM. To give a parameter
+to this overlay, `display_auto_detect` must be 0 and `config.txt` must name
+the overlay.
+
+**CAUTION: this stops the display. The panel of this appliance is on
+`dsi@110000` and the overlay selects `dsi@128000`:**
+
+```
+pwm-backlight panel_backlight@1: error -EREMOTEIO: failed to apply initial PWM state
+pwm-backlight panel_backlight@1: probe with driver pwm-backlight failed with error -121
+```
+
+`/sys/class/drm` has no connector after this, and `/proc/bus/input/devices`
+has no touchscreen. The machine continues to operate and SSH continues to
+operate, thus a person can put `config.txt` back.
+
+`display_auto_detect=1` selects the correct interface. Keep it at 1.
+
+The panel is `ili9881c-dsi`. The driver gives it the name `dsi-5inch`, with 2
+lanes, on `1f00118000.dsi`.
