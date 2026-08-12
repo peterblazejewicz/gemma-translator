@@ -7,8 +7,6 @@
       - Windows, with a window (IClassicDesktopStyleApplicationLifetime).
       - The Raspberry Pi, with the Linux DRM backend and one view
         (ISingleViewApplicationLifetime). Start it with the DRM argument.
-
-    Program.cs selects the head. See section 3.1 of CLAUDE.md.
   -->
 
   <PropertyGroup>
@@ -30,7 +28,6 @@
          it restores and builds on Windows. It operates on Linux only. -->
     <PackageReference Include="Avalonia.LinuxFramebuffer" Version="12.1.1" />
 
-    <!-- CLAUDE.md section 3.2 selects CommunityToolkit.Mvvm, not ReactiveUI. -->
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 
     <!-- The audio capture. SoundFlow is a managed layer on miniaudio (MIT).

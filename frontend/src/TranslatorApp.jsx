@@ -33,8 +33,9 @@ import { playBlip } from "./utils/audio-blip"
 // keyboard had to serve two people.
 //
 // What is left here is speech-to-text and text-to-speech. Nothing calls them,
-// because the audio that fed them is now captured in C#. CLAUDE.md section 5.3
-// keeps this code until those two slices land; then this file is deleted.
+// because the audio that fed them is now captured in C#. This code stays until
+// those two slices land in C#; then this file is deleted. Deleting a slice
+// before its replacement works would stop the software.
 //
 // CAUTION: a third part is still here. Lane 1 and lane 2 rotate their language
 // from the two arrows on the display: handleRotateLanguage below, through the
@@ -84,8 +85,8 @@ function TranslatorApp({ config }) {
   // playback so long translations don't overflow a single TTS request.
   //
   // Nothing calls this right now: translation moved to C# and TTS ran on its
-  // output. Text-to-speech has no C# replacement yet, so CLAUDE.md section 5.3
-  // says the upstream code stays until that slice lands. Do not delete it.
+  // output. Text-to-speech has no C# replacement yet, so this upstream code
+  // stays until that slice lands. Do not delete it.
   const playTTS = useCallback(
     (text, targetLang) => {
       if (!text) return
@@ -240,7 +241,7 @@ function TranslatorApp({ config }) {
 
         {/* The visualizer has no audio source now: the capture is in C# and
             the Web Audio AnalyserNode went with the recorder hook. The C#
-            visualizer needs an FFT that we write. See CLAUDE.md. */}
+            visualizer needs an FFT that we write. */}
         <Visualizer
           activePerson={1}
           isRecording={false}

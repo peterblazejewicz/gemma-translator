@@ -20,8 +20,8 @@ import React from "react"
 // visualizer density, and system volume (proxied to amixer on the Pi via the
 // backend's /api/volume).
 //
-// The LLM endpoint, model, and key moved to C# (LiteRtOptions). See CLAUDE.md
-// section 5.3.
+// The LLM endpoint, model, and key moved to C# (LiteRtOptions), and the three
+// text fields went with them in the same change.
 export default function SettingsOverlay({
   isActive,
   onClose,
@@ -139,7 +139,7 @@ export default function SettingsOverlay({
           comes from the GEMMA_LiteRt__ApiKey variable of the environment.
 
           The display of the appliance has no keyboard, thus a person cannot
-          type in a text field. See section 5.3 of CLAUDE.md.
+          type in a text field.
         */}
 
 
