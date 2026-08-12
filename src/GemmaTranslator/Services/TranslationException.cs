@@ -22,10 +22,15 @@ namespace GemmaTranslator.Services;
 /// The translation did not occur.
 /// </summary>
 /// <remarks>
-/// Upstream throws a plain <c>Error</c> with the status and the body of the
-/// response, at <c>api.js:113</c>. The user interface shows
-/// "(Translation failed)". This class keeps that behaviour, but it gives the
-/// caller one type to catch.
+/// Upstream throws a plain <c>Error</c> whose message holds the status and the
+/// body of the response, in <c>translateText</c> of
+/// <c>upstream/main:frontend/src/utils/api.js</c>. The catch of
+/// <c>processTranslation</c> then puts that message on the display.
+/// <para>
+/// This class gives the caller one type to catch. <c>MainViewModel</c> puts
+/// the message of this exception on the display, thus do not put the body of
+/// the answer in it: that body can hold the speech of the person.
+/// </para>
 /// </remarks>
 public sealed class TranslationException : Exception
 {

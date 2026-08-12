@@ -146,7 +146,7 @@ public sealed partial class MainViewModel : ObservableObject
         // when the container makes this class.
         pushToTalk.Changed += OnButtonChanged;
 
-        LogStarted(_logger, Lane1Language.Name, Lane2Language.Name);
+        LogUserInterfaceStarted(_logger, Lane1Language.Name, Lane2Language.Name);
     }
 
     /// <summary>
@@ -502,7 +502,7 @@ public sealed partial class MainViewModel : ObservableObject
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The user interface started. Lane 1 is {lane1Language} and lane 2 is {lane2Language}.")]
-    private static partial void LogStarted(
+    private static partial void LogUserInterfaceStarted(
         ILogger logger,
         string lane1Language,
         string lane2Language);

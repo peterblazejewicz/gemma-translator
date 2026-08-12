@@ -250,6 +250,15 @@ chamfer
 #               the bytes of a value.
 # repeated    - part of "repeated start", the name of the operation of I2C
 #               that reads a register.
+#
+# --- the types of Conventional Commits ---
+#
+# fix         - the type of a commit that corrects a defect, in the first line
+#               of a commit message. It is a token of Conventional Commits and
+#               not the verb. The other types that this repository uses (feat,
+#               docs, refactor, chore) are not in the dictionary, thus the
+#               checker does not examine them and they need no entry here.
+fix
 momentary
 interrupt
 register

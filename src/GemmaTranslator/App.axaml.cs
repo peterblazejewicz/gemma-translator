@@ -61,6 +61,13 @@ public partial class App : Application
         // operates. An incorrect value must stop the software here, with a
         // clear message in the log, and not at the first translation. The
         // appliance has no settings screen that can correct it later.
+        //
+        // SECURITY CONTROL. Do not delete this line as a redundant read. It is
+        // what runs the loopback check in LiteRtOptionsValidator. Options are
+        // validated lazily, so without this line the check happens on the
+        // first translation instead — which is after somebody has already
+        // spoken into the appliance, and after their speech has already been
+        // sent to whatever endpoint the settings named.
         LiteRtOptions liteRt = provider.GetRequiredService<IOptions<LiteRtOptions>>().Value;
 
         // The same reason: a rate of 0 or a minimum press of 99999 ms gives an

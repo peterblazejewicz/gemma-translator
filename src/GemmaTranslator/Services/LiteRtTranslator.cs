@@ -133,15 +133,21 @@ public sealed partial class LiteRtTranslator : ITranslator
         {
             if (!response.IsSuccessStatusCode)
             {
-                string errorBody = await ReadBodyAsync(response, cancellationToken)
-                    .ConfigureAwait(false);
-
                 int status = (int)response.StatusCode;
 
-                // The body goes to the log and not to the display. The person
-                // at the appliance cannot act on a Python traceback, and the
-                // text comes from a machine that we do not control.
-                LogBadStatus(_logger, status, errorBody);
+                // The body of the answer does not go to the log. The request
+                // holds the speech of a person, and a server that gives an
+                // error can put that text in its answer.
+                //
+                // The reason and the length come from the status line and the
+                // headers, thus they name the failure and hold no speech.
+                // Upstream makes the same selection: translateText of
+                // frontend/src/utils/api.js falls back to response.statusText.
+                LogBadStatus(
+                    _logger,
+                    status,
+                    response.ReasonPhrase ?? "(none)",
+                    response.Content.Headers.ContentLength ?? -1);
 
                 throw new TranslationException(
                     $"The translation server gave status {status}.");
@@ -156,15 +162,31 @@ public sealed partial class LiteRtTranslator : ITranslator
                         cancellationToken)
                     .ConfigureAwait(false);
             }
+            catch (JsonException exception)
+            {
+                // The message of a JsonException holds the character where the
+                // read stopped, and on this path the body holds the words of
+                // the translation. Thus the exception itself does not go to
+                // the log. The path and the position are a name of a field and
+                // a number, and they give the same help.
+                LogBadJson(
+                    _logger,
+                    exception.Path ?? "(none)",
+                    exception.BytePositionInLine ?? -1);
+
+                throw new TranslationException(
+                    "The translation server sent a body that is not JSON.");
+            }
             catch (Exception exception) when (
-                exception is JsonException
-                    or InvalidOperationException
-                    or NotSupportedException)
+                exception is InvalidOperationException or NotSupportedException)
             {
                 // InvalidOperationException comes from a character set in
                 // `Content-Type` that .NET does not know. One header of that
-                // shape stopped the software before this catch was here.
-                LogBadJson(_logger, exception);
+                // shape stopped the software before this catch was here. The
+                // message holds the name of that character set and no part of
+                // the body.
+                LogBadCharacterSet(_logger, exception);
+
                 throw new TranslationException(
                     "The translation server sent a body that is not JSON.",
                     exception);
@@ -203,34 +225,6 @@ public sealed partial class LiteRtTranslator : ITranslator
         }
     }
 
-    /// <summary>
-    /// Reads the body of a response that gave an error.
-    /// </summary>
-    /// <remarks>
-    /// The read can throw if the character set of the response is not known.
-    /// The caller is already on an error path, thus a second error must not
-    /// replace the first one.
-    /// </remarks>
-    /// <param name="response">The response.</param>
-    /// <param name="cancellationToken">Stops the read.</param>
-    /// <returns>The body, or a note that the body could not be read.</returns>
-    private static async Task<string> ReadBodyAsync(
-        HttpResponseMessage response,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await response.Content
-                .ReadAsStringAsync(cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (Exception exception) when (
-            exception is InvalidOperationException or NotSupportedException or HttpRequestException)
-        {
-            return $"(the body could not be read: {exception.Message})";
-        }
-    }
-
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Translated {source} to {target} in {seconds:F2} s with {tokens} tokens.")]
@@ -253,13 +247,18 @@ public sealed partial class LiteRtTranslator : ITranslator
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The translation server gave status {status}. The body is: {body}")]
-    private static partial void LogBadStatus(ILogger logger, int status, string body);
+        Message = "The translation server gave status {status} ({reason}). The body is {bytes} bytes, and -1 says that the server gave no length.")]
+    private static partial void LogBadStatus(ILogger logger, int status, string reason, long bytes);
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The translation server sent a body that is not JSON.")]
-    private static partial void LogBadJson(ILogger logger, Exception exception);
+        Message = "The translation server sent a body that is not JSON. The read stopped at {path}, {bytePosition} bytes into the line.")]
+    private static partial void LogBadJson(ILogger logger, string path, long bytePosition);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The translation server sent a character set that .NET does not know.")]
+    private static partial void LogBadCharacterSet(ILogger logger, Exception exception);
 
     [LoggerMessage(
         Level = LogLevel.Error,

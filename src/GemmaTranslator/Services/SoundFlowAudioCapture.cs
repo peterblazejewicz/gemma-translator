@@ -248,7 +248,7 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
             _deviceSampleRate = device.Format.SampleRate;
             _device = device;
 
-            LogStarted(
+            LogMicrophoneStarted(
                 _logger,
                 info.Name ?? "(no name)",
                 _options.SampleRate,
@@ -396,7 +396,7 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The microphone is {device}. The software asked for {wanted} Hz and the machine gave {actual} Hz with {channels} channel(s).")]
-    private static partial void LogStarted(
+    private static partial void LogMicrophoneStarted(
         ILogger logger,
         string device,
         int wanted,

@@ -102,8 +102,9 @@ public static class ServiceRegistration
 
             client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
 
-            // The body of an answer goes to the log. 2 GB is the default, and
-            // the Raspberry Pi has 8 GB with Gemma already in it.
+            // SendAsync holds the full answer in memory before it gives the
+            // response. 2 GB is the default, and the Raspberry Pi has 8 GB
+            // with Gemma already in it.
             client.MaxResponseContentBufferSize = 1024 * 1024;
         })
             .SetHandlerLifetime(Timeout.InfiniteTimeSpan)
