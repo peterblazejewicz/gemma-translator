@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ---------------------------------------------------------------------------
-# SECURITY CONTROL. The text here is plain English on purpose, and not
-# Simplified Technical English. See section 8 of CLAUDE.md.
+# SECURITY CONTROL. The text here is deliberately plain English, not the
+# Simplified Technical English the rest of this repository uses. A vague
+# comment on a security control gets deleted by the next person who tidies up.
 # ---------------------------------------------------------------------------
 #
 # This rule gives the appliance account ONE input device, by owner. That is
@@ -44,3 +45,23 @@
 # the account of the systemd unit in the position of {{USER}}.
 
 SUBSYSTEM=="input", KERNEL=="event*", SUBSYSTEMS=="platform", DRIVERS=="gpio-keys", KERNELS=="recorder_keys", SYMLINK+="input/recorder-buttons", OWNER="{{USER}}", GROUP="root", MODE="0400"
+
+# The touchscreen of the display module. Avalonia reads it through libinput,
+# which needs the account to be able to open the device node.
+#
+# This rule is the second half of keeping the account out of group "input".
+# Without it, the only way the appliance can see the touchscreen is to be in
+# that group, which is the thing the comment above tells you not to do. With
+# it, the account owns exactly two input devices: the buttons and the panel it
+# is drawing on.
+#
+# The match is pinned to the driver and not to the name for the same reason as
+# the rule above. Nothing plugged into a USB port can claim to be an i2c device
+# bound to the Goodix-TS driver.
+#
+# Unlike the rule above, ATTRS{name} is safe to include here. udev requires
+# every parent-matching key in one rule to match the same ancestor, and on this
+# device SUBSYSTEMS, DRIVERS and ATTRS{name} all live on the i2c parent
+# (11-005d). Verified with "udevadm info -a -p /sys/class/input/event10".
+
+SUBSYSTEM=="input", KERNEL=="event*", SUBSYSTEMS=="i2c", DRIVERS=="Goodix-TS", ATTRS{name}=="gt911", SYMLINK+="input/appliance-touchscreen", OWNER="{{USER}}", GROUP="root", MODE="0400"

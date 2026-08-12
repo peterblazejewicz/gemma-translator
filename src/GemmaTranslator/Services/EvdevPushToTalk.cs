@@ -36,21 +36,23 @@ namespace GemmaTranslator.Services;
 /// <para>
 /// SECURITY CONTROL. This class opens one path, and that path is a symlink
 /// that udev makes for the GPIO button harness. Do not change it to a scan of
-/// /dev/input, do not fall back to matching on the reported device name, and
-/// do not put the service account in group "input".
+/// /dev/input, and do not fall back to matching on the reported device name: a
+/// USB device supplies its own name string and can claim to be the buttons.
+/// The rule in <c>deploy/99-gemma-translator.rules</c> matches the kernel
+/// device topology instead, which nothing on a USB port can imitate.
 /// </para>
 /// <para>
-/// What that would give away: every /dev/input/event* node on this machine is
-/// 0660 root:input by default, so any member of that group can read the
-/// touchscreen and every keystroke from any USB keyboard somebody plugs in
-/// later, including a password typed at a console. This appliance stands in a
-/// public place and already records what people say. Widen this and it becomes
-/// a keylogger, and nothing on the display would show it.
+/// That rule hands this account the buttons and the touchscreen by owner, so
+/// that it never needs group "input". Group "input" reads every
+/// /dev/input/event* node on the machine, including any USB keyboard somebody
+/// plugs in later and any password typed on it.
 /// </para>
 /// <para>
-/// The udev rule matches the kernel device topology and not the reported name,
-/// because a USB device supplies its own name string and can claim to be the
-/// button harness. See <c>deploy/99-gemma-translator.rules</c>.
+/// CAUTION: this control is not yet in force on the appliance. Raspberry Pi OS
+/// puts the first account of the machine in group "input", so on a stock image
+/// that account still holds the wide access and these rules buy nothing.
+/// Removing the membership is a deployment step, not a code change;
+/// <c>deploy/README.md</c> gives the command and the check to run after it.
 /// </para>
 /// <para>
 /// CAUTION: the software opens the device one time, at the start. A harness
