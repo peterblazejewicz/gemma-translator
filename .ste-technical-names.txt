@@ -251,6 +251,12 @@ chamfer
 # repeated    - part of "repeated start", the name of the operation of I2C
 #               that reads a register.
 #
+# guard       - the low battery guard, which is the name of the component in
+#               deploy/gemma-battery-guard.sh, in the name of its unit, and in
+#               its Description. The dictionary refuses "to guard" (v). This is
+#               the same class of false result as file, log, and request above.
+guard
+
 # --- the types of Conventional Commits ---
 #
 # fix         - the type of a commit that corrects a defect, in the first line

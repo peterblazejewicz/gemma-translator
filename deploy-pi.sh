@@ -37,7 +37,7 @@ if [ "$(uname -s)" != "Linux" ]; then
     echo "[WARNING] Current OS: $(uname -s)."
 fi
 
-echo "[1/8] Installing OS dependencies..."
+echo "[1/9] Installing OS dependencies..."
 if command -v apt-get &> /dev/null; then
     sudo apt-get update
     # device-tree-compiler makes the overlay of step 2. i2c-tools is for the
@@ -65,7 +65,7 @@ if [ -n "$NODE_MAJOR" ] && [ "$NODE_MAJOR" -lt 18 ] 2>/dev/null; then
     echo "[WARNING] Step 3 (npm build) may fail. Please upgrade Node.js first."
 fi
 
-echo "[2/8] Installing the GPIO overlay and the udev rule..."
+echo "[2/9] Installing the GPIO overlay and the udev rule..."
 # The two push-to-talk buttons on GPIO17 and GPIO27, and the mains line of the
 # X1201 UPS on GPIO6. See deploy/recorder-keys-overlay.dts.
 BOOT_DIR="/boot/firmware"
@@ -75,18 +75,19 @@ UDEV_FILE="/etc/udev/rules.d/99-gemma-translator.rules"
 REBOOT_NEEDED=0
 
 if [ -f "$OVERLAY_SRC" ] && [ -d "${BOOT_DIR}/overlays" ]; then
-    dtc -@ -I dts -O dtb -o /tmp/recorder-keys.dtbo "$OVERLAY_SRC"
+    TMP_DTBO="$(mktemp)"
+    dtc -@ -I dts -O dtb -o "$TMP_DTBO" "$OVERLAY_SRC"
 
     # Install the overlay only if it changed. The value tells the user if a
     # restart is necessary, and a restart of this appliance is not free.
-    if ! sudo cmp -s /tmp/recorder-keys.dtbo "${BOOT_DIR}/overlays/recorder-keys.dtbo"; then
-        sudo install -m 644 /tmp/recorder-keys.dtbo "${BOOT_DIR}/overlays/recorder-keys.dtbo"
+    if ! sudo cmp -s "$TMP_DTBO" "${BOOT_DIR}/overlays/recorder-keys.dtbo"; then
+        sudo install -m 644 "$TMP_DTBO" "${BOOT_DIR}/overlays/recorder-keys.dtbo"
         echo "[INFO] Installed ${BOOT_DIR}/overlays/recorder-keys.dtbo"
         REBOOT_NEEDED=1
     else
         echo "[INFO] recorder-keys.dtbo is current."
     fi
-    rm -f /tmp/recorder-keys.dtbo
+    rm -f "$TMP_DTBO"
 
     CONFIG_TXT="${BOOT_DIR}/config.txt"
 
@@ -170,17 +171,45 @@ if [ -f "$UDEV_TEMPLATE" ]; then
     fi
 fi
 
-echo "[3/8] Running backend environment setup..."
+echo "[3/9] Running backend environment setup..."
 "${PROJECT_DIR}/setup.sh"
 
-echo "[4/8] Installing frontend dependencies & building production UI..."
+echo "[4/9] Installing frontend dependencies & building production UI..."
 npm --prefix "${PROJECT_DIR}/frontend" install
 npm --prefix "${PROJECT_DIR}/frontend" run build
 
-echo "[5/8] Downloading LiteRT model..."
+echo "[5/9] Downloading LiteRT model..."
 "${PROJECT_DIR}/download_model.sh"
 
-echo "[6/8] Registering systemd service..."
+echo "[6/9] Installing the low battery guard..."
+# The guard stops the machine when the voltage of the cells stays low. Without
+# it, the cells go empty, the Raspberry Pi loses its electrical supply in one
+# moment, and the SD card can become defective in the middle of a write.
+#
+# The guard operates as root, because systemctl poweroff needs that privilege.
+# It is not part of the translator on purpose: the moments that the guard is
+# necessary are the moments that the translator does not operate.
+GUARD_SRC="${PROJECT_DIR}/deploy/gemma-battery-guard.sh"
+GUARD_DEST="/usr/local/sbin/gemma-battery-guard.sh"
+GUARD_UNIT_SRC="${PROJECT_DIR}/deploy/gemma-battery-guard.service"
+GUARD_UNIT_DEST="/etc/systemd/system/gemma-battery-guard.service"
+
+if [ -f "$GUARD_SRC" ] && [ -f "$GUARD_UNIT_SRC" ]; then
+    sudo install -m 755 "$GUARD_SRC" "$GUARD_DEST"
+    sudo install -m 644 "$GUARD_UNIT_SRC" "$GUARD_UNIT_DEST"
+    sudo systemctl daemon-reload
+    sudo systemctl enable gemma-battery-guard.service
+    sudo systemctl restart gemma-battery-guard.service
+    echo "[INFO] The low battery guard is at ${GUARD_DEST}."
+    echo "[INFO] Read it with: journalctl -u gemma-battery-guard -n 20"
+else
+    echo "[ERROR] deploy/ has no low battery guard. The appliance would have"
+    echo "[ERROR] no protection against cells that go empty, thus this"
+    echo "[ERROR] installation stops here."
+    exit 1
+fi
+
+echo "[7/9] Registering systemd service..."
 SERVICE_FILE="/etc/systemd/system/gemma-translator.service"
 TEMPLATE_FILE="${PROJECT_DIR}/deploy/gemma-translator.service"
 
@@ -195,7 +224,7 @@ if [ -f "$TEMPLATE_FILE" ]; then
     sudo systemctl enable gemma-translator.service
     sudo systemctl restart gemma-translator.service
 
-    echo "[7/8] Configuring GUI kiosk autostart..."
+    echo "[8/9] Configuring GUI kiosk autostart..."
     LXSESSION_DIR="/home/${CURRENT_USER}/.config/lxsession/rpd-x"
     AUTOSTART_FILE="${LXSESSION_DIR}/autostart"
     if [ -d "$LXSESSION_DIR" ] || [ -f "/etc/xdg/lxsession/rpd-x/autostart" ]; then
@@ -210,7 +239,7 @@ if [ -f "$TEMPLATE_FILE" ]; then
         echo "[INFO] LXDE rpd-x session not detected. Skipping LXDE autostart config."
     fi
 
-    echo "[8/8] Systemd service configured and started."
+    echo "[9/9] Systemd service configured and started."
     systemctl status --no-pager gemma-translator.service || true
 else
     echo "[ERROR] Template file ${TEMPLATE_FILE} not found."

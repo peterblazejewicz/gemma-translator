@@ -77,6 +77,8 @@ active low flag, thus low is a key down.
 | --- | --- |
 | `deploy/recorder-keys-overlay.dts` | The device tree overlay that makes the three signals. |
 | `deploy/99-gemma-translator.rules` | The two udev rules that make a stable path for the buttons and for the touchscreen. |
+| `deploy/gemma-battery-guard.sh` | The low battery guard of section 9 |
+| `deploy/gemma-battery-guard.service` | The unit of the guard, which operates as root |
 
 The fuel gauge needs no file of this project. `i2c-sensor` is an overlay of
 Raspberry Pi OS and it has a `max17040` parameter.
@@ -251,12 +253,19 @@ says that a driver has the address. See section 8.9.**
 ## 7. Removal
 
 ```bash
+sudo systemctl disable --now gemma-battery-guard.service
+sudo rm -f /etc/systemd/system/gemma-battery-guard.service
+sudo rm -f /usr/local/sbin/gemma-battery-guard.sh
+sudo systemctl daemon-reload
 sudo cp /boot/firmware/config.txt.gemma-backup /boot/firmware/config.txt
 sudo rm -f /etc/udev/rules.d/99-gemma-translator.rules
 sudo rm -f /boot/firmware/overlays/recorder-keys.dtbo
 sudo udevadm control --reload
 sudo reboot
 ```
+
+**CAUTION: the first three commands remove the low battery guard. After them
+no software stops the machine when the cells go low. See section 9.**
 
 The copy of `config.txt` removes the two `dtoverlay` lines together. If you
 put the membership of group `input` away, put it back:
@@ -274,6 +283,114 @@ volume is FAT32, thus each computer can read it.
 
 Put `config.txt.gemma-backup` in the position of `config.txt`. That file is on
 the same volume.
+
+---
+
+## 9. The low battery guard
+
+`deploy-pi.sh` installs the guard in its step 6. The script goes to
+`/usr/local/sbin/gemma-battery-guard.sh` and the unit to
+`/etc/systemd/system/`.
+
+The guard stops the machine before the cells go empty. Without it the Raspberry
+Pi loses its electrical supply in one moment, and the SD card can become
+defective in the middle of a write.
+
+**CAUTION: the guard replaces the shutdown of the scripts of Geekworm in
+`x120x`. Those scripts stop when the driver of the kernel takes address 0x36.
+See section 8.9. Do not use the two methods together.**
+
+### 9.1 The rule
+
+The guard reads `/sys/class/power_supply/battery/voltage_now` each 5 s. Each
+value is in microvolts.
+
+| Condition | Result |
+| --- | --- |
+| Less than 2000000, or more than 4400000 | Not possible, thus hold the counts |
+| A fall of more than 300000 from a value that was not low | Not possible, thus hold the counts |
+| The mains supplies the machine, for a maximum of 120 reads | Hold the counts |
+| Less than 3000000, for 3 reads together | Stop the machine |
+| Less than 3200000, for 12 net reads | Stop the machine |
+| 3250000 or more | Remove 1 from the count of the low reads |
+| Between 3200000 and 3250000 | Hold the counts |
+| The read gives nothing | Hold the counts |
+
+3.20 V is the value that Geekworm uses in its own script.
+
+### 9.2 Why the voltage, and not the charge
+
+`capacity` gave 10 % and the register gave 46 % at the same time, while the
+cells supplied a current. RCOMP keeps its default value. The voltage was correct in each
+measurement.
+
+A control that stops a machine cannot use a value with that error. `capacity`
+is correct on a bench, on the mains, with no current, and it is not correct in
+service, which is the one condition that is important.
+
+### 9.3 Why the mains line is not in the test
+
+The mains line changes many times each second when the electrical supply cannot
+give sufficient current. See section 8.7 and the debounce of
+`SysfsPowerMonitor`. A rule that stops at each high read of that line gives no
+protection while the cells go empty.
+
+The voltage gives the same knowledge with no such condition. A supply that
+cannot hold the cells lets the voltage go down, thus the guard operates. A
+supply that holds them keeps the voltage up, thus the guard does not operate.
+
+The mains line has one function only: while it is high the guard holds its
+count, for a maximum of 120 reads. This gives a charger the time to lift cells
+that are low. The maximum is necessary because a mains line that is high and
+incorrect must not stop the guard for all time.
+
+### 9.4 How to make sure of the guard
+
+```bash
+systemctl is-enabled gemma-battery-guard
+systemctl is-active gemma-battery-guard
+journalctl -u gemma-battery-guard -n 6
+```
+
+The result must be `enabled` and `active`. A guard that operates writes its
+values each 5 minutes, thus a journal with no such line is not correct.
+
+**CAUTION: `systemctl start` does not make the guard operate after the next
+start of the machine. Use `systemctl enable`.**
+
+To see the guard stop the machine, move the low value above the voltage of a
+full cell. The guard writes two CAUTION lines when it has this value:
+
+```bash
+sudo systemctl set-environment GEMMA_GUARD_LOW_UV=4300000
+sudo systemctl restart gemma-battery-guard
+journalctl -u gemma-battery-guard -f
+```
+
+The machine stops after 12 reads, which is 60 s. With the mains connected it
+stops after 132 reads, which is 11 minutes, because of section 9.3.
+
+The value goes away at the next start of the machine, because systemd keeps it
+in memory only.
+
+To remove it before that:
+
+```bash
+sudo systemctl unset-environment GEMMA_GUARD_LOW_UV
+sudo systemctl restart gemma-battery-guard
+```
+
+The guard refuses a value that is not a number, a value that starts with 0,
+and a value that is not between 2500000 and 4300000. It writes a CAUTION and
+keeps 3200000.
+
+**TO BE UNDERSTOOD: the journal of this machine is in memory and not on the
+card.**
+
+**Thus the line that gives the cause of a shutdown does not stay after the
+machine starts again, and a person who asks why the appliance stopped has no
+answer. `Storage=persistent` in `journald.conf` corrects this, and it writes
+more to the card.**
 
 ---
 

@@ -10,6 +10,10 @@ WorkingDirectory={{PROJECT_DIR}}
 ExecStart={{PROJECT_DIR}}/start.sh --prod
 Restart=always
 RestartSec=5
+# The low battery guard decides in seconds. systemd's default stop timeout is
+# 90 s, and spending that during a poweroff the guard just ordered is time the
+# cells do not have.
+TimeoutStopSec=15
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=XDG_RUNTIME_DIR=/run/user/{{UID}}
 

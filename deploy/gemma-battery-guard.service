@@ -1,0 +1,85 @@
+# Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+# SPDX-License-Identifier: Apache-2.0
+#
+# NEW FUNCTION. Upstream has no UPS and nothing that stops the machine. The
+# script is deploy/gemma-battery-guard.sh.
+#
+# This unit operates as root and it has no User= line. `systemctl poweroff` is
+# an operation on D-Bus, and systemd gives permission for it from the uid of
+# the sender. No privilege of the kernel gives it, thus root is the one method.
+#
+# CAUTION: the account of the appliance has only the permissions that it needs,
+# on purpose. Do not move this guard into the translator, and do not give that
+# account the permission to stop the machine with sudoers or with polkit.
+#
+# The guard must not be part of the software that it protects. The times that
+# it is most necessary are the times that the software does not operate: after
+# a fault, in a wait between two starts, or during an installation.
+#
+# DefaultDependencies=no is not here on purpose. The default gives
+# Conflicts=shutdown.target and Before=shutdown.target, thus systemd stops this
+# guard correctly during the poweroff that the guard started.
+#
+# The limits below come from a measurement on the appliance and not from an
+# assumption. ProtectSystem=strict does not stop `systemctl poweroff`: it makes
+# the file system read-only, and a connection to an AF_UNIX socket has no
+# permission test of that type. Thus /run/dbus/system_bus_socket stays
+# available. The test used `systemd-run` with these values, an empty
+# CapabilityBoundingSet, and PrivateNetwork. `systemctl is-system-running` gave
+# the answer "running" in that condition.
+#
+# CAUTION: do not add these two.
+#
+# PrivateTmp=yes needs a /tmp that the software can write. If ext4 becomes
+# read-only, which is the result of the damage that this guard stops, the
+# namespace does not start and systemd gives 226/NAMESPACE. Then the guard does
+# not start at all. The script opens no temporary file, thus this value gives
+# nothing.
+#
+# PrivateUsers=yes changes the caller that PID 1 sees, and this unit must be
+# uid 0 to PID 1.
+
+[Unit]
+Description=Gemma Translator low battery guard
+Documentation=file:///usr/local/sbin/gemma-battery-guard.sh
+# A start limit stops a unit that has many faults in a short time. The guard
+# must continue to try, because an appliance that has no protection shows
+# nothing on its display.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/gemma-battery-guard.sh
+Restart=always
+RestartSec=5
+TimeoutStopSec=10
+
+# The default path has /usr/local/sbin first, and this installation writes
+# there. Thus a service of root finds cat, sync, timeout and systemctl in a
+# directory that the installation touches. This value gives the sequence.
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+# The guard needs no privilege of the kernel, no network, and no permission to
+# write. It reads two files of sysfs, starts four programs of coreutils, and
+# sends one message on D-Bus.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+ProtectProc=invisible
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
