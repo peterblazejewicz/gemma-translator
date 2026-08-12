@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Globalization;
+using System.Numerics;
 using Microsoft.Extensions.Logging;
 
 namespace GemmaTranslator.Services;
@@ -36,6 +37,27 @@ public sealed partial class SysfsPowerMonitor : IPowerMonitor
     // it.
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(5);
 
+    // The mains line changes many times each second when the electrical supply
+    // cannot give the current that the X1201 and the Raspberry Pi use
+    // together. Thus the software does not obey one read: three reads that
+    // agree make a change.
+    //
+    // The cost: a person who disconnects the supply sees the last value for
+    // 10 s after the first read that gives the new level, and for 15 s after
+    // the line itself changed. A value that changes more quickly makes the
+    // display move at one read that is not correct.
+    private const int AgreeCount = 3;
+
+    // The window that finds a line that is not stable, and the count of reads
+    // in it that do not agree.
+    //
+    // CAUTION: a read each 5 s cannot measure a line that changes each second.
+    // The software counts reads that do not agree with the read before them,
+    // and no more. That count is not the count of the changes of the line.
+    private const int WindowReads = 12;
+    private const int UnstableChanges = 3;
+    private const uint WindowMask = (1u << WindowReads) - 1;
+
     private readonly ILogger<SysfsPowerMonitor> _logger;
     private readonly CancellationTokenSource _stop = new();
 
@@ -43,9 +65,23 @@ public sealed partial class SysfsPowerMonitor : IPowerMonitor
     private readonly HashSet<string> _quiet = new(StringComparer.Ordinal);
 
     private volatile PowerState _current = new(null, null);
-    private bool _started;
+    private int _started;
     private bool _disposed;
     private bool _first = true;
+
+    // The condition of the mains line that the software believes, the raw read
+    // before this one, and the count of raw reads that agree.
+    //
+    // _recent holds one bit for each of the last WindowReads reads that gave a
+    // level. A bit of 1 says that the read did not agree with the read before
+    // it.
+    //
+    // The read loop is the one user of each of these.
+    private bool? _mains;
+    private bool? _rawMains;
+    private int _agree;
+    private uint _recent;
+    private bool _unstable;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SysfsPowerMonitor"/> class.
@@ -63,13 +99,15 @@ public sealed partial class SysfsPowerMonitor : IPowerMonitor
     /// <inheritdoc/>
     public void Start()
     {
-        if (_started)
+        // CAUTION: a test and then a set is not sufficient here. Two calls that
+        // come together would make two read loops, and the two would use the
+        // same fields of the debounce. Two loops that each add to _agree make
+        // a change after two reads that agree, and not three.
+        if (Interlocked.Exchange(ref _started, 1) == 1)
         {
             LogMonitorAlreadyStarted(_logger);
             return;
         }
-
-        _started = true;
 
         // Read the token here and not in the task. A read of Token after
         // Dispose throws, and the task can start after Dispose.
@@ -185,7 +223,18 @@ public sealed partial class SysfsPowerMonitor : IPowerMonitor
             ? new CellCharge(percent.Value, microvolts.Value)
             : null;
 
-        PowerState state = new(online is null ? null : online != 0, cells);
+        bool? raw = online is null ? null : online != 0;
+
+        bool? believed = Debounce(raw, out bool differs);
+
+        WatchStability(raw, differs);
+
+        // CAUTION: while the mains line is not stable the software gives no
+        // condition, and not the last one that it believed. A line that
+        // changes many times each second gives no condition that a person can
+        // obey, and a display that says "the mains supplies the machine" while
+        // the cells go down is worse than one that says nothing.
+        PowerState state = new(_unstable ? null : believed, cells);
         PowerState previous = _current;
 
         _current = state;
@@ -217,6 +266,81 @@ public sealed partial class SysfsPowerMonitor : IPowerMonitor
             state.Cells?.Microvolts ?? -1);
     }
 
+    /// <summary>
+    /// Gives the condition of the mains line that the software believes.
+    /// </summary>
+    /// <param name="raw">The value of this read.</param>
+    /// <param name="differs">
+    /// True if this read and the read before it each gave a level and the two
+    /// levels do not agree.
+    /// </param>
+    /// <returns>The value that the software believes.</returns>
+    private bool? Debounce(bool? raw, out bool differs)
+    {
+        // _agree is 0 before the first call and it is 1 or more after it, thus
+        // it is the test for the first call. A test on _rawMains cannot do
+        // this work, because null is a value that a read can give.
+        bool first = _agree == 0;
+
+        // A read that gave nothing is not a level, thus it is not a change of
+        // the level. Without this test one read that fails counts two times:
+        // one when the level goes away and one when it comes back.
+        differs = !first
+            && raw is not null
+            && _rawMains is not null
+            && raw != _rawMains;
+
+        _agree = raw == _rawMains ? _agree + 1 : 1;
+        _rawMains = raw;
+
+        // The first read is the condition at the start. A machine that starts
+        // on its cells must say so, and not after 10 s.
+        if (first || _agree >= AgreeCount)
+        {
+            _mains = raw;
+        }
+
+        return _mains;
+    }
+
+    /// <summary>
+    /// Examines the mains line for a condition that is not stable.
+    /// </summary>
+    /// <param name="raw">The value of this read.</param>
+    /// <param name="differs">The result of <see cref="Debounce"/>.</param>
+    private void WatchStability(bool? raw, bool differs)
+    {
+        // A read that gave nothing measures nothing. Thus the window keeps its
+        // condition, and a machine that stops giving the level does not become
+        // "stable".
+        if (raw is null)
+        {
+            return;
+        }
+
+        // The window moves with each read. A window that fills and then empties
+        // loses each group of changes that is on the two sides of an edge, and
+        // a line that changes two times in each window is then not visible.
+        _recent = ((_recent << 1) | (differs ? 1u : 0u)) & WindowMask;
+
+        int changes = BitOperations.PopCount(_recent);
+
+        if (changes >= UnstableChanges && !_unstable)
+        {
+            _unstable = true;
+            LogMainsUnstable(
+                _logger,
+                changes,
+                WindowReads,
+                (int)(Interval.TotalSeconds * WindowReads));
+        }
+        else if (changes == 0 && _unstable)
+        {
+            _unstable = false;
+            LogMainsStable(_logger);
+        }
+    }
+
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The electrical supply: mains {mains} (1 is on and 0 is off), charge {charge} percent, {microvolts} microvolts. A value of -1 says that the machine gives no such signal.")]
@@ -225,6 +349,20 @@ public sealed partial class SysfsPowerMonitor : IPowerMonitor
         int mains,
         int charge,
         int microvolts);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The mains line is not stable: {changes} of the last {reads} reads do not agree with the read before them, in {seconds} seconds. The software gives no condition of the mains line while this continues.")]
+    private static partial void LogMainsUnstable(
+        ILogger logger,
+        int changes,
+        int reads,
+        int seconds);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The mains line is stable again.")]
+    private static partial void LogMainsStable(ILogger logger);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
