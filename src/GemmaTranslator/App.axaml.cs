@@ -131,8 +131,11 @@ public partial class App : Application
 
             // The Raspberry Pi reads /dev/input, thus it needs no top level.
             provider.GetRequiredService<IPushToTalk>().Start(null);
-
         }
+
+        // The electrical supply is the same on the two heads, thus this call
+        // is out of the two blocks above.
+        provider.GetRequiredService<IPowerMonitor>().Start();
 
         base.OnFrameworkInitializationCompleted();
     }

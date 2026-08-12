@@ -120,6 +120,25 @@ if [ -f "$OVERLAY_SRC" ] && [ -d "${BOOT_DIR}/overlays" ]; then
     else
         echo "[INFO] config.txt already has dtoverlay=recorder-keys."
     fi
+
+    # The fuel gauge of the X1201, through the driver of the kernel. This is a
+    # stock overlay of Raspberry Pi OS and it needs no file from this project.
+    #
+    # CAUTION: the driver then owns address 0x36 of bus 1. A program that reads
+    # that address directly gets "Device or resource busy". The scripts of
+    # Geekworm in x120x read it directly, thus they stop after this line.
+    if ! grep -qE '^[[:space:]]*dtoverlay=i2c-sensor,max17040[[:space:]]*$' "$CONFIG_TXT"; then
+        printf '\n[all]\ndtoverlay=i2c-sensor,max17040\n' | sudo tee -a "$CONFIG_TXT" > /dev/null
+        echo "[INFO] Added dtoverlay=i2c-sensor,max17040 to config.txt"
+        echo "[WARNING] After the next start, the driver owns I2C address 0x36."
+        echo "[WARNING] The scripts in x120x read that address directly and will"
+        echo "[WARNING] stop with 'Device or resource busy'. If one of them does"
+        echo "[WARNING] your low battery shutdown, put a replacement in place"
+        echo "[WARNING] first. See section 8.9 of deploy/README.md."
+        REBOOT_NEEDED=1
+    else
+        echo "[INFO] config.txt already has dtoverlay=i2c-sensor,max17040."
+    fi
 else
     echo "[INFO] ${BOOT_DIR}/overlays not found. Skipping the GPIO overlay."
 fi

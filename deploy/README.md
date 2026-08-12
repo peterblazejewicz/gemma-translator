@@ -76,13 +76,16 @@ active low flag, thus low is a key down.
 | File | Function |
 | --- | --- |
 | `deploy/recorder-keys-overlay.dts` | The device tree overlay that makes the three signals. |
-| `deploy/99-gemma-translator.rules` | The udev rule that makes a stable path for the buttons. |
+| `deploy/99-gemma-translator.rules` | The two udev rules that make a stable path for the buttons and for the touchscreen. |
+
+The fuel gauge needs no file of this project. `i2c-sensor` is an overlay of
+Raspberry Pi OS and it has a `max17040` parameter.
 
 `deploy-pi.sh` does each step of section 5 in its step 2.
 
-The udev rule gives the input device to the account of the service and to no
-other account. The rule file has the full text on that control. Read it before
-you make a change to it.
+The two udev rules give the buttons and the touchscreen to the account of the
+service and to no other account. The rule file has the full text on that
+control. Read it before you make a change to it.
 
 ---
 
@@ -131,14 +134,17 @@ sudo sed -i -E \
 That command removes nothing on a new installation. It touches no other
 `dtoverlay` line and no `dtparam` line.
 
-Then add one line:
+Then add two lines. The first makes the buttons and the mains line. The second
+gives the fuel gauge to the driver of the kernel. See section 8.8.
 
 ```bash
 printf '\n[all]\ndtoverlay=recorder-keys\n' \
   | sudo tee -a /boot/firmware/config.txt > /dev/null
+printf '\n[all]\ndtoverlay=i2c-sensor,max17040\n' \
+  | sudo tee -a /boot/firmware/config.txt > /dev/null
 ```
 
-`[all]` goes with the line because `config.txt` has sections such as `[pi5]`.
+`[all]` goes with each line because `config.txt` has sections such as `[pi5]`.
 A line after a section is for that model only.
 
 Examine the result, then start the machine again:
@@ -216,6 +222,30 @@ EOF
 A push gives one `DOWN` and one `UP`. If you disconnect the USB-C of the
 X1201, `online` becomes 0. If you connect it again, `online` becomes 1.
 
+For the touchscreen and the fuel gauge:
+
+```bash
+ls -lL /dev/input/appliance-touchscreen
+ls /sys/class/power_supply/
+cat /sys/class/power_supply/battery/capacity
+cat /sys/class/power_supply/battery/voltage_now
+```
+
+The measured result:
+
+```
+cr-------- 1 jabra-translator root 13, 74 /dev/input/appliance-touchscreen
+battery  mains
+95
+4146250
+```
+
+`voltage_now` is in microvolts. Thus 4146250 is 4.146 V.
+
+**CAUTION: after the fuel gauge has its driver, `i2cdetect -y 1` gives `UU` at
+address `0x36` and not `36`. That is the correct result and not a fault. `UU`
+says that a driver has the address. See section 8.9.**
+
 ---
 
 ## 7. Removal
@@ -226,6 +256,13 @@ sudo rm -f /etc/udev/rules.d/99-gemma-translator.rules
 sudo rm -f /boot/firmware/overlays/recorder-keys.dtbo
 sudo udevadm control --reload
 sudo reboot
+```
+
+The copy of `config.txt` removes the two `dtoverlay` lines together. If you
+put the membership of group `input` away, put it back:
+
+```bash
+sudo gpasswd -a "$USER" input
 ```
 
 An overlay in `config.txt` becomes part of the device tree before the kernel
@@ -366,9 +403,78 @@ gives the two bytes in that sequence.
 
 The kernel has a driver for this part. With `dtoverlay=i2c-sensor,max17040`
 the values come from `/sys/class/power_supply/battery/voltage_now` and
-`/sys/class/power_supply/battery/capacity`. Each account can read them.
+`/sys/class/power_supply/battery/capacity`. Each account can read them, thus
+the software needs no membership of group `i2c`.
+
+The driver and the formula give the same result. One measurement of the two,
+at the same charge:
+
+| Source | Voltage | Charge |
+| --- | --- | --- |
+| The registers, with the formula above | 4.1463 V | 95.29 % |
+| The driver, from `power_supply` | 4146250 µV | 95 |
+
+Thus the driver removes the fraction and changes nothing else.
+
+The MAX17040 measures one cell. The X1201 holds two cells, and the measured
+4.146 V is the voltage of one of them. Thus the two cells are in parallel and
+the value is the value of the group.
+
+**TO BE UNDERSTOOD: no document of Geekworm that we have gives the connection
+of the two cells. The measurement is the only source. If a different X1201
+puts the two cells in series, a fuel gauge of one cell gives a charge that is
+not the charge of the group.**
 
 The value of `capacity` can be more than 100. The value of `status` is
 `Unknown`, because the driver has no charger.
 
-This overlay is not part of the configuration of section 5.
+The mains line of section 8.7 is the signal that tells you if the charge
+increases.
+
+### 8.9 One address has one owner
+
+This is section 8.3 again, on the I²C bus and not on a pin.
+
+The driver of the kernel gets address `0x36` when it binds. Software that
+then reads the address directly gets `Errno 16`:
+
+```
+OSError: [Errno 16] Device or resource busy
+```
+
+**CAUTION: this stops the scripts of Geekworm in `x120x`. `bat.py`, `pld.py`
+and `merged.py` each read `0x36` with `smbus2`, and each one stops with that
+error. `i2cdetect` gives `UU` at that address.**
+
+Thus the two methods are not possible together. Use the driver, or use the
+scripts of the vendor. Do not make a plan that needs the two.
+
+### 8.10 Raspberry Pi OS puts the first account in group `input`
+
+```
+$ id
+uid=1000(jabra-translator) ... 996(input) ...
+```
+
+The image does this, and not `deploy-pi.sh`. Group `input` reads each
+`/dev/input/event*` node, because each node is `0660 root:input`. Thus the two
+udev rules of section 4 give no protection while this membership is there.
+
+To remove it:
+
+```bash
+sudo gpasswd -d "$USER" input
+```
+
+**CAUTION: this step has no test on this hardware.**
+
+Avalonia reads the touchscreen through libinput. libinput is not installed on
+this machine, and the software of this fork has not started on it.
+
+Thus nobody has seen that the touchscreen continues to operate after this
+command. Do this step when the software first starts on the appliance, and
+prepare to put the membership back:
+
+```bash
+sudo gpasswd -a "$USER" input
+```

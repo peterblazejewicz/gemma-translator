@@ -125,17 +125,25 @@ public static class ServiceRegistration
 
         services.AddSingleton<IAudioCapture, SoundFlowAudioCapture>();
 
-        // CAUTION: this is the one true difference of the platform in the
-        // software. Avalonia gives no key event on the Raspberry Pi, because
-        // the DRM backend raises a pointer event and a touch event only. Thus
-        // Linux reads /dev/input and Windows uses the keys of Avalonia.
+        // CAUTION: these are the two true differences of the platform in the
+        // software, and each one is hardware and not a fake.
+        //
+        // The buttons: Avalonia gives no key event on the Raspberry Pi,
+        // because the DRM backend raises a pointer event and a touch event
+        // only. Thus Linux reads /dev/input and Windows uses the keys of
+        // Avalonia.
+        //
+        // The electrical supply: the appliance has an X1201 UPS and the
+        // development host has none.
         if (OperatingSystem.IsLinux())
         {
             services.AddSingleton<IPushToTalk, EvdevPushToTalk>();
+            services.AddSingleton<IPowerMonitor, SysfsPowerMonitor>();
         }
         else
         {
             services.AddSingleton<IPushToTalk, KeyboardPushToTalk>();
+            services.AddSingleton<IPowerMonitor, NoPowerMonitor>();
         }
 
         // The view models.
