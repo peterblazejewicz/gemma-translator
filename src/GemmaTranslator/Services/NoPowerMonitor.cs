@@ -32,6 +32,15 @@ public sealed partial class NoPowerMonitor : IPowerMonitor
     public PowerState Current { get; } = new(null, null);
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// This machine has no X1201, thus nothing changes and this event does not
+    /// occur. The display shows a charge that nobody read.
+    /// </remarks>
+#pragma warning disable CS0067 // The event is part of the interface. See the remark.
+    public event EventHandler<PowerState>? Changed;
+#pragma warning restore CS0067
+
+    /// <inheritdoc/>
     public void Start() => LogNoSupply(_logger);
 
     /// <inheritdoc/>

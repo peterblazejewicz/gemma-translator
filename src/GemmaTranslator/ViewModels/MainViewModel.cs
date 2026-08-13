@@ -14,16 +14,13 @@
 // limitations under the License.
 //
 // This file is part of a fork of google-gemma/gemma-translator and has
-// been modified.
+// been modified. It replaces frontend/src/TranslatorApp.jsx.
 
 using System.Diagnostics;
 using System.Globalization;
-using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using GemmaTranslator.Configuration;
-using GemmaTranslator.Fonts;
 using GemmaTranslator.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -31,26 +28,60 @@ using Microsoft.Extensions.Options;
 namespace GemmaTranslator.ViewModels;
 
 /// <summary>
-/// The data of the main view.
+/// The shell of the user interface, and the one state machine of the
+/// appliance.
 /// </summary>
 /// <remarks>
-/// The microphone and the two buttons operate. The speech-to-text part and the
-/// text-to-speech part come later, thus the audio does not go to the
-/// translation and <see cref="SourceText"/> holds a constant example.
+/// <para>
+/// This fork has no test project, thus the sequence of the states must be
+/// legible in one location. Each change of the state writes one line of the
+/// log, and the journal of systemd is the record of what the appliance did.
+/// </para>
+/// <para>
+/// Upstream keeps the same condition in one React component with a conditional
+/// render, and it has no router. See <c>TranslatorApp.jsx</c>.
+/// </para>
+/// <para>
+/// CAUTION: the speech-to-text part has no C# code. The release of a button
+/// goes to <see cref="ExampleText"/> and not to the words of the person. Each
+/// other part of the sequence is complete.
+/// </para>
 /// </remarks>
 public sealed partial class MainViewModel : ObservableObject
 {
     /// <summary>
-    /// The text that the software translates until the microphone operates.
+    /// The text that the software translates until the microphone gives words.
     /// </summary>
     /// <remarks>
     /// CAUTION: this constant goes away with the speech-to-text slice. Then
-    /// the microphone and Moonshine make this text.
+    /// Moonshine makes this text from the audio of the person.
     /// </remarks>
-    private const string ExampleText = "Where is the railway station?";
+    private const string ExampleText = "Where is the nearest train station?";
+
+    /// <summary>
+    /// How long a message stays on the display.
+    /// </summary>
+    /// <remarks>
+    /// The value comes from the design. A message that stays for all time
+    /// covers the conversation, and the appliance has no keyboard that can
+    /// remove it.
+    /// </remarks>
+    private static readonly TimeSpan StatusLife = TimeSpan.FromSeconds(6);
+
+    /// <summary>
+    /// The interval between two frames of the visualizer and of the time of the
+    /// recording.
+    /// </summary>
+    /// <remarks>
+    /// 33 ms is about 30 frames each second. The design gives 60, and the bars
+    /// are decoration: 30 looks the same to a person and it gives the Raspberry
+    /// Pi half of the work.
+    /// </remarks>
+    private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(33);
 
     private readonly ITranslator _translator;
     private readonly IAudioCapture _capture;
+    private readonly IUserSettingsStore _settings;
     private readonly AudioOptions _audioOptions;
     private readonly ILogger<MainViewModel> _logger;
 
@@ -61,59 +92,66 @@ public sealed partial class MainViewModel : ObservableObject
     // away, and then nothing else ends the recording.
     private DispatcherTimer? _limitTimer;
 
+    // The bars of the visualizer and the time of the recording.
+    private DispatcherTimer? _frameTimer;
+
+    // The message goes away without a touch, because the appliance has no
+    // keyboard.
+    private DispatcherTimer? _statusTimer;
+
     /// <summary>
-    /// The language of lane 1, which is the person on the left.
+    /// What the appliance does now.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdlePrompt))]
+    [NotifyPropertyChangedFor(nameof(IsRecording))]
+    [NotifyPropertyChangedFor(nameof(IsStatusVisible))]
+    private AppState _state = AppState.Idle;
+
+    /// <summary>
+    /// Which of the two operations of <see cref="AppState.Working"/> operates.
+    /// </summary>
+    [ObservableProperty]
+    private WorkStage _workStage;
+
+    /// <summary>
+    /// What one person said and the translation of it, or <c>null</c>.
     /// </summary>
     /// <remarks>
-    /// The names are the names of the upstream lanes (<c>laneId</c> 1 and 2 in
-    /// <c>TranslatorApp.jsx</c>). They do not say "left" and "right", because
-    /// the position of a lane is a property of the layout.
+    /// This stays after the operation is complete. A person reads the answer
+    /// while the appliance is idle again, thus the display keeps the two texts
+    /// until the next person speaks.
     /// </remarks>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TranslatedFont))]
-    private Language _lane1Language = Languages.FromCode("ja");
+    [NotifyPropertyChangedFor(nameof(HasExchange))]
+    [NotifyPropertyChangedFor(nameof(IsIdlePrompt))]
+    private Exchange? _exchange;
 
     /// <summary>
-    /// The language of lane 2, which is the person on the right.
+    /// One short sentence for a person, or <c>null</c>.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SourceFont))]
-    private Language _lane2Language = Languages.FromCode("en");
+    [NotifyPropertyChangedFor(nameof(IsStatusVisible))]
+    private string? _statusText;
 
     /// <summary>
-    /// The text that the person said, in the language of that person.
+    /// The charge of the cells, as the display shows it.
     /// </summary>
     [ObservableProperty]
-    private string _sourceText = ExampleText;
-
-    /// <summary>
-    /// The text in the language of the other person.
-    /// </summary>
-    [ObservableProperty]
-    private string _translatedText = string.Empty;
-
-    /// <summary>
-    /// The line that shows the time and the quantity of tokens.
-    /// </summary>
-    /// <remarks>
-    /// Upstream shows this at <c>TranslatorApp.jsx:229</c>.
-    /// </remarks>
-    [ObservableProperty]
-    private string _statusText = string.Empty;
+    private BatteryStatus _battery = BatteryStatus.From(new PowerState(null, null));
 
     /// <summary>
     /// The lane that records now, or 0.
     /// </summary>
-    /// <remarks>
-    /// This is the condition of the operation and the value that the display
-    /// shows. The button of the other person does nothing while it is not 0.
-    /// </remarks>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsLane1Recording))]
-    [NotifyPropertyChangedFor(nameof(IsLane2Recording))]
-    [NotifyPropertyChangedFor(nameof(IsRecording))]
-    [NotifyCanExecuteChangedFor(nameof(TranslateCommand))]
+    [NotifyPropertyChangedFor(nameof(RecordingLabel))]
     private int _recordingLane;
+
+    /// <summary>
+    /// How long the person has held the button, as <c>m:ss</c>.
+    /// </summary>
+    [ObservableProperty]
+    private string _recordingTime = "0:00";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainViewModel"/> class.
@@ -121,32 +159,48 @@ public sealed partial class MainViewModel : ObservableObject
     /// <param name="translator">The translation service from the container.</param>
     /// <param name="capture">The microphone from the container.</param>
     /// <param name="pushToTalk">The two buttons from the container.</param>
+    /// <param name="power">The electrical supply from the container.</param>
+    /// <param name="settings">The selections of a person, from the container.</param>
     /// <param name="audioOptions">The settings of the microphone.</param>
     /// <param name="logger">The logger from the container.</param>
     public MainViewModel(
         ITranslator translator,
         IAudioCapture capture,
         IPushToTalk pushToTalk,
+        IPowerMonitor power,
+        IUserSettingsStore settings,
         IOptions<AudioOptions> audioOptions,
         ILogger<MainViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(translator);
         ArgumentNullException.ThrowIfNull(capture);
         ArgumentNullException.ThrowIfNull(pushToTalk);
+        ArgumentNullException.ThrowIfNull(power);
+        ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(audioOptions);
         ArgumentNullException.ThrowIfNull(logger);
 
         _translator = translator;
         _capture = capture;
+        _settings = settings;
         _audioOptions = audioOptions.Value;
         _logger = logger;
+
+        // The two lanes cannot hold the same language. That rule is a rule
+        // about the pair, thus it is here and not in the lane.
+        Lane1 = new LaneViewModel(1, Languages.FromCode("ja"), Turn);
+        Lane2 = new LaneViewModel(2, Languages.FromCode("en"), Turn);
 
         // The view model listens only. App starts the buttons, because the
         // Windows implementation needs the top level and that does not exist
         // when the container makes this class.
         pushToTalk.Changed += OnButtonChanged;
+        power.Changed += OnPowerChanged;
 
-        LogUserInterfaceStarted(_logger, Lane1Language.Name, Lane2Language.Name);
+        Battery = BatteryStatus.From(power.Current);
+        ResetLevels();
+
+        LogUserInterfaceStarted(_logger, Lane1.Language.Name, Lane2.Language.Name);
     }
 
     /// <summary>
@@ -154,103 +208,224 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     public static string Attribution => "Powered by Moonshine AI";
 
+    /// <summary>The person on the left.</summary>
+    public LaneViewModel Lane1 { get; }
+
+    /// <summary>The person on the right.</summary>
+    public LaneViewModel Lane2 { get; }
+
     /// <summary>
-    /// The font for <see cref="SourceText"/>, which is the language of lane 2.
+    /// The count of the bars of the visualizer, from the settings.
+    /// </summary>
+    public int BarCount => _settings.Current.VisualizerBars;
+
+    /// <summary>
+    /// <c>true</c> when the display shows "Hold a button to talk".
     /// </summary>
     /// <remarks>
-    /// The display gives the font for each area, because a fallback list
-    /// cannot give the correct shape for Chinese and for Japanese at the same
-    /// time. See <see cref="AppFonts.For(Language)"/>.
+    /// The prompt goes away at the first conversation and it does not come
+    /// back. A person who used the appliance one time knows what to do.
     /// </remarks>
-    public FontFamily SourceFont => AppFonts.For(Lane2Language);
+    public bool IsIdlePrompt => State == AppState.Idle && Exchange is null;
 
     /// <summary>
-    /// The font for <see cref="TranslatedText"/>, which is the language of
-    /// lane 1.
+    /// <c>true</c> when the display shows the two texts.
     /// </summary>
-    public FontFamily TranslatedFont => AppFonts.For(Lane1Language);
+    public bool HasExchange => Exchange is not null;
 
     /// <summary>
-    /// True while the person of lane 1 speaks.
+    /// <c>true</c> while the software hears a person.
+    /// </summary>
+    public bool IsRecording => State == AppState.Recording;
+
+    /// <summary>
+    /// <c>true</c> when the display shows a message.
     /// </summary>
     /// <remarks>
-    /// The display must show which person the software hears. The button is
-    /// a physical part and it gives no light.
+    /// A message and the pill of the recording go in the same position. The
+    /// recording wins: a person must see that the microphone is open.
     /// </remarks>
-    public bool IsLane1Recording => RecordingLane == 1;
+    public bool IsStatusVisible => StatusText is not null && !IsRecording;
 
     /// <summary>
-    /// True while the person of lane 2 speaks.
+    /// The text of the pill while the microphone is open.
     /// </summary>
-    public bool IsLane2Recording => RecordingLane == 2;
+    public string RecordingLabel => string.Create(
+        CultureInfo.InvariantCulture,
+        $"RECORDING · SPEAKER {(RecordingLane == 0 ? 1 : RecordingLane)}");
 
     /// <summary>
-    /// True while the software hears a person.
-    /// </summary>
-    /// <remarks>
-    /// The display shows a border on the full surface. A person who is not the
-    /// speaker must see from a distance that the microphone is in operation.
-    /// The Jabra has a light of its own, but that light is on always, because
-    /// the software keeps the device open. See IAudioCapture.Prepare.
-    /// </remarks>
-    public bool IsRecording => RecordingLane != 0;
-
-    /// <summary>
-    /// Translates <see cref="SourceText"/> from lane 2 into lane 1.
+    /// Changes the state and writes one line of the log.
     /// </summary>
     /// <remarks>
-    /// The direction is the direction of upstream: the person who speaks is
-    /// the source, and the other person is the target. A tap starts this
-    /// command, because the audio does not go to the translation until the
-    /// speech-to-text slice.
+    /// Each change goes through this method. With no test project the journal
+    /// is what says that the appliance did what it must do.
     /// </remarks>
-    /// <returns>The task of the operation.</returns>
-    [RelayCommand(CanExecute = nameof(IsNotRecording))]
-    private async Task TranslateAsync()
+    /// <param name="next">The state that comes now.</param>
+    private void GoTo(AppState next)
     {
-        if (string.IsNullOrWhiteSpace(SourceText))
+        if (State == next)
         {
-            // The speech-to-text slice gives an empty text if it hears no
-            // speech. A call with no text takes seconds and gives nothing.
-            TranslatedText = string.Empty;
-            StatusText = "(No speech detected)";
             return;
         }
 
-        StatusText = "Translating...";
-        TranslatedText = string.Empty;
+        LogState(_logger, State, next);
+        State = next;
+    }
+
+    /// <summary>
+    /// Turns the drum of one lane and keeps the two languages different.
+    /// </summary>
+    /// <remarks>
+    /// The step goes past the language of the other lane, in the direction that
+    /// the person asked for. Thus a touch always changes the language, and the
+    /// two lanes never agree.
+    /// </remarks>
+    /// <param name="lane">The lane of the arrow that the person touched.</param>
+    /// <param name="direction">-1 for the arrow above, 1 for the arrow below.</param>
+    private void Turn(LaneViewModel lane, int direction)
+    {
+        if (State == AppState.Recording)
+        {
+            return;
+        }
+
+        LaneViewModel other = lane.Number == 1 ? Lane2 : Lane1;
+        int count = Languages.All.Count;
+
+        int index = Languages.All.ToList().FindIndex(x => x.Code == lane.Language.Code);
+        index = ((index + direction) % count + count) % count;
+
+        if (Languages.All[index].Code == other.Language.Code)
+        {
+            index = ((index + direction) % count + count) % count;
+        }
+
+        lane.Language = Languages.All[index];
+
+        LogLanguage(_logger, lane.Number, lane.Language.Name);
+    }
+
+    /// <summary>
+    /// Shows one sentence, and removes it after <see cref="StatusLife"/>.
+    /// </summary>
+    /// <param name="text">The sentence for the person.</param>
+    private void ShowStatus(string text)
+    {
+        StatusText = text;
+
+        _statusTimer?.Stop();
+        _statusTimer = new DispatcherTimer { Interval = StatusLife };
+
+        _statusTimer.Tick += (_, _) =>
+        {
+            _statusTimer?.Stop();
+            _statusTimer = null;
+            StatusText = null;
+        };
+
+        _statusTimer.Start();
+    }
+
+    /// <summary>
+    /// The electrical supply changed.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: this event comes on the thread that reads the files of the
+    /// <c>power_supply</c> class. Each write to a property must go to the
+    /// thread of the user interface.
+    /// </remarks>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="state">The new condition of the electrical supply.</param>
+    private void OnPowerChanged(object? sender, PowerState state)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            Battery = BatteryStatus.From(state);
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(() => Battery = BatteryStatus.From(state));
+        }
+    }
+
+    /// <summary>
+    /// Makes the sequence of the operation after a person releases a button.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: the first stage has no C# code. The speech-to-text part comes
+    /// later, thus the software takes <see cref="ExampleText"/> and goes to the
+    /// translation. The stages and the display are the stages and the display
+    /// of the complete operation.
+    /// </remarks>
+    /// <param name="lane">The lane of the person who spoke.</param>
+    /// <returns>The task of the operation.</returns>
+    private async Task RunPipelineAsync(LaneViewModel lane)
+    {
+        LaneViewModel other = lane.Number == 1 ? Lane2 : Lane1;
+
+        GoTo(AppState.Working);
+        WorkStage = WorkStage.Listening;
+
+        Exchange = new Exchange
+        {
+            SourceLanguage = lane.Language,
+            TargetLanguage = other.Language,
+            SourceText = "Listening…",
+            TargetText = "—",
+            SourceIsLane2 = lane.Number == 2,
+            IsSourceMuted = true,
+            IsTargetMuted = true,
+        };
+
+        // The speech-to-text part goes here.
+        string heard = ExampleText;
+
+        WorkStage = WorkStage.Translating;
+
+        Exchange = Exchange with
+        {
+            SourceText = heard,
+            TargetText = "Translating…",
+            IsSourceMuted = false,
+            IsTargetMuted = true,
+        };
 
         try
         {
             TranslationResult result = await _translator
-                .TranslateAsync(SourceText, Lane2Language, Lane1Language)
+                .TranslateAsync(heard, lane.Language, other.Language)
                 .ConfigureAwait(true);
 
-            TranslatedText = result.Translation;
-            StatusText = MakeStatus(result);
+            Exchange = Exchange with
+            {
+                TargetText = result.Translation,
+                IsTargetMuted = false,
+            };
+
+            LogTranslated(_logger, result.Duration.TotalSeconds, result.TotalTokens);
         }
         catch (TranslationException exception)
         {
             LogTranslationFailed(_logger, exception);
-            TranslatedText = "(Translation failed)";
-            StatusText = exception.Message;
+            Exchange = Exchange with { TargetText = "—", IsTargetMuted = true };
+            ShowStatus("Translation service isn't responding.");
         }
 #pragma warning disable CA1031 // The appliance must not stop. See the remark.
         catch (Exception exception)
 #pragma warning restore CA1031
         {
-            // CAUTION: this catch is the last one on purpose.
-            //
-            // AsyncRelayCommand awaits the task and throws again on a thread of
-            // the pool. Nothing catches that, thus one error of a type that we
-            // did not expect stops the process. The Raspberry Pi has no
-            // keyboard and no console: the display becomes black, systemd
-            // starts the software again, and the same answer stops it again.
-            // A defect in one service must not do this.
+            // CAUTION: this catch is the last one on purpose. Nothing awaits
+            // this task, thus an error of a type that we did not expect stops
+            // the process. The Raspberry Pi has no keyboard and no console: the
+            // display becomes black, systemd starts the software again, and the
+            // same answer stops it again.
             LogTranslationFailed(_logger, exception);
-            TranslatedText = "(Translation failed)";
-            StatusText = "The translation did not occur.";
+            Exchange = Exchange with { TargetText = "—", IsTargetMuted = true };
+            ShowStatus("Translation service isn't responding.");
         }
+
+        GoTo(AppState.Result);
     }
 
     /// <summary>
@@ -258,9 +433,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     /// <remarks>
     /// CAUTION: this is the one protection against a release that does not
-    /// come. The limit of the buffer stops the memory from increasing, but
-    /// only this gives the lane back. Without it the appliance shows a lane
-    /// that is bright and it refuses the other person for ever.
+    /// come. The limit of the buffer stops the memory from increasing, but only
+    /// this gives the lane back. Without it the appliance shows a lane that is
+    /// bright and it refuses the other person for ever.
     /// </remarks>
     /// <param name="lane">The lane that records.</param>
     private void StartLimitTimer(int lane)
@@ -277,17 +452,14 @@ public sealed partial class MainViewModel : ObservableObject
             LogLimitTimer(_logger, lane, _audioOptions.MaximumRecordingSeconds);
 
             // A release that the person did not make. It goes through
-            // HandleButtonSafely, which is the one entry that catches. An
-            // error out of a Tick has no catch, and the process stops.
+            // HandleButtonSafely, which is the one entry that catches. An error
+            // out of a Tick has no catch, and the process stops.
             HandleButtonSafely(new PushToTalkChange(lane, IsPressed: false));
         };
 
         _limitTimer.Start();
     }
 
-    /// <summary>
-    /// Stops the timer of the limit.
-    /// </summary>
     private void StopLimitTimer()
     {
         _limitTimer?.Stop();
@@ -295,9 +467,58 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// True if no person speaks. The temporary button uses this.
+    /// Starts the bars of the visualizer and the time of the pill.
     /// </summary>
-    private bool IsNotRecording => RecordingLane == 0;
+    private void StartFrameTimer(LaneViewModel lane)
+    {
+        StopFrameTimer();
+
+        long start = Stopwatch.GetTimestamp();
+
+        _frameTimer = new DispatcherTimer { Interval = FrameInterval };
+
+        _frameTimer.Tick += (_, _) =>
+        {
+            double seconds = Stopwatch.GetElapsedTime(start).TotalSeconds;
+
+            lane.Levels = VisualizerLevels.At(BarCount, seconds);
+
+            int whole = (int)seconds;
+            RecordingTime = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{whole / 60}:{whole % 60:D2}");
+        };
+
+        _frameTimer.Start();
+    }
+
+    private void StopFrameTimer()
+    {
+        _frameTimer?.Stop();
+        _frameTimer = null;
+
+        ResetLevels();
+    }
+
+    /// <summary>
+    /// Gives each lane a bar for each count of the settings, all at zero.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: an empty list is not the same as a list of zeros. The
+    /// visualizer makes one bar for each value, thus an empty list gives a
+    /// strip with nothing in it. The design shows a row of short bars while the
+    /// appliance is quiet.
+    ///
+    /// The two lanes share the array. Nothing writes into it: each new
+    /// condition of the bars is a new array.
+    /// </remarks>
+    private void ResetLevels()
+    {
+        double[] quiet = new double[BarCount];
+
+        Lane1.Levels = quiet;
+        Lane2.Levels = quiet;
+    }
 
     /// <summary>
     /// A button of a person went down or came up.
@@ -326,11 +547,10 @@ public sealed partial class MainViewModel : ObservableObject
     /// Does the work of one change of a button, and catches each error.
     /// </summary>
     /// <remarks>
-    /// CAUTION: the catch is the same protection that <c>TranslateAsync</c>
-    /// has, for the same cause. This method operates in a callback of the
-    /// dispatcher, thus an error that goes out of it has no catch and the
-    /// process stops. The appliance has no keyboard: the display becomes
-    /// black, systemd starts the software, and the same button stops it again.
+    /// CAUTION: this method operates in a callback of the dispatcher, thus an
+    /// error that goes out of it has no catch and the process stops. The
+    /// appliance has no keyboard: the display becomes black, systemd starts the
+    /// software, and the same button stops it again.
     /// </remarks>
     /// <param name="change">The lane, and the new condition of the button.</param>
     private void HandleButtonSafely(PushToTalkChange change)
@@ -349,20 +569,20 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Stops the microphone and the timer after an error, and lets the samples
+    /// Stops the microphone and the timers after an error, and lets the samples
     /// go.
     /// </summary>
     /// <remarks>
-    /// CAUTION: each path that makes <see cref="RecordingLane"/> 0 must also
-    /// stop the microphone. With 0 alone the release of the button finds no
-    /// lane and does nothing. The session then stays open and the buffer keeps
-    /// the speech.
+    /// CAUTION: each path that ends a recording must also stop the microphone.
+    /// Without that the session stays open and the buffer keeps the speech of a
+    /// person.
     /// </remarks>
     private void DiscardRecording()
     {
         try
         {
             StopLimitTimer();
+            StopFrameTimer();
 
             using Recording? discarded = _capture.StopRecording();
         }
@@ -373,14 +593,18 @@ public sealed partial class MainViewModel : ObservableObject
             LogDiscardFailed(_logger, exception);
         }
 
-        // CAUTION: these two are properties of the toolkit, and not fields.
-        // Each one raises PropertyChanged, and Avalonia then applies a style on
-        // this thread. Thus each one can throw, and this method operates in a
-        // catch.
+        // CAUTION: each of these raises PropertyChanged, and Avalonia then
+        // applies a style on this thread. Thus each one can throw, and this
+        // method operates in a catch.
         try
         {
             RecordingLane = 0;
-            StatusText = "The microphone did not operate.";
+            Lane1.IsRecording = false;
+            Lane2.IsRecording = false;
+            Lane1.CanTurn = true;
+            Lane2.CanTurn = true;
+            GoTo(AppState.Idle);
+            ShowStatus("Microphone not found. Check the device connections.");
         }
 #pragma warning disable CA1031 // An error out of this method stops the process.
         catch (Exception exception)
@@ -390,11 +614,6 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Does the work of one change of a button, on the thread of the user
-    /// interface.
-    /// </summary>
-    /// <param name="change">The lane, and the new condition of the button.</param>
     private void HandleButton(PushToTalkChange change)
     {
         if (change.IsPressed)
@@ -409,10 +628,10 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void StartRecording(int lane)
     {
-        // The first press wins. The button of the other person does nothing
+        // The first push wins. The button of the other person does nothing
         // until the full operation is complete, and not only until the
         // recording stops.
-        if (RecordingLane != 0 || TranslateCommand.IsRunning)
+        if (RecordingLane != 0 || State == AppState.Working)
         {
             LogButtonIgnored(_logger, lane);
             return;
@@ -425,29 +644,38 @@ public sealed partial class MainViewModel : ObservableObject
         catch (AudioCaptureException exception)
         {
             LogCaptureFailed(_logger, lane, exception);
-            StatusText = exception.Message;
+            ShowStatus("Microphone not found. Check the device connections.");
             return;
         }
 
         // The lane goes in the log here, and not in the audio service, which
-        // has no lane. Without this line each press of the two buttons gives
-        // the same text, thus the journal cannot say that the second button
+        // has no lane. Without this line each push of the two buttons gives the
+        // same text, thus the journal cannot say that the second button
         // operates.
         LogRecordingStarted(_logger, lane);
 
         _pressTicks = Stopwatch.GetTimestamp();
         RecordingLane = lane;
-        TranslatedText = string.Empty;
-        StatusText = "Listening...";
+        RecordingTime = "0:00";
+        StatusText = null;
+
+        LaneViewModel speaking = lane == 1 ? Lane1 : Lane2;
+
+        speaking.IsRecording = true;
+        Lane1.CanTurn = false;
+        Lane2.CanTurn = false;
+
+        GoTo(AppState.Recording);
 
         StartLimitTimer(lane);
+        StartFrameTimer(speaking);
     }
 
     private void StopRecording(int lane)
     {
         // A release for a lane that does not record is not an error. It occurs
         // if a button was down when the software started, because the software
-        // did not see the press.
+        // did not see the push.
         if (RecordingLane != lane)
         {
             return;
@@ -456,7 +684,14 @@ public sealed partial class MainViewModel : ObservableObject
         TimeSpan held = Stopwatch.GetElapsedTime(_pressTicks);
 
         StopLimitTimer();
+        StopFrameTimer();
+
+        LaneViewModel speaking = lane == 1 ? Lane1 : Lane2;
+
         RecordingLane = 0;
+        speaking.IsRecording = false;
+        Lane1.CanTurn = true;
+        Lane2.CanTurn = true;
 
         using Recording? recording = _capture.StopRecording();
 
@@ -464,47 +699,25 @@ public sealed partial class MainViewModel : ObservableObject
         {
             // A physical button in a public location gets an accidental touch.
             LogPressTooShort(_logger, lane, held.TotalMilliseconds);
-            StatusText = "Hold the button while you speak.";
+            GoTo(AppState.Idle);
+            ShowStatus("Press and hold the button while you speak.");
             return;
         }
 
         if (recording is null)
         {
+            GoTo(AppState.Idle);
             return;
         }
 
-        if (recording.ReachedLimit)
-        {
-            StatusText = string.Create(
-                CultureInfo.InvariantCulture,
-                $"The recording came to the limit of {_audioOptions.MaximumRecordingSeconds} s.");
-            return;
-        }
+        LogRecordingStopped(_logger, lane, recording.Duration.TotalSeconds, recording.PeakLevel);
 
-        // The speech-to-text part has no C# replacement, thus the audio stops
-        // here. The next slice gives it to Moonshine and puts the text in
-        // SourceText.
-        StatusText = string.Create(
-            CultureInfo.InvariantCulture,
-            $"Lane {lane}: {recording.Duration.TotalSeconds:F1} s, level {recording.PeakLevel:F2}. Speech-to-text comes later.");
+        // Nothing awaits this task on purpose. RunPipelineAsync catches each
+        // error of its own, and the user interface must not stop while the
+        // model works.
+        _ = RunPipelineAsync(speaking);
     }
 
-    /// <summary>
-    /// Makes the line that shows the time and the quantity of tokens.
-    /// </summary>
-    /// <param name="result">The result of the translation.</param>
-    /// <returns>The text for <see cref="StatusText"/>.</returns>
-    private static string MakeStatus(TranslationResult result)
-        => string.Create(
-            CultureInfo.InvariantCulture,
-            $"Duration: {result.Duration.TotalSeconds:F2}s | Tokens: {result.TotalTokens}");
-
-    /// <summary>
-    /// Writes the line that shows that the user interface started.
-    /// </summary>
-    /// <param name="logger">The logger.</param>
-    /// <param name="lane1Language">The name of the language of lane 1.</param>
-    /// <param name="lane2Language">The name of the language of lane 2.</param>
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The user interface started. Lane 1 is {lane1Language} and lane 2 is {lane2Language}.")]
@@ -512,6 +725,21 @@ public sealed partial class MainViewModel : ObservableObject
         ILogger logger,
         string lane1Language,
         string lane2Language);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The state goes from {from} to {to}.")]
+    private static partial void LogState(ILogger logger, AppState from, AppState to);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Lane {lane} is now {language}.")]
+    private static partial void LogLanguage(ILogger logger, int lane, string language);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The translation took {seconds:F2} s and used {tokens} tokens.")]
+    private static partial void LogTranslated(ILogger logger, double seconds, int tokens);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
@@ -525,13 +753,18 @@ public sealed partial class MainViewModel : ObservableObject
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The press on lane {lane} was {milliseconds:F0} ms, which is too short.")]
+        Message = "The push on lane {lane} was {milliseconds:F0} ms, which is too short.")]
     private static partial void LogPressTooShort(ILogger logger, int lane, double milliseconds);
 
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The recording started for lane {lane}.")]
     private static partial void LogRecordingStarted(ILogger logger, int lane);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The recording of lane {lane} was {seconds:F1} s at level {level:F2}.")]
+    private static partial void LogRecordingStopped(ILogger logger, int lane, double seconds, double level);
 
     [LoggerMessage(
         Level = LogLevel.Error,
@@ -543,13 +776,10 @@ public sealed partial class MainViewModel : ObservableObject
         Message = "The microphone stopped, but the software did not complete the work after it. The buffer can keep the speech of a person.")]
     private static partial void LogDiscardFailed(ILogger logger, Exception exception);
 
-
     [LoggerMessage(
         Level = LogLevel.Error,
         Message = "The button of lane {lane} gave an error.")]
     private static partial void LogButtonFailed(ILogger logger, int lane, Exception exception);
-
-
 
     [LoggerMessage(
         Level = LogLevel.Warning,

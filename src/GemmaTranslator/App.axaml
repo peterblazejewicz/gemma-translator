@@ -23,8 +23,38 @@
              x:Class="GemmaTranslator.App"
              RequestedThemeVariant="Dark">
 
+  <!--
+    The variant here is the value before a person selects one. Appearance
+    writes the value of the settings over it at the start, and again each time
+    that a person touches a swatch. See Services/Appearance.cs.
+  -->
+
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <!-- The colours of the two variants, and the colours that do not
+             change with a variant. -->
+        <ResourceInclude Source="avares://GemmaTranslator/Assets/Theme.axaml" />
+
+        <!-- The mark of the appliance and the accent before a selection.
+             THE ONE LOCATION for a change of the mark. -->
+        <ResourceInclude Source="avares://GemmaTranslator/Assets/Branding.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+
+      <!--
+        Appearance replaces these three at the start. They are here so that the
+        previewer and the harness have a value, and so that a binding that
+        reads one before the first Apply does not fail.
+      -->
+      <SolidColorBrush x:Key="AccentBrush" Color="#FFD100" />
+      <SolidColorBrush x:Key="AccentInkBrush" Color="#1A1A18" />
+      <SolidColorBrush x:Key="AccentDeepBrush" Color="#FFD100" />
+    </ResourceDictionary>
+  </Application.Resources>
+
   <Application.Styles>
     <FluentTheme />
+    <StyleInclude Source="avares://GemmaTranslator/Assets/Typography.axaml" />
   </Application.Styles>
 
 </Application>

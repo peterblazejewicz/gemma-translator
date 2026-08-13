@@ -94,6 +94,12 @@ public partial class App : Application
 
         LogSettings(logger, liteRt.ModelName, hasApiKey);
 
+        // The selections of a person go on the surface before the first view.
+        // Without this the display shows the values of the software, and then
+        // changes them when the first frame is already on the panel.
+        provider.GetRequiredService<Appearance>()
+            .Apply(provider.GetRequiredService<IUserSettingsStore>().Current);
+
         // Open the microphone before the first press. A test measured 1.22 s
         // from the start of the device to the first sample with a Jabra
         // Speak2 40, thus a device that opens at the press loses the first

@@ -15,12 +15,15 @@
   limitations under the License.
 
   This file is part of a fork of google-gemma/gemma-translator and has
-  been modified.
+  been modified. It replaces frontend/src/TranslatorApp.jsx and the layout of
+  frontend/style.css.
 -->
 
 <UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:controls="using:GemmaTranslator.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:v="using:GemmaTranslator.Views"
              xmlns:vm="using:GemmaTranslator.ViewModels"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="GemmaTranslator.Views.MainView"
@@ -30,182 +33,273 @@
              mc:Ignorable="d">
 
   <!--
-    The skeleton of the user interface, for a landscape surface of 1280 x 720.
+    The surface of the appliance, 1280 x 720 in landscape. The panel is
+    720 x 1280 in native portrait and the DRM start turns it. See Program.cs.
 
-    The panel is 720 x 1280 in native portrait. The DRM startup turns it 90
-    degrees. See Program.cs.
+    Three bands, and the dimensions come from the design:
 
-    The structure is the structure of the upstream user interface, which
-    style.css line 68 calls "hardcoded 480x320 landscape". The heights keep the
-    upstream proportion of 320 pixels:
+      The conversation: the remainder, 496 pixels
+      The visualizer:    56 pixels
+      The two lanes:    168 pixels
 
-      The response area: 232 upstream, star here, 72.5 % of the height.
-      The two lanes:      60 upstream, 135 here, 18.75 % of the height.
-      The visualizer:     28 upstream,  63 here,  8.75 % of the height.
-
-    Two physical buttons record, one for each person. The lane becomes bright
-    while the software hears that person. The 135 pixels of the lanes give a
-    touch target of approximately 11 mm, for the language selection that comes
-    later.
+    Upstream has the same three bands at 480 x 320 (style.css line 68, which
+    says "hardcoded 480x320 landscape"). Its numbers do not move here: this
+    canvas is 2.67 times as wide and the panel gives 11.6 pixels for one
+    millimetre, thus a finger needs 105 pixels and upstream assumed 20.
   -->
 
   <UserControl.Styles>
-    <!-- A style class, and not a converter. Avalonia uses a class and a
-         selector where WPF uses a trigger. -->
-    <Style Selector="Border.recording">
-      <Setter Property="Background" Value="#1B3A57" />
+    <!-- The charge of the cells. The two conditions do not follow the accent:
+         a person can select the green swatch, and a warning in green says the
+         opposite of what it means. -->
+    <Style Selector="controls|BatteryGlyph">
+      <Setter Property="Stroke" Value="{DynamicResource InkBrush}" />
+      <Setter Property="Fill" Value="{DynamicResource AccentBrush}" />
+    </Style>
+    <Style Selector="controls|BatteryGlyph.warn">
+      <Setter Property="Stroke" Value="{DynamicResource BatteryWarningBrush}" />
+      <Setter Property="Fill" Value="{DynamicResource BatteryWarningBrush}" />
+    </Style>
+    <Style Selector="controls|BatteryGlyph.danger">
+      <Setter Property="Stroke" Value="{DynamicResource BatteryDangerBrush}" />
+      <Setter Property="Fill" Value="{DynamicResource BatteryDangerBrush}" />
     </Style>
 
-    <!-- The border of the full surface. A person who is not the speaker must
-         see from a distance that the microphone is in operation. The Jabra has
-         a light of its own, but it is on always because the software keeps the
-         device open. See IAudioCapture.Prepare. -->
-    <Style Selector="Border.microphoneLive">
-      <Setter Property="BorderBrush" Value="#D03030" />
-      <Setter Property="BorderThickness" Value="6" />
+    <Style Selector="TextBlock.batteryText">
+      <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+    </Style>
+    <Style Selector="TextBlock.batteryText.warn">
+      <Setter Property="Foreground" Value="{DynamicResource BatteryWarningBrush}" />
+    </Style>
+    <Style Selector="TextBlock.batteryText.danger">
+      <Setter Property="Foreground" Value="{DynamicResource BatteryDangerBrush}" />
+    </Style>
+
+    <!-- A text of the conversation that is a message and not speech. -->
+    <Style Selector="TextBlock.conversation.muted">
+      <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+    </Style>
+
+    <Style Selector="Border.bubble">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource HairBrush}" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="30,22" />
+      <Setter Property="MaxWidth" Value="792" />
+      <Setter Property="BoxShadow" Value="0 1 3 0 #121A1A18" />
+    </Style>
+
+    <Style Selector="Border.pill">
+      <Setter Property="CornerRadius" Value="40" />
+      <Setter Property="Padding" Value="30,14" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Margin" Value="0,28,0,0" />
     </Style>
   </UserControl.Styles>
 
-  <Panel>
-  <Grid RowDefinitions="*,135,63" Background="#000000">
+  <Panel Background="{DynamicResource PageBrush}">
+    <Grid RowDefinitions="*,56,168">
 
-    <!-- The response area, which upstream calls the ResponseDrawer.
-         The text scrolls and the button has its own row, because the model has
-         no limit on the quantity of tokens. A long answer must not move the
-         button off the display: the appliance has no keyboard that can then
-         correct the condition. -->
-    <Grid Grid.Row="0" Background="#111114" RowDefinitions="*,Auto,Auto">
+      <!-- ================= the conversation ================= -->
+      <Panel Grid.Row="0">
 
-      <ScrollViewer Grid.Row="0"
-                    VerticalScrollBarVisibility="Auto"
-                    Margin="40,16">
-        <StackPanel VerticalAlignment="Center"
+        <!-- The prompt of the idle screen. It goes away at the first
+             conversation and does not come back: a person who used the
+             appliance one time knows what to do. -->
+        <StackPanel IsVisible="{Binding IsIdlePrompt}"
                     HorizontalAlignment="Center"
-                    Spacing="18">
-
-          <!-- What the person said. The speech-to-text part has no C# code
-               yet, thus this is still a constant example.
-               The font comes from the language of the lane. Chinese and
-               Japanese use the same Han characters with a different correct
-               shape, thus a fallback list cannot give the two at the same
-               time. See Fonts/AppFonts.cs. -->
-          <TextBlock Text="{Binding SourceText}"
-                     FontFamily="{Binding SourceFont}"
-                     FontSize="36"
-                     Opacity="0.55"
-                     TextWrapping="Wrap"
-                     TextAlignment="Center"
+                    VerticalAlignment="Center">
+          <TextBlock Classes="headline"
+                     Text="Hold a button to talk"
+                     Foreground="{DynamicResource InkBrush}"
                      HorizontalAlignment="Center" />
-
-          <!-- The translation, which the LiteRT-LM server makes. -->
-          <TextBlock Text="{Binding TranslatedText}"
-                     FontFamily="{Binding TranslatedFont}"
-                     FontSize="44"
-                     TextWrapping="Wrap"
-                     TextAlignment="Center"
+          <Border Width="64"
+                  Height="4"
+                  CornerRadius="2"
+                  Margin="0,22,0,0"
+                  Background="{DynamicResource AccentBrush}"
+                  HorizontalAlignment="Center" />
+          <TextBlock Classes="sub-headline"
+                     Text="Speak while holding · Release to translate"
+                     Margin="0,26,0,0"
                      HorizontalAlignment="Center" />
         </StackPanel>
-      </ScrollViewer>
 
-      <!-- CAUTION: this button is temporary. The two physical buttons record
-           now, but the audio does not reach the translation until the
-           speech-to-text slice. Then this button goes away.
-           The dimension is not temporary. The panel gives 11.6 pixels for
-           one millimetre (1280 pixels on 110.4 mm, datasheet page 3), and a
-           finger needs 9 mm. Thus 105 pixels is the minimum for each control
-           that a person touches. The control that comes after this button
-           must keep this number. -->
-      <Button Grid.Row="1"
-              Content="Translate"
-              Command="{Binding TranslateCommand}"
-              MinHeight="105"
-              MinWidth="260"
-              FontSize="18"
-              HorizontalAlignment="Center" />
+        <!-- The two texts. The bubble of the speaker goes above the lane of
+             that speaker. -->
+        <!-- The visibility reads the shell and the content reads the exchange,
+             thus the two are on different elements: x:DataType applies to each
+             binding of the element that carries it. -->
+        <Panel IsVisible="{Binding HasExchange}">
+        <StackPanel DataContext="{Binding Exchange}"
+                    x:DataType="vm:Exchange"
+                    Spacing="26"
+                    Margin="44,106,44,36"
+                    VerticalAlignment="Center">
 
-      <!-- The status line shows an error. It must wrap: a message can be long,
-           and one line goes off the two sides of the display. -->
-      <TextBlock Grid.Row="2"
-                 Text="{Binding StatusText}"
-                 FontSize="14"
-                 Opacity="0.45"
-                 TextWrapping="Wrap"
-                 MaxLines="3"
-                 TextAlignment="Center"
-                 Margin="40,10,40,14"
-                 HorizontalAlignment="Center" />
+          <Border Classes="bubble" HorizontalAlignment="{Binding SourceSide}">
+            <StackPanel>
+              <TextBlock Classes="label" Text="{Binding SourceLabel}" />
+              <TextBlock Classes="conversation"
+                         Classes.muted="{Binding IsSourceMuted}"
+                         Text="{Binding SourceText}"
+                         FontFamily="{Binding SourceFont}"
+                         FontSize="{Binding SourceFontSize}"
+                         LineHeight="{Binding SourceLineHeight}"
+                         FlowDirection="{Binding SourceFlow}"
+                         TextAlignment="Start"
+                         Margin="0,10,0,0" />
+            </StackPanel>
+          </Border>
 
-      <!-- The attribution that the Moonshine licence conditions make
-           necessary. It is a fixed part of the layout, not a late addition. -->
-      <TextBlock Text="{x:Static vm:MainViewModel.Attribution}"
-                 FontSize="12"
-                 Opacity="0.45"
-                 HorizontalAlignment="Right"
-                 VerticalAlignment="Bottom"
-                 Margin="14" />
+          <Border Classes="bubble" HorizontalAlignment="{Binding TargetSide}">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="12">
+                <TextBlock Classes="label" Text="{Binding TargetLabel}" />
+
+                <!-- The appliance speaks the translation now. -->
+                <Viewbox Width="22" Height="22" IsVisible="{Binding IsSpeaking}">
+                  <Canvas Width="24" Height="24">
+                    <Path Data="M11,5 L6,9 L2,9 L2,15 L6,15 L11,19 Z"
+                          Stroke="{DynamicResource AccentDeepBrush}"
+                          StrokeThickness="2"
+                          StrokeJoin="Round" />
+                    <Path Data="M15.54,8.46 A5,5 0 0 1 15.54,15.53"
+                          Stroke="{DynamicResource AccentDeepBrush}"
+                          StrokeThickness="2"
+                          StrokeLineCap="Round" />
+                    <Path Data="M19.07,4.93 A10,10 0 0 1 19.07,19.07"
+                          Stroke="{DynamicResource AccentDeepBrush}"
+                          StrokeThickness="2"
+                          StrokeLineCap="Round" />
+                  </Canvas>
+                </Viewbox>
+              </StackPanel>
+
+              <TextBlock Classes="conversation"
+                         Classes.muted="{Binding IsTargetMuted}"
+                         Text="{Binding TargetText}"
+                         FontFamily="{Binding TargetFont}"
+                         FontSize="{Binding TargetFontSize}"
+                         LineHeight="{Binding TargetLineHeight}"
+                         FlowDirection="{Binding TargetFlow}"
+                         TextAlignment="Start"
+                         Margin="0,10,0,0" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+        </Panel>
+
+        <!-- The charge of the cells. -->
+        <StackPanel Orientation="Horizontal"
+                    Spacing="10"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Margin="0,10,22,0">
+          <controls:BatteryGlyph Width="42"
+                                 Height="22"
+                                 VerticalAlignment="Center"
+                                 Percent="{Binding Battery.Percent}"
+                                 IsCharging="{Binding Battery.IsCharging}"
+                                 GroundBrush="{DynamicResource PageBrush}"
+                                 Classes.warn="{Binding Battery.IsWarning}"
+                                 Classes.danger="{Binding Battery.IsDanger}" />
+          <TextBlock Classes="numeric batteryText"
+                     Classes.warn="{Binding Battery.IsWarning}"
+                     Classes.danger="{Binding Battery.IsDanger}"
+                     Text="{Binding Battery.Text}"
+                     FontSize="26"
+                     VerticalAlignment="Center" />
+        </StackPanel>
+
+        <!-- One sentence for a person. It wraps and it does not stop with
+             three points: the appliance has no keyboard, thus a person cannot
+             ask for the remainder of a message that is cut. -->
+        <Border Classes="pill"
+                IsVisible="{Binding IsStatusVisible}"
+                MaxWidth="760"
+                Background="{DynamicResource PanelBrush}"
+                BorderBrush="{DynamicResource HairBrush}"
+                BorderThickness="2">
+          <StackPanel Orientation="Horizontal" Spacing="14">
+            <Border Width="12"
+                    Height="12"
+                    CornerRadius="6"
+                    VerticalAlignment="Center"
+                    Background="{DynamicResource StatusDotBrush}" />
+            <TextBlock Classes="status"
+                       Text="{Binding StatusText}"
+                       TextWrapping="Wrap"
+                       MaxLines="2"
+                       VerticalAlignment="Center" />
+          </StackPanel>
+        </Border>
+
+        <!-- The microphone is open. A person who is not the speaker must see
+             this from a distance. -->
+        <Border Classes="pill"
+                IsVisible="{Binding IsRecording}"
+                Background="{DynamicResource InverseBrush}">
+          <StackPanel Orientation="Horizontal" Spacing="14">
+            <Border Width="14"
+                    Height="14"
+                    CornerRadius="7"
+                    VerticalAlignment="Center"
+                    Background="{DynamicResource RecordingDotBrush}" />
+            <TextBlock Text="{Binding RecordingLabel}"
+                       FontSize="24"
+                       FontWeight="Medium"
+                       LetterSpacing="2"
+                       Foreground="{DynamicResource InverseInkBrush}"
+                       VerticalAlignment="Center" />
+            <TextBlock Classes="numeric"
+                       Text="{Binding RecordingTime}"
+                       FontSize="22"
+                       Foreground="{DynamicResource InverseInkBrush}"
+                       VerticalAlignment="Center" />
+          </StackPanel>
+        </Border>
+      </Panel>
+
+      <!-- ================= the visualizer ================= -->
+      <Grid Grid.Row="1"
+            ColumnDefinitions="*,2,*"
+            Background="{DynamicResource PageBrush}">
+        <Border Grid.ColumnSpan="3"
+                BorderThickness="0,2,0,0"
+                BorderBrush="{DynamicResource HairBrush}" />
+
+        <controls:AudioVisualizer Grid.Column="0"
+                                  Levels="{Binding Lane1.Levels}"
+                                  IsActive="{Binding Lane1.IsRecording}"
+                                  ActiveBrush="{DynamicResource AccentBrush}"
+                                  IdleBrush="{DynamicResource MutedBrush}" />
+
+        <Border Grid.Column="1" Background="{DynamicResource HairBrush}" />
+
+        <controls:AudioVisualizer Grid.Column="2"
+                                  Levels="{Binding Lane2.Levels}"
+                                  IsActive="{Binding Lane2.IsRecording}"
+                                  ActiveBrush="{DynamicResource AccentBrush}"
+                                  IdleBrush="{DynamicResource MutedBrush}" />
+      </Grid>
+
+      <!-- ================= the two lanes ================= -->
+      <Grid Grid.Row="2" ColumnDefinitions="*,2,*">
+        <Border Grid.ColumnSpan="3"
+                BorderThickness="0,2,0,0"
+                BorderBrush="{DynamicResource HairBrush}" />
+
+        <v:LaneView Grid.Column="0" DataContext="{Binding Lane1}" />
+
+        <Border Grid.Column="1" Background="{DynamicResource HairBrush}" />
+
+        <v:LaneView Grid.Column="2" DataContext="{Binding Lane2}" />
+      </Grid>
+
     </Grid>
-
-    <!-- The two lanes, beside each other, as upstream has them. Each lane is
-         one half of the width. Lane 1 is the person on the left. -->
-    <Grid Grid.Row="1" ColumnDefinitions="*,*">
-
-      <!-- The lane becomes bright while the software hears that person. The
-           button is a physical part and it gives no light. -->
-      <Border Grid.Column="0"
-              BorderBrush="#333338"
-              BorderThickness="0,1,1,0"
-              Classes.recording="{Binding IsLane1Recording}">
-        <StackPanel VerticalAlignment="Center"
-                    HorizontalAlignment="Center"
-                    Spacing="6">
-          <TextBlock Text="1"
-                     FontSize="14"
-                     Opacity="0.45"
-                     HorizontalAlignment="Center" />
-          <TextBlock Text="{Binding Lane1Language.Name}"
-                     FontSize="28"
-                     HorizontalAlignment="Center" />
-        </StackPanel>
-      </Border>
-
-      <Border Grid.Column="1"
-              BorderBrush="#333338"
-              BorderThickness="0,1,0,0"
-              Classes.recording="{Binding IsLane2Recording}">
-        <StackPanel VerticalAlignment="Center"
-                    HorizontalAlignment="Center"
-                    Spacing="6">
-          <TextBlock Text="2"
-                     FontSize="14"
-                     Opacity="0.45"
-                     HorizontalAlignment="Center" />
-          <TextBlock Text="{Binding Lane2Language.Name}"
-                     FontSize="28"
-                     HorizontalAlignment="Center" />
-        </StackPanel>
-      </Border>
-
-    </Grid>
-
-    <!-- The visualizer. Upstream draws 32 bars from the Web Audio
-         AnalyserNode. Avalonia has no AnalyserNode, thus this part needs an
-         FFT that we write. It is empty until then. -->
-    <Border Grid.Row="2"
-            BorderBrush="#333338"
-            BorderThickness="0,1,0,0">
-      <TextBlock Text="visualizer"
-                 FontSize="12"
-                 Opacity="0.3"
-                 HorizontalAlignment="Center"
-                 VerticalAlignment="Center" />
-    </Border>
-
-  </Grid>
-
-  <!-- This border is on top of the layout and it takes no touch. -->
-  <Border Classes.microphoneLive="{Binding IsRecording}"
-          BorderThickness="0"
-          IsHitTestVisible="False" />
   </Panel>
 
 </UserControl>

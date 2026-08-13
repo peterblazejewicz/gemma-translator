@@ -1,0 +1,108 @@
+<!--
+  Copyright 2026 Google LLC
+  Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+
+  This file is part of a fork of google-gemma/gemma-translator and has
+  been modified. It replaces the type of frontend/style.css.
+-->
+
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fonts="using:GemmaTranslator.Fonts">
+
+  <!--
+    The type of the design.
+
+    Upstream uses a monospace stack at each position and its canvas is 480
+    pixels wide (style.css). This canvas is 1280 pixels wide on a panel of
+    11.6 pixels for one millimetre, thus the dimensions of upstream do not
+    move here and each one comes from the design.
+
+    A class gives the dimension and the weight. It does not give the family
+    for the text of a conversation: that family comes from the language of the
+    lane, because Chinese and Japanese use the same characters with a
+    different correct shape. See Fonts/AppFonts.cs.
+  -->
+
+  <!-- The one line of the idle screen, and the headline of the warning of the
+       very low charge. -->
+  <Style Selector="TextBlock.headline">
+    <Setter Property="FontSize" Value="46" />
+    <Setter Property="FontWeight" Value="Medium" />
+  </Style>
+
+  <Style Selector="TextBlock.sub-headline">
+    <Setter Property="FontSize" Value="25" />
+    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+  </Style>
+
+  <!-- The message of the status pill. It wraps: see the comment of the pill in
+       MainView. -->
+  <Style Selector="TextBlock.status">
+    <Setter Property="FontSize" Value="28" />
+    <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+  </Style>
+
+  <!-- "ENGLISH · HEARD", "JAPANESE · TRANSLATION", and
+       "RECORDING · SPEAKER 1". The tracking is 2 pixels in the design. -->
+  <Style Selector="TextBlock.label">
+    <Setter Property="FontSize" Value="24" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="LetterSpacing" Value="2" />
+    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+  </Style>
+
+  <!-- The text that a person said, and the translation. The design gives 42,
+       and 34 when the text is longer than 70 characters. The view model gives
+       the dimension, thus this class gives only what does not change. -->
+  <Style Selector="TextBlock.conversation">
+    <Setter Property="FontSize" Value="42" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+  </Style>
+
+  <!-- "ACCENT COLOR", "APPEARANCE", "SPEECH OUTPUT", "VISUALIZER DENSITY",
+       "ABOUT", and "STARTING UP". -->
+  <Style Selector="TextBlock.section-label">
+    <Setter Property="FontSize" Value="20" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="LetterSpacing" Value="2" />
+    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.title">
+    <Setter Property="FontSize" Value="36" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+  </Style>
+
+  <!--
+    Each numeral that the display shows: the charge of the cells, the time of a
+    recording, the clock, the count of the bars, and the percentage of the
+    warm-up.
+
+    This class gives the family and not the dimension, because the design uses
+    the same face at 22, 26, 34, 44, and 150 pixels.
+
+    "+tnum" gives one width to each numeral. Each font of this software already
+    does that, thus the value is a statement of what the display needs and not
+    a correction of the font.
+  -->
+  <Style Selector="TextBlock.numeric">
+    <Setter Property="FontFamily" Value="{x:Static fonts:AppFonts.MonoFamily}" />
+    <Setter Property="FontFeatures" Value="+tnum" />
+  </Style>
+
+</Styles>

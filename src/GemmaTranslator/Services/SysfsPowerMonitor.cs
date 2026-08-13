@@ -97,6 +97,9 @@ public sealed partial class SysfsPowerMonitor : IPowerMonitor
     public PowerState Current => _current;
 
     /// <inheritdoc/>
+    public event EventHandler<PowerState>? Changed;
+
+    /// <inheritdoc/>
     public void Start()
     {
         // CAUTION: a test and then a set is not sufficient here. Two calls that
@@ -264,6 +267,11 @@ public sealed partial class SysfsPowerMonitor : IPowerMonitor
             state.MainsOnline is null ? -1 : state.MainsOnline.Value ? 1 : 0,
             state.Cells?.Percent ?? -1,
             state.Cells?.Microvolts ?? -1);
+
+        // The display shows the charge, thus it must know. This is the same
+        // test as the line above: the user interface gets an event only when
+        // the mains line or the charge changes, and not for each read.
+        Changed?.Invoke(this, state);
     }
 
     /// <summary>

@@ -74,6 +74,21 @@ public interface IPowerMonitor : IDisposable
     PowerState Current { get; }
 
     /// <summary>
+    /// Occurs when the mains line or the charge of the cells changes.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: this event comes on the thread that reads the values, and not
+    /// on the thread of the user interface. A listener that writes a property
+    /// must go to the correct thread first, or Avalonia throws.
+    ///
+    /// The event does not come for a change of the voltage. That value is a
+    /// measurement and not a condition: it moves at almost each read, and an
+    /// event for it would wake the user interface every 5 s for the life of the
+    /// appliance.
+    /// </remarks>
+    event EventHandler<PowerState>? Changed;
+
+    /// <summary>
     /// Starts to read the electrical supply.
     /// </summary>
     void Start();

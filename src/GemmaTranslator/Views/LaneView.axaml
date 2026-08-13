@@ -1,0 +1,263 @@
+<!--
+  Copyright 2026 Google LLC
+  Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+
+  This file is part of a fork of google-gemma/gemma-translator and has
+  been modified. It replaces frontend/src/components/LanguageLane.jsx.
+-->
+
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GemmaTranslator.ViewModels"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GemmaTranslator.Views.LaneView"
+             x:DataType="vm:LaneViewModel"
+             d:DesignWidth="639"
+             d:DesignHeight="168"
+             mc:Ignorable="d">
+
+  <!--
+    One person, and the drum that selects the language of that person.
+
+    The badge of a person goes to the outer edge of its lane, thus lane 1 has
+    it on the left and lane 2 has it on the right. The view model gives the
+    column. The two arrows do NOT move: the arrow that goes up is on the left
+    in the two lanes, because a person who uses one lane and then the other
+    must find the same control in the same position.
+
+    The badge is the one part that the display mirrors.
+  -->
+
+  <UserControl.Resources>
+    <!--
+      The badge of the lane that records. The two values do not come from the
+      variant: the ground of a lane that records is already the inverse, and a
+      badge that inverts again would go back to the ground of the page.
+    -->
+    <SolidColorBrush x:Key="LaneBadgeLiveBrush" Color="#FAF9F5" />
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <!-- The lane of the person who speaks inverts its full ground. A person
+         who stands away must see which person the appliance hears, thus the
+         signal is the ground and not a border. -->
+    <Style Selector="Border#Lane">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border#Lane.live">
+      <Setter Property="Background" Value="{DynamicResource InverseBrush}" />
+    </Style>
+
+    <Style Selector="Border#Lane TextBlock.drumItem">
+      <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+    </Style>
+    <Style Selector="Border#Lane.live TextBlock.drumItem">
+      <Setter Property="Foreground" Value="{DynamicResource InverseInkBrush}" />
+    </Style>
+
+    <!--
+      The two arrows. A Button gives the pushed condition and the condition
+      that takes no touch with no code behind the file: :pressed fills the
+      circle with the accent, and :disabled makes it faint while a lane
+      records.
+    -->
+    <Style Selector="Button.arrow">
+      <Setter Property="Width" Value="112" />
+      <Setter Property="Height" Value="112" />
+      <Setter Property="CornerRadius" Value="56" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource HairBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <!-- There is no pointer on the appliance, thus :pointerover must look the
+         same as the condition with no touch. Without this the Fluent theme
+         gives a grey circle after a touch on the Windows head. -->
+    <Style Selector="Button.arrow:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource HairBrush}" />
+    </Style>
+
+    <Style Selector="Button.arrow:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    </Style>
+    <Style Selector="Button.arrow:pressed Path">
+      <Setter Property="Stroke" Value="{DynamicResource AccentInkBrush}" />
+    </Style>
+
+    <Style Selector="Button.arrow:disabled">
+      <Setter Property="Opacity" Value="0.35" />
+    </Style>
+
+    <Style Selector="Border#Lane Button.arrow Path">
+      <Setter Property="Stroke" Value="{DynamicResource InkBrush}" />
+    </Style>
+    <Style Selector="Border#Lane.live Button.arrow Path">
+      <Setter Property="Stroke" Value="{DynamicResource InverseInkBrush}" />
+    </Style>
+    <Style Selector="Border#Lane.live Button.arrow">
+      <Setter Property="BorderBrush" Value="{DynamicResource InverseInkBrush}" />
+    </Style>
+
+    <!-- The row in the window of the drum. The other rows are smaller and
+         faint, which is what makes the window legible with no highlight. -->
+    <Style Selector="TextBlock.drumItem">
+      <Setter Property="FontSize" Value="24" />
+      <Setter Property="FontWeight" Value="Normal" />
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="TextBlock.drumItem.selected">
+      <Setter Property="FontSize" Value="34" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+  </UserControl.Styles>
+
+  <Border Name="Lane" Classes.live="{Binding IsRecording}">
+    <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="22,0">
+
+      <!-- The badge of the person. It is 80 pixels, which is below the 105 of
+           a touch target on purpose: nothing here takes a touch. -->
+      <Border Grid.Column="{Binding BadgeColumn}"
+              Width="80"
+              Height="80"
+              CornerRadius="40"
+              VerticalAlignment="Center"
+              Margin="{Binding BadgeMargin}"
+              Background="{DynamicResource InverseBrush}"
+              Classes.live="{Binding IsRecording}">
+        <Border.Styles>
+          <Style Selector="Border.live">
+            <Setter Property="Background" Value="{DynamicResource LaneBadgeLiveBrush}" />
+          </Style>
+        </Border.Styles>
+
+        <StackPanel Orientation="Horizontal"
+                    FlowDirection="{Binding BadgeFlow}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="2">
+          <Viewbox Width="34" Height="34">
+            <Canvas Width="24" Height="24">
+              <Path Data="M5.5,8 A3.5,3.5 0 1 1 12.5,8 A3.5,3.5 0 1 1 5.5,8 Z"
+                    Stroke="{DynamicResource InverseInkBrush}"
+                    StrokeThickness="2" />
+              <Path Data="M3.5,20 C3.5,17 6,15 9,15 C12,15 14.5,17 14.5,20"
+                    Stroke="{DynamicResource InverseInkBrush}"
+                    StrokeThickness="2"
+                    StrokeLineCap="Round" />
+              <Path Data="M17.5,6.5 A4,4 0 0 1 17.5,11.5"
+                    Stroke="{DynamicResource InverseInkBrush}"
+                    StrokeThickness="2"
+                    StrokeLineCap="Round" />
+              <Path Data="M20,4.5 A7.5,7.5 0 0 1 20,13.5"
+                    Stroke="{DynamicResource InverseInkBrush}"
+                    StrokeThickness="2"
+                    StrokeLineCap="Round" />
+            </Canvas>
+          </Viewbox>
+
+          <TextBlock Text="{Binding Number}"
+                     FontSize="24"
+                     FontWeight="Medium"
+                     Foreground="{DynamicResource InverseInkBrush}"
+                     VerticalAlignment="Center" />
+        </StackPanel>
+      </Border>
+
+      <!-- The arrow above. 112 pixels, which is more than the 105 that a
+           finger needs on this panel. -->
+      <Button Grid.Column="1"
+              Classes="arrow"
+              Margin="0,0,14,0"
+              Command="{Binding TurnUpCommand}"
+              IsEnabled="{Binding CanTurn}">
+        <Path Data="M10,25 L20,15 L30,25"
+              StrokeThickness="3.3"
+              StrokeLineCap="Round"
+              StrokeJoin="Round"
+              Width="40"
+              Height="40" />
+      </Button>
+
+      <!-- The drum. It is 132 pixels, thus a person sees 3 rows of 44 and the
+           window is the row in the middle. -->
+      <Border Grid.Column="2" Height="132" ClipToBounds="True" VerticalAlignment="Center">
+        <Panel>
+          <ItemsControl ItemsSource="{Binding Items}"
+                        Height="{Binding DrumHeight}"
+                        VerticalAlignment="Top">
+            <ItemsControl.RenderTransform>
+              <TranslateTransform Y="{Binding DrumOffset}" />
+            </ItemsControl.RenderTransform>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DrumItem">
+                <TextBlock Classes="drumItem"
+                           Classes.selected="{Binding IsSelected}"
+                           Text="{Binding Name}"
+                           Height="44"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           VerticalAlignment="Center" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <!-- The window of the drum. It takes no touch: the two arrows turn
+               the drum, because a list that a person drags needs a scroll bar
+               that this surface has no room for. -->
+          <Border Height="44"
+                  VerticalAlignment="Top"
+                  Margin="0,44,0,0"
+                  BorderThickness="0,2,0,2"
+                  BorderBrush="{DynamicResource HairBrush}"
+                  IsHitTestVisible="False">
+            <Rectangle Width="4"
+                       Height="26"
+                       RadiusX="2"
+                       RadiusY="2"
+                       Fill="{DynamicResource AccentBrush}"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Center"
+                       Margin="8,0,0,0" />
+          </Border>
+        </Panel>
+      </Border>
+
+      <!-- The arrow below. -->
+      <Button Grid.Column="3"
+              Classes="arrow"
+              Margin="14,0,0,0"
+              Command="{Binding TurnDownCommand}"
+              IsEnabled="{Binding CanTurn}">
+        <Path Data="M10,15 L20,25 L30,15"
+              StrokeThickness="3.3"
+              StrokeLineCap="Round"
+              StrokeJoin="Round"
+              Width="40"
+              Height="40" />
+      </Button>
+
+    </Grid>
+  </Border>
+
+</UserControl>

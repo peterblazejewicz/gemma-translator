@@ -69,8 +69,12 @@ multilingual
 transcription
 translator
 tokens
+# prompt   - the LLM term for the instruction text sent to the model.
+prompt
 
 # --- Platform and hardware ---
+# port     - a TCP port number, for example port 9379.
+port
 raspberry
 pi
 arm64
@@ -331,3 +335,14 @@ screenshot
 harness
 battery
 splash
+
+# --- names of the controls that we write ---
+#
+# brush - a brush (n), the Avalonia type that fills a shape (IBrush,
+#         SolidColorBrush). The dictionary refuses "to brush" (v). This is the
+#         same class of false result as file, log, and request above.
+# bolt  - the shape of a flash of lightning, which the glyph of the battery
+#         shows while the cells take charge. It is the name of the shape in the
+#         design and the name of the identifier in the code.
+brush
+bolt

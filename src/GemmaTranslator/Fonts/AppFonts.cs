@@ -55,6 +55,15 @@ public static class AppFonts
     public const string Mono = $"{GemmaFontCollection.CollectionUri}#Noto Sans Mono";
 
     /// <summary>
+    /// <see cref="Mono"/> as a family, for a style in AXAML.
+    /// </summary>
+    /// <remarks>
+    /// A style needs this type. <c>x:Static</c> with the constant gives a
+    /// string, and a setter of a style does not convert it.
+    /// </remarks>
+    public static FontFamily MonoFamily { get; } = new(Mono);
+
+    /// <summary>
     /// Gets the font for the text of one language.
     /// </summary>
     /// <remarks>

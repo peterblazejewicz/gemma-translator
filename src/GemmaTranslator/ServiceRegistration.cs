@@ -124,6 +124,12 @@ public static class ServiceRegistration
 
         services.AddSingleton<IAudioCapture, SoundFlowAudioCapture>();
 
+        // What a person selected on the display: the accent, the variant, the
+        // speech output, and the count of the bars. The store reads the file in
+        // its constructor, thus it is a singleton and the disk gets one read.
+        services.AddSingleton<IUserSettingsStore, JsonUserSettingsStore>();
+        services.AddSingleton<Appearance>();
+
         // CAUTION: these are the two true differences of the platform in the
         // software, and each one is hardware and not a fake.
         //
