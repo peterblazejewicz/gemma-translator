@@ -55,10 +55,6 @@ public enum AppState
     /// <summary>
     /// The software makes the text and then the translation.
     /// </summary>
-    /// <remarks>
-    /// <see cref="WorkStage"/> says which of the two operations is in
-    /// operation.
-    /// </remarks>
     Working,
 
     /// <summary>
@@ -70,22 +66,4 @@ public enum AppState
     /// The display is dark, to use less electrical supply on the cells.
     /// </summary>
     Screensaver,
-}
-
-/// <summary>
-/// The two operations of <see cref="AppState.Working"/>.
-/// </summary>
-/// <remarks>
-/// The design shows a different text for each one, thus the two are not one
-/// state. Upstream also shows two texts at
-/// <c>TranslatorApp.jsx</c>: it says "Listening" and then it says
-/// "Translating".
-/// </remarks>
-public enum WorkStage
-{
-    /// <summary>The speech-to-text part makes the text of the speech.</summary>
-    Listening,
-
-    /// <summary>The model makes the text in the other language.</summary>
-    Translating,
 }

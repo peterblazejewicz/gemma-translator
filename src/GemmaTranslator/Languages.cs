@@ -79,6 +79,22 @@ public static class Languages
     /// </summary>
     public static Language Default { get; } = All.Single(x => x.Code == "en");
 
+    /// <returns>The position of this language in <see cref="All"/>.</returns>
+    public static int IndexOf(Language language)
+    {
+        ArgumentNullException.ThrowIfNull(language);
+
+        for (int index = 0; index < All.Count; index++)
+        {
+            if (All[index].Code == language.Code)
+            {
+                return index;
+            }
+        }
+
+        return 0;
+    }
+
     /// <summary>
     /// Finds the language with this code.
     /// </summary>

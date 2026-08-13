@@ -161,10 +161,10 @@
         <!-- The visibility reads the shell and the content reads the exchange,
              thus the two are on different elements: x:DataType applies to each
              binding of the element that carries it. -->
-        <Panel IsVisible="{Binding HasExchange}">
-        <StackPanel DataContext="{Binding Exchange}"
-                    x:DataType="vm:Exchange"
-                    Spacing="26"
+        <ContentControl Content="{Binding Exchange}" VerticalAlignment="Center">
+          <ContentControl.ContentTemplate>
+            <DataTemplate x:DataType="vm:Exchange">
+        <StackPanel Spacing="26"
                     Margin="44,106,44,36"
                     VerticalAlignment="Center">
 
@@ -219,7 +219,9 @@
             </StackPanel>
           </Border>
         </StackPanel>
-        </Panel>
+            </DataTemplate>
+          </ContentControl.ContentTemplate>
+        </ContentControl>
 
         <!-- The charge of the cells. -->
         <StackPanel Orientation="Horizontal"

@@ -151,18 +151,6 @@ public sealed partial class MainViewModel : ObservableObject
     /// operation.
     /// </summary>
     [ObservableProperty]
-    private WorkStage _workStage;
-
-    /// <summary>
-    /// What one person said and the translation of it, or <c>null</c>.
-    /// </summary>
-    /// <remarks>
-    /// This stays after the operation is complete. A person reads the answer
-    /// while the appliance is idle again, thus the display keeps the two texts
-    /// until the next person speaks.
-    /// </remarks>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasExchange))]
     [NotifyPropertyChangedFor(nameof(IsIdlePrompt))]
     private Exchange? _exchange;
 
@@ -213,9 +201,6 @@ public sealed partial class MainViewModel : ObservableObject
     /// This is a part of a time. It does not say how much of the model came
     /// into the memory. See <see cref="WarmUpTime"/>.
     /// </remarks>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(WarmUpPercentText))]
-    private double _warmUpPercent;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainViewModel"/> class.
@@ -311,7 +296,6 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>
     /// <c>true</c> when the display shows the two texts.
     /// </summary>
-    public bool HasExchange => Exchange is not null;
 
     /// <summary>
     /// <c>true</c> while the software hears a person.
@@ -363,9 +347,6 @@ public sealed partial class MainViewModel : ObservableObject
 #pragma warning restore CA1822
 
     /// <summary>The percentage of the warm-up, for the display.</summary>
-    public string WarmUpPercentText => string.Create(
-        CultureInfo.InvariantCulture,
-        $"{(int)WarmUpPercent}%");
 
     /// <summary>
     /// The text of the pill while the microphone is open.
@@ -414,21 +395,21 @@ public sealed partial class MainViewModel : ObservableObject
     /// Opens the settings screen.
     /// </summary>
     [RelayCommand]
-    private void OpenSettings()
+    private void OpenSettings() => Safely(() =>
     {
         NoteActivity();
         IsSettingsOpen = true;
-    }
+    });
 
     /// <summary>
     /// Closes the settings screen.
     /// </summary>
     [RelayCommand]
-    private void CloseSettings()
+    private void CloseSettings() => Safely(() =>
     {
         NoteActivity();
         IsSettingsOpen = false;
-    }
+    });
 
     /// <summary>
     /// Ends the screensaver.
@@ -484,11 +465,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         _warmUpTimer.Tick += (_, _) => Safely(() =>
         {
-            double part = Stopwatch.GetElapsedTime(_warmUpTicks) / WarmUpTime;
-
-            WarmUpPercent = Math.Clamp(part * 100, 0, 100);
-
-            if (part < 1)
+            if (Stopwatch.GetElapsedTime(_warmUpTicks) < WarmUpTime)
             {
                 return;
             }
@@ -654,7 +631,7 @@ public sealed partial class MainViewModel : ObservableObject
         LaneViewModel other = lane.Number == 1 ? Lane2 : Lane1;
         int count = Languages.All.Count;
 
-        int index = Languages.All.ToList().FindIndex(x => x.Code == lane.Language.Code);
+        int index = Languages.IndexOf(lane.Language);
         index = ((index + direction) % count + count) % count;
 
         if (Languages.All[index].Code == other.Language.Code)
@@ -703,11 +680,11 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (Dispatcher.UIThread.CheckAccess())
         {
-            Battery = BatteryStatus.From(state);
+            Safely(() => Battery = BatteryStatus.From(state));
         }
         else
         {
-            Dispatcher.UIThread.Post(() => Battery = BatteryStatus.From(state));
+            Dispatcher.UIThread.Post(() => Safely(() => Battery = BatteryStatus.From(state)));
         }
     }
 
@@ -727,7 +704,6 @@ public sealed partial class MainViewModel : ObservableObject
         LaneViewModel other = lane.Number == 1 ? Lane2 : Lane1;
 
         GoTo(AppState.Working);
-        WorkStage = WorkStage.Listening;
 
         Exchange = new Exchange
         {
@@ -743,7 +719,6 @@ public sealed partial class MainViewModel : ObservableObject
         // The speech-to-text part goes here.
         string heard = ExampleText;
 
-        WorkStage = WorkStage.Translating;
 
         Exchange = Exchange with
         {
@@ -787,7 +762,7 @@ public sealed partial class MainViewModel : ObservableObject
             ShowStatus("Translation service isn't responding.");
         }
 
-        GoTo(AppState.Result);
+        Safely(() => GoTo(AppState.Result));
     }
 
     /// <summary>
@@ -809,7 +784,7 @@ public sealed partial class MainViewModel : ObservableObject
             Interval = TimeSpan.FromSeconds(_audioOptions.MaximumRecordingSeconds),
         };
 
-        _limitTimer.Tick += (_, _) =>
+        _limitTimer.Tick += (_, _) => Safely(() =>
         {
             LogLimitTimer(_logger, lane, _audioOptions.MaximumRecordingSeconds);
 
@@ -817,7 +792,7 @@ public sealed partial class MainViewModel : ObservableObject
             // HandleButtonSafely, which is the one entry that catches. An error
             // out of a Tick has no catch, and the process stops.
             HandleButtonSafely(new PushToTalkChange(lane, IsPressed: false));
-        };
+        });
 
         _limitTimer.Start();
     }
@@ -995,24 +970,19 @@ public sealed partial class MainViewModel : ObservableObject
         // conversation. The pill that says "RECORDING" is in that conversation,
         // thus a recording that starts here is a microphone that is open with
         // no signal on the panel. See MainView.axaml.
+        if (!change.IsPressed)
+        {
+            StopRecording(change.Lane);
+            return;
+        }
         if (State == AppState.WarmUp || IsSettingsOpen || Battery.IsCritical)
         {
-            if (change.IsPressed)
-            {
                 LogButtonIgnored(_logger, change.Lane);
-            }
 
             return;
         }
 
-        if (change.IsPressed)
-        {
             StartRecording(change.Lane);
-        }
-        else
-        {
-            StopRecording(change.Lane);
-        }
     }
 
     private void StartRecording(int lane)

@@ -78,36 +78,28 @@
                  HorizontalAlignment="Center" />
 
       <!--
-        The bar is a ProgressBar and not two columns of a Grid. A column takes
-        a GridLength, and WarmUpPercent is a number.
-
-        Thus a Grid needs a class that makes the one from the other. The
-        ProgressBar computes the proportion in the control, and this screen
-        needs no such class and no code behind this file.
-
-        CAUTION: the Value of a RangeBase binds in two directions if you give
-        no Mode. The view model computes this number from a clock, and no
-        part of the display must write it back.
+        CAUTION: the bar gives no quantity, and it must not give one. The model
+        goes into the memory in a different process, and that process gives this
+        software no signal. Thus a percentage here is a number that nobody
+        measured.
       -->
       <ProgressBar Width="520"
                    Height="12"
                    MinHeight="12"
                    CornerRadius="6"
                    Margin="0,34,0,0"
-                   Minimum="0"
-                   Maximum="100"
-                   Value="{Binding WarmUpPercent, Mode=OneWay}"
+                   IsIndeterminate="True"
                    Background="{DynamicResource PanelBrush}"
                    Foreground="{DynamicResource AccentBrush}"
                    HorizontalAlignment="Center" />
 
-      <TextBlock Classes="numeric"
-                 Text="{Binding WarmUpPercentText}"
-                 FontSize="26"
-                 Foreground="{DynamicResource MutedBrush}"
-                 Margin="0,14,0,0"
-                 HorizontalAlignment="Center" />
     </StackPanel>
+    <TextBlock Text="{x:Static vm:MainViewModel.Attribution}"
+               FontSize="20"
+                 Foreground="{DynamicResource MutedBrush}"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Bottom"
+               Margin="0,0,0,28" />
 
   </Panel>
 

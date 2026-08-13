@@ -191,7 +191,7 @@ public sealed partial class LaneViewModel : ObservableObject
     /// column moves up by one row for each step after the first one, and the
     /// first language moves down by one row.
     /// </remarks>
-    public double DrumOffset => -(IndexOf(Language) - 1) * RowHeight;
+    public double DrumOffset => -(Languages.IndexOf(Language) - 1) * RowHeight;
 
     /// <summary>
     /// Turns the drum to the language above.
@@ -205,18 +205,6 @@ public sealed partial class LaneViewModel : ObservableObject
     [RelayCommand]
     private void TurnDown() => _turn(this, 1);
 
-    private static int IndexOf(Language language)
-    {
-        for (int index = 0; index < Languages.All.Count; index++)
-        {
-            if (Languages.All[index].Code == language.Code)
-            {
-                return index;
-            }
-        }
-
-        return 0;
-    }
 
     private static IReadOnlyList<DrumItem> MakeItems(Language selected)
     {

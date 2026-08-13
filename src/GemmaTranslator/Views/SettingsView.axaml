@@ -200,59 +200,6 @@
             </StackPanel>
           </Border>
 
-          <Button Padding="0"
-                  Background="Transparent"
-                  BorderThickness="0"
-                  HorizontalAlignment="Stretch"
-                  HorizontalContentAlignment="Stretch"
-                  Command="{Binding ToggleSpeechCommand}">
-            <Border Classes="card" BorderThickness="2" BorderBrush="{DynamicResource HairBrush}">
-              <StackPanel>
-                <TextBlock Classes="section-label" Text="SPEECH OUTPUT" />
-                <Grid ColumnDefinitions="*,Auto" Margin="0,16,0,0">
-                  <TextBlock Grid.Column="0"
-                             Text="Speak translations aloud"
-                             FontSize="26"
-                             VerticalAlignment="Center"
-                             Foreground="{DynamicResource InkBrush}" />
-
-                  <!-- The switch. The knob moves to the other end, thus a
-                       person sees the condition and not only a colour. -->
-                  <Border Grid.Column="1"
-                          Width="160"
-                          Height="88"
-                          CornerRadius="44"
-                          Classes.on="{Binding SpeakTranslations}">
-                    <Border.Styles>
-                      <Style Selector="Border">
-                        <Setter Property="Background" Value="{DynamicResource HairBrush}" />
-                      </Style>
-                      <Style Selector="Border.on">
-                        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
-                      </Style>
-                      <Style Selector="Border Border.knob">
-                        <Setter Property="HorizontalAlignment" Value="Left" />
-                      </Style>
-                      <Style Selector="Border.on Border.knob">
-                        <Setter Property="HorizontalAlignment" Value="Right" />
-                      </Style>
-                    </Border.Styles>
-                    <Border Classes="knob"
-                            Width="72"
-                            Height="72"
-                            CornerRadius="36"
-                            Margin="8,0"
-                            VerticalAlignment="Center"
-                            Background="{DynamicResource CardBrush}" />
-                  </Border>
-                </Grid>
-                <TextBlock Text="Volume follows the speakerphone buttons"
-                           FontSize="24"
-                           Margin="0,6,0,0"
-                           Foreground="{DynamicResource MutedBrush}" />
-              </StackPanel>
-            </Border>
-          </Button>
         </StackPanel>
 
         <!-- The right column. -->
