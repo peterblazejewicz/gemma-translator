@@ -30,31 +30,18 @@ using Microsoft.Extensions.Options;
 
 namespace GemmaTranslator;
 
-/// <summary>
-/// The Avalonia application.
-/// </summary>
 public partial class App : Application
 {
-    /// <inheritdoc/>
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// The two heads put the same <see cref="Views.MainView"/> in a different
-    /// container. Windows has a window manager and gets a window. The
-    /// Raspberry Pi has no window manager and gets one view that fills the
-    /// display.
-    /// </remarks>
     public override void OnFrameworkInitializationCompleted()
     {
         // Avalonia calls this method also when there is no lifetime, which is
-        // what SetupWithoutStarting does. The work below opens the microphone
-        // and starts the monitor of the electrical supply. Neither is correct
-        // when nothing shows a view: the software would hold the capture device
-        // of the appliance with no display and no way to release it.
+        // what SetupWithoutStarting does. The work below opens the microphone,
+        // and a process that shows no view cannot release it.
         if (ApplicationLifetime is null)
         {
             base.OnFrameworkInitializationCompleted();
@@ -68,11 +55,6 @@ public partial class App : Application
 
         ServiceProvider provider = services.BuildServiceProvider();
 
-        // Get the settings now. This is the moment that the validator
-        // operates. An incorrect value must stop the software here, with a
-        // clear message in the log, and not at the first translation. The
-        // appliance has no settings screen that can correct it later.
-        //
         // SECURITY CONTROL. Do not delete this line as a redundant read. It is
         // what runs the loopback check in LiteRtOptionsValidator. Options are
         // validated lazily, so without this line the check happens on the
@@ -94,9 +76,6 @@ public partial class App : Application
 
         LogSettings(logger, liteRt.ModelName, hasApiKey);
 
-        // The selections of a person go on the surface before the first view.
-        // Without this the display shows the values of the software, and then
-        // changes them when the first frame is already on the panel.
         provider.GetRequiredService<Appearance>()
             .Apply(provider.GetRequiredService<IUserSettingsStore>().Current);
 
@@ -111,8 +90,6 @@ public partial class App : Application
         }
         catch (AudioCaptureException exception)
         {
-            // The software continues. A person can connect the microphone
-            // after the start, and the first press opens it again.
             LogNoMicrophoneAtStart(logger, exception);
         }
 
@@ -125,16 +102,10 @@ public partial class App : Application
                 DataContext = viewModel,
             };
 
-            // The keys of the two people arrive at the top level, because
-            // Avalonia sends a key to the control that has the focus and this
-            // view has no control that takes the focus.
             provider.GetRequiredService<IPushToTalk>().Start(window);
 
             desktop.MainWindow = window;
 
-            // The container holds each service that must be disposed, for
-            // example the audio device. Windows can stop the software, thus
-            // the container must go with it.
             desktop.Exit += (_, _) => provider.Dispose();
         }
         else if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
@@ -150,23 +121,15 @@ public partial class App : Application
             provider.GetRequiredService<IPushToTalk>().Start(null);
         }
 
-        // The electrical supply is the same on the two heads, thus this call
-        // is out of the two blocks above.
         provider.GetRequiredService<IPowerMonitor>().Start();
 
         base.OnFrameworkInitializationCompleted();
     }
 
-    /// <summary>
-    /// Writes the settings of the LiteRT-LM server to the log.
-    /// </summary>
     /// <remarks>
-    /// CAUTION: the key is a secret. This method writes only if a key is
-    /// there. Do not put the key in the message.
+    /// CAUTION: the key is a secret. This method writes only if a key is there.
+    /// Do not put the key in the message.
     /// </remarks>
-    /// <param name="logger">The logger.</param>
-    /// <param name="model">The name of the model.</param>
-    /// <param name="hasApiKey">True if a key is supplied.</param>
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The model is {model}. A key is supplied: {hasApiKey}.")]

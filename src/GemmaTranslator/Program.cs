@@ -23,18 +23,8 @@ using GemmaTranslator.Fonts;
 
 namespace GemmaTranslator;
 
-/// <summary>
-/// The start of the software. It selects one of the two heads.
-/// </summary>
 internal static class Program
 {
-    /// <summary>
-    /// Starts the software.
-    /// </summary>
-    /// <param name="args">
-    /// The arguments of the command. Give <c>--drm</c> on the Raspberry Pi.
-    /// </param>
-    /// <returns>The exit code.</returns>
     [STAThread]
     public static int Main(string[] args)
     {
@@ -49,12 +39,6 @@ internal static class Program
         return builder.StartWithClassicDesktopLifetime(args);
     }
 
-    /// <summary>
-    /// Starts the software on the panel of the appliance.
-    /// </summary>
-    /// <param name="builder">The builder from <see cref="BuildAvaloniaApp"/>.</param>
-    /// <param name="args">The arguments of the command.</param>
-    /// <returns>The exit code.</returns>
     private static int StartOnPanel(AppBuilder builder, string[] args)
     {
         // Avalonia opens each /dev/dri/card[0-9]+ in the sequence that the
@@ -65,9 +49,9 @@ internal static class Program
         // panel, as it gives a name to the buttons and to the touchscreen.
         const string panelCard = "/dev/dri/appliance-panel";
 
-        // This test comes before Avalonia, because Avalonia has no logger here
-        // and the appliance has no console. Without it a machine with no rule
-        // gives a native error with no cause in it.
+        // Avalonia has no logger at this point and the appliance has no
+        // console, thus a machine with no rule gives a native error with no
+        // cause in it.
         if (!File.Exists(panelCard))
         {
             throw new InvalidOperationException(
@@ -97,16 +81,10 @@ internal static class Program
         });
     }
 
-    /// <summary>
-    /// Makes the Avalonia application.
-    /// </summary>
     /// <remarks>
     /// The Avalonia previewer and the XAML tools also call this method, thus it
     /// is public and it has no other work in it.
     /// </remarks>
-    /// <returns>The builder of the application.</returns>
-    // The software supplies its own fonts and does not use a font of the
-    // operating system. See Fonts/AppFonts.cs.
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
@@ -151,8 +129,7 @@ internal static class Program
             }
             catch (Exception)
             {
-                // There is no console. The blinking cursor is a small problem.
-                // A stop of the software is a large one.
+                // There is no console.
             }
         })
         {

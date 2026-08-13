@@ -83,10 +83,6 @@ public sealed partial class SysfsPowerMonitor : IPowerMonitor
     private uint _recent;
     private bool _unstable;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SysfsPowerMonitor"/> class.
-    /// </summary>
-    /// <param name="logger">The logger from the container.</param>
     public SysfsPowerMonitor(ILogger<SysfsPowerMonitor> logger)
     {
         ArgumentNullException.ThrowIfNull(logger);

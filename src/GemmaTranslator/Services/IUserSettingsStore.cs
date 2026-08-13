@@ -19,18 +19,8 @@
 
 namespace GemmaTranslator.Services;
 
-/// <summary>
-/// Keeps what a person selected, so that it stays after a start.
-/// </summary>
-/// <remarks>
-/// Upstream keeps the colour of the theme in <c>localStorage</c>. The appliance
-/// has no browser, thus the software writes a small file.
-/// </remarks>
 public interface IUserSettingsStore
 {
-    /// <summary>
-    /// Gets the settings that the software uses now.
-    /// </summary>
     UserSettings Current { get; }
 
     /// <summary>
@@ -38,25 +28,18 @@ public interface IUserSettingsStore
     /// the store had.
     /// </summary>
     /// <remarks>
-    /// CAUTION: two view models read this store. Without this event a touch on
-    /// the settings screen does not reach the primary screen: a person changes
-    /// the count of the bars, and the visualizer keeps the count that it had
-    /// until the end of the next recording, with no message and no line in the
-    /// journal.
+    /// CAUTION: two view models read this store. Without this event a change on
+    /// the settings screen does not reach the primary screen, and nothing says
+    /// so in the journal.
     ///
     /// The event comes on the thread that called <see cref="Save"/>, which is
     /// the thread of the user interface.
     /// </remarks>
     event EventHandler<UserSettings>? Changed;
 
-    /// <summary>
-    /// Keeps new settings and writes them to the disk.
-    /// </summary>
     /// <remarks>
     /// A write that does not occur is not an error that stops the software. The
-    /// appliance continues with the value in the memory, and the person sees
-    /// the change that they made.
+    /// appliance continues with the value in the memory.
     /// </remarks>
-    /// <param name="settings">The settings to keep.</param>
     void Save(UserSettings settings);
 }

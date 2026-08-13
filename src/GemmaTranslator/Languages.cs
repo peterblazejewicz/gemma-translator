@@ -18,9 +18,6 @@
 
 namespace GemmaTranslator;
 
-/// <summary>
-/// One language that the software can hear, translate, and speak.
-/// </summary>
 /// <param name="Code">
 /// The code of the user interface, for example <c>ja</c>. The speech-to-text
 /// part and the translation part use this code.
@@ -40,22 +37,6 @@ public sealed record Language(
     string TtsLanguage,
     string? TtsVoice = null);
 
-/// <summary>
-/// The set of languages, in one location.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Upstream keeps this set in four locations: <c>AVAILABLE_LANGUAGES</c> in
-/// <c>TranslatorApp.jsx</c>, and <c>SUPPORTED_STT_LANGS</c>,
-/// <c>TTS_LANG_MAP</c>, and <c>TTS_VOICE_MAP</c> in <c>server.py</c>. If you
-/// change one location and miss the others, upstream falls back to English and
-/// gives no error.
-/// </para>
-/// <para>
-/// This class is the one location. To add a language, add one item to
-/// <see cref="All"/>.
-/// </para>
-/// </remarks>
 public static class Languages
 {
     /// <summary>
@@ -74,9 +55,6 @@ public static class Languages
         new Language("ko", "Korean", "ko-kr"),
     ];
 
-    /// <summary>
-    /// English. The software uses this language if a code is not known.
-    /// </summary>
     public static Language Default { get; } = All.Single(x => x.Code == "en");
 
     /// <returns>The position of this language in <see cref="All"/>.</returns>
@@ -92,16 +70,12 @@ public static class Languages
             }
         }
 
+        // A language always comes from All, thus this line is for a value that
+        // no code makes. It gives the first position, and the drum then shows a
+        // language and not an empty window.
         return 0;
     }
 
-    /// <summary>
-    /// Finds the language with this code.
-    /// </summary>
-    /// <param name="code">A code of the user interface, for example <c>ko</c>.</param>
-    /// <returns>
-    /// The language, or <see cref="Default"/> if the code is not known.
-    /// </returns>
     public static Language FromCode(string? code)
     {
         if (string.IsNullOrEmpty(code))

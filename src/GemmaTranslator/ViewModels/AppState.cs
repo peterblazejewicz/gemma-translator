@@ -19,51 +19,18 @@
 
 namespace GemmaTranslator.ViewModels;
 
-/// <summary>
-/// What the appliance does now.
-/// </summary>
-/// <remarks>
-/// <para>
-/// The DRM backend makes no window and no popup, thus each one of these fills
-/// the surface. Two conditions are not in this list, because they go on top of
-/// a state and do not replace it: the settings screen and the warning of the
-/// very low charge.
-/// </para>
-/// <para>
-/// The image that the system shows before the software starts is also not
-/// here. The software does not draw it. See section 6 of the plan and
-/// deploy/README.md.
-/// </para>
-/// </remarks>
 public enum AppState
 {
-    /// <summary>
-    /// The model comes into the memory. This takes tens of seconds.
-    /// </summary>
     WarmUp,
 
-    /// <summary>
-    /// The appliance waits for a person to hold a button.
-    /// </summary>
     Idle,
 
-    /// <summary>
-    /// The software hears one person.
-    /// </summary>
     Recording,
 
-    /// <summary>
-    /// The software makes the text and then the translation.
-    /// </summary>
     Working,
 
-    /// <summary>
-    /// The two texts are on the display.
-    /// </summary>
     Result,
 
-    /// <summary>
-    /// The display is dark, to use less electrical supply on the cells.
-    /// </summary>
     Screensaver,
 }
+

@@ -380,3 +380,17 @@ recording
 danger
 list
 process
+
+# entry point - the method that the runtime calls first. It is the term of the
+#               C# specification and of the .NET documents.
+entry
+
+# user - the person who operates the software. It is the word of this domain:
+#        software has users, and "user interface" is the name of the part that
+#        this fork replaces. ASD-STE100 does not hold the word, thus it is a
+#        technical name of rule 1.4.
+#
+#        Use "user" for the human at the appliance. Keep "person" for a human
+#        who is not a user, for example a bystander who must see that the
+#        microphone is open.
+user

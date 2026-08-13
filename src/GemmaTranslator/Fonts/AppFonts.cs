@@ -20,52 +20,26 @@ using Avalonia.Media;
 
 namespace GemmaTranslator.Fonts;
 
-/// <summary>
-/// The fonts of the software, and the font for each language.
-/// </summary>
-/// <remarks>
-/// The font is a decision of the user interface and it is not a property of a
-/// language. Thus it is here, and not in <see cref="Language"/>. That record
-/// goes to <c>ITranslator</c>, which must not know an Avalonia type.
-/// </remarks>
 public static class AppFonts
 {
-    /// <summary>The family for Latin text, and the default family.</summary>
     public const string Latin = $"{GemmaFontCollection.CollectionUri}#Noto Sans";
 
-    /// <summary>The family for Arabic text.</summary>
     public const string Arabic = $"{GemmaFontCollection.CollectionUri}#Noto Sans Arabic";
 
-    /// <summary>The family for Japanese text.</summary>
     public const string Japanese = $"{GemmaFontCollection.CollectionUri}#Noto Sans JP";
 
-    /// <summary>The family for Chinese text.</summary>
     public const string Chinese = $"{GemmaFontCollection.CollectionUri}#Noto Sans SC";
 
-    /// <summary>The family for Korean text.</summary>
     public const string Korean = $"{GemmaFontCollection.CollectionUri}#Noto Sans KR";
 
-    /// <summary>The family for a numeral that the display shows.</summary>
-    /// <remarks>
-    /// The design gives a monospace face to the charge of the cells, to the
-    /// time of a recording, to the clock, and to the count of the bars. Each
-    /// one of the 5 other files also gives one width to each numeral, thus this
-    /// family is for the appearance of the design and not for the function.
-    /// </remarks>
     public const string Mono = $"{GemmaFontCollection.CollectionUri}#Noto Sans Mono";
 
-    /// <summary>
-    /// <see cref="Mono"/> as a family, for a style in AXAML.
-    /// </summary>
     /// <remarks>
     /// A style needs this type. <c>x:Static</c> with the constant gives a
     /// string, and a setter of a style does not convert it.
     /// </remarks>
     public static FontFamily MonoFamily { get; } = new(Mono);
 
-    /// <summary>
-    /// Gets the font for the text of one language.
-    /// </summary>
     /// <remarks>
     /// <para>
     /// CAUTION: this method is necessary, and the fallback list is not
@@ -81,8 +55,6 @@ public static class AppFonts
     /// the two languages are correct.
     /// </para>
     /// </remarks>
-    /// <param name="language">The language of the text.</param>
-    /// <returns>The font family for that language.</returns>
     public static FontFamily For(Language language)
     {
         ArgumentNullException.ThrowIfNull(language);
@@ -97,9 +69,6 @@ public static class AppFonts
         });
     }
 
-    /// <summary>
-    /// Makes the settings of the font manager.
-    /// </summary>
     /// <remarks>
     /// <para>
     /// <c>DefaultFamilyName</c> is the value that stops the failure at the
@@ -119,7 +88,6 @@ public static class AppFonts
     /// <see cref="For(Language)"/>, which removes the condition.
     /// </para>
     /// </remarks>
-    /// <returns>The settings for <c>AppBuilder.With</c>.</returns>
     public static FontManagerOptions MakeOptions() => new()
     {
         DefaultFamilyName = Latin,

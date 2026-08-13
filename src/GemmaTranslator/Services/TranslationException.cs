@@ -18,43 +18,22 @@
 
 namespace GemmaTranslator.Services;
 
-/// <summary>
-/// The translation did not occur.
-/// </summary>
 /// <remarks>
-/// Upstream throws a plain <c>Error</c> whose message holds the status and the
-/// body of the response, in <c>translateText</c> of
-/// <c>upstream/main:frontend/src/utils/api.js</c>. The catch of
-/// <c>processTranslation</c> then puts that message on the display.
-/// <para>
-/// This class gives the caller one type to catch. <c>MainViewModel</c> puts
-/// the message of this exception on the display, thus do not put the body of
-/// the answer in it: that body can hold the speech of the person.
-/// </para>
+/// <c>MainViewModel</c> puts the message of this exception on the display, thus
+/// do not put the body of the answer in it: that body can hold the speech of
+/// the person.
 /// </remarks>
 public sealed class TranslationException : Exception
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="TranslationException"/> class.
-    /// </summary>
     public TranslationException()
     {
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="TranslationException"/> class.
-    /// </summary>
-    /// <param name="message">What went wrong.</param>
     public TranslationException(string message)
         : base(message)
     {
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="TranslationException"/> class.
-    /// </summary>
-    /// <param name="message">What went wrong.</param>
-    /// <param name="innerException">The first error.</param>
     public TranslationException(string message, Exception innerException)
         : base(message, innerException)
     {

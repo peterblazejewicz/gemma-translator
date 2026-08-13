@@ -20,14 +20,8 @@ using Avalonia.Controls;
 
 namespace GemmaTranslator.Views;
 
-/// <summary>
-/// One person of the conversation, and the drum that selects the language.
-/// </summary>
 public partial class LaneView : UserControl
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="LaneView"/> class.
-    /// </summary>
     public LaneView()
     {
         InitializeComponent();

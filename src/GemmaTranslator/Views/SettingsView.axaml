@@ -30,15 +30,8 @@
              mc:Ignorable="d">
 
   <!--
-    The settings screen. It fills the surface, because the DRM backend makes no
-    window and no popup.
-
     Each control that a person touches is 104 pixels or more. The panel gives
     11.6 pixels for one millimetre, thus a finger needs 105.
-
-    Upstream has 4 text fields, a mode of the keyboard, a checkbox for the
-    proxy, and a control of the volume. Each one is gone. See
-    SettingsViewModel.
   -->
 
   <UserControl.Styles>
@@ -48,7 +41,6 @@
       <Setter Property="Padding" Value="26,18" />
     </Style>
 
-    <!-- A large target that a person touches. Its shape is a full radius. -->
     <Style Selector="Button.round">
       <Setter Property="Width" Value="104" />
       <Setter Property="Height" Value="104" />
@@ -80,8 +72,6 @@
       <Setter Property="Stroke" Value="{DynamicResource InkBrush}" />
     </Style>
 
-    <!-- Light and Dark. The one that the appliance uses takes the ink as its
-         ground, which is the same signal that the lane of a speaker uses. -->
     <Style Selector="Button.variant">
       <Setter Property="Height" Value="104" />
       <Setter Property="CornerRadius" Value="52" />
@@ -131,7 +121,6 @@
             RowDefinitions="Auto,16,*"
             Margin="0,8,0,0">
 
-        <!-- ACCENT COLOR, across the two columns. -->
         <Border Grid.Row="0" Grid.ColumnSpan="3" Classes="card">
           <StackPanel>
             <TextBlock Classes="section-label" Text="ACCENT COLOR" />
@@ -143,9 +132,6 @@
               </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:AccentSwatch">
-                  <!-- The ring of the swatch that the appliance uses. The
-                       design draws it as two shadows; a border with padding
-                       gives the same two rings and needs no shadow. -->
                   <Button Width="120"
                           Height="120"
                           CornerRadius="60"
@@ -179,7 +165,6 @@
           </StackPanel>
         </Border>
 
-        <!-- The left column. -->
         <StackPanel Grid.Row="2" Grid.Column="0" Spacing="16">
 
           <Border Classes="card">
@@ -200,9 +185,21 @@
             </StackPanel>
           </Border>
 
+          <!--
+            The card of the speech output is not here. UserSettings keeps
+            SpeakTranslations and the file keeps its member, thus the format of
+            the file does not change. Nothing reads that value: the
+            text-to-speech part has no C# code.
+
+            A control for a function that the software does not have makes a
+            promise that it cannot keep. A person touches it, the knob moves,
+            the value stays after a start, and the appliance speaks no more
+            than before. There is no keyboard and no console to find that out.
+
+            Put the card back with the text-to-speech slice.
+          -->
         </StackPanel>
 
-        <!-- The right column. -->
         <StackPanel Grid.Row="2" Grid.Column="2" Spacing="16">
 
           <Border Classes="card">

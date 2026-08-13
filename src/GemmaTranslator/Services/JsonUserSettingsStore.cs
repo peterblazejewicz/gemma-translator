@@ -23,19 +23,10 @@ using Microsoft.Extensions.Logging;
 
 namespace GemmaTranslator.Services;
 
-/// <summary>
-/// Keeps the settings of a person in one JSON file.
-/// </summary>
 public sealed partial class JsonUserSettingsStore : IUserSettingsStore
 {
-    /// <summary>
-    /// The directory below the settings directory of the account.
-    /// </summary>
     private const string DirectoryName = "gemma-translator";
 
-    /// <summary>
-    /// The name of the file.
-    /// </summary>
     /// <remarks>
     /// It is not <c>appsettings.json</c>. That file holds the settings of the
     /// operator, git holds it, and a person cannot change it on the display.
@@ -48,11 +39,6 @@ public sealed partial class JsonUserSettingsStore : IUserSettingsStore
 
     private UserSettings _current;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="JsonUserSettingsStore"/>
-    /// class and reads the file.
-    /// </summary>
-    /// <param name="logger">The logger from the container.</param>
     public JsonUserSettingsStore(ILogger<JsonUserSettingsStore> logger)
     {
         ArgumentNullException.ThrowIfNull(logger);
@@ -84,22 +70,19 @@ public sealed partial class JsonUserSettingsStore : IUserSettingsStore
         _current = Read(_path);
     }
 
-    /// <inheritdoc/>
     public UserSettings Current => _current;
 
-    /// <inheritdoc/>
     public event EventHandler<UserSettings>? Changed;
 
-    /// <inheritdoc/>
     public void Save(UserSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
         UserSettings next = settings.Sanitized();
 
-        // A record compares by value. The settings screen keeps each touch, and
-        // a person who holds the plus of the count of bars makes one write for
-        // each step. This appliance writes to an SD card.
+        // The settings screen keeps each touch, and a person who holds the plus
+        // of the count of bars makes one write for each step. This appliance
+        // writes to an SD card.
         bool unchanged = next == _current;
 
         _current = next;
@@ -146,17 +129,11 @@ public sealed partial class JsonUserSettingsStore : IUserSettingsStore
         {
             // CAUTION: a disk that is full or a directory that is read only
             // must not stop the appliance. The person sees the change that they
-            // made, and it goes away at the next start. That is much better
-            // than a display that is black.
+            // made, and it goes away at the next start.
             LogWriteFailed(_logger, _path, exception);
         }
     }
 
-    /// <summary>
-    /// Reads the file, or gives the settings of an appliance that nobody
-    /// changed.
-    /// </summary>
-    /// <param name="path">The full path of the file.</param>
     private UserSettings Read(string path)
     {
         try
@@ -205,12 +182,6 @@ public sealed partial class JsonUserSettingsStore : IUserSettingsStore
     private static partial void LogWriteFailed(ILogger logger, string path, Exception exception);
 }
 
-/// <summary>
-/// The JSON context of the settings.
-/// </summary>
-/// <remarks>
-/// The software uses a generated context for the LiteRT-LM protocol also.
-/// </remarks>
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(UserSettingsFile))]
 internal sealed partial class StoreJson : JsonSerializerContext;

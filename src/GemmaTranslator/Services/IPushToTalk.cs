@@ -21,52 +21,29 @@ using Avalonia.Controls;
 
 namespace GemmaTranslator.Services;
 
-/// <summary>
-/// The button of one person went down or came up.
-/// </summary>
 /// <param name="Lane">The lane of the person: 1 or 2.</param>
 /// <param name="IsPressed">True if the button went down.</param>
 public sealed record PushToTalkChange(int Lane, bool IsPressed);
 
-/// <summary>
-/// The two buttons that start and stop the recording.
-/// </summary>
 /// <remarks>
-/// <para>
-/// This interface gives the raw condition of the two buttons only. It does not
-/// know the minimum time of a press, and it does not know if the software is
-/// occupied. Those are rules of the operation, and they are in the view model.
-/// </para>
-/// <para>
-/// CAUTION: this interface is here for a true difference of the platform, and
-/// not for a fake. Avalonia gives no key event on the Raspberry Pi: the DRM
-/// backend of <c>Avalonia.LinuxFramebuffer</c> 12.1.1 can raise a pointer
-/// event and a touch event only, and <c>RawKeyEventArgs</c> is not in that
-/// assembly. Thus Windows uses the keys of Avalonia and the Raspberry Pi reads
-/// the input device of Linux.
-/// </para>
+/// Avalonia gives no key event on the Raspberry Pi: the DRM backend of
+/// <c>Avalonia.LinuxFramebuffer</c> 12.1.1 can raise a pointer event and a
+/// touch event only, and <c>RawKeyEventArgs</c> is not in that assembly. Thus
+/// Windows uses the keys of Avalonia and the Raspberry Pi reads the input
+/// device of Linux.
 /// </remarks>
 public interface IPushToTalk : IDisposable
 {
-    /// <summary>
-    /// Occurs when a button goes down or comes up.
-    /// </summary>
     /// <remarks>
     /// The event can come on a thread that is not the thread of the user
     /// interface. The Raspberry Pi reads the device on its own thread.
     /// </remarks>
     event EventHandler<PushToTalkChange>? Changed;
 
-    /// <summary>
-    /// Starts to listen to the buttons.
-    /// </summary>
     /// <remarks>
     /// CAUTION: the top level is a part of the contract, and it is not a
-    /// property of one platform. Windows needs it, because Avalonia sends a
-    /// key to the control that has the focus and this view has no such
-    /// control. The Raspberry Pi does not use it. If this argument is not
-    /// here, a caller that has the interface only cannot make the software
-    /// operate on Windows, and a cast to one class is necessary.
+    /// property of one platform. Windows needs it. The Raspberry Pi does not
+    /// use it.
     /// </remarks>
     /// <param name="topLevel">
     /// The window or the single view, or <c>null</c> if there is none.

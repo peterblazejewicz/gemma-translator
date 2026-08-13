@@ -26,27 +26,13 @@ using Microsoft.Extensions.Options;
 
 namespace GemmaTranslator;
 
-/// <summary>
-/// The one location that makes the settings and registers each service of the
-/// software.
-/// </summary>
-/// <remarks>
-/// Do not make a service or a view model with <c>new</c> in a view. Get it
-/// from the container, and give each dependency to the constructor. The
-/// container is the one location that selects an implementation for the
-/// platform, thus a view that makes its own gets the wrong one.
-/// </remarks>
 public static class ServiceRegistration
 {
-    /// <summary>
-    /// Reads the settings of the software.
-    /// </summary>
     /// <remarks>
     /// The base path is <see cref="AppContext.BaseDirectory"/> and not the
-    /// current directory. systemd starts the software with a current directory
-    /// of <c>/</c>, where there is no file.
+    /// current directory. systemd starts the software with a current directory of
+    /// <c>/</c>, where there is no file.
     /// </remarks>
-    /// <returns>The settings.</returns>
     public static IConfiguration BuildConfiguration()
         => new ConfigurationBuilder()
             .SetBasePath(AppContext.BaseDirectory)
@@ -54,12 +40,6 @@ public static class ServiceRegistration
             .AddEnvironmentVariables("GEMMA_")
             .Build();
 
-    /// <summary>
-    /// Adds each service of the software to the collection.
-    /// </summary>
-    /// <param name="services">The collection of the container.</param>
-    /// <param name="configuration">The settings from <see cref="BuildConfiguration"/>.</param>
-    /// <returns>The same collection, for a chain of calls.</returns>
     public static IServiceCollection AddGemmaTranslator(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -73,9 +53,8 @@ public static class ServiceRegistration
         {
             logging.AddConfiguration(configuration.GetSection("Logging"));
 
-            // Two providers, because the two targets are different. systemd
-            // puts the console in the journal. A WinExe has no console, thus
-            // Windows needs the debug output.
+            // systemd puts the console in the journal. A WinExe has no
+            // console, thus Windows needs the debug output.
             logging.AddConsole();
             logging.AddDebug();
         });
@@ -124,15 +103,11 @@ public static class ServiceRegistration
 
         services.AddSingleton<IAudioCapture, SoundFlowAudioCapture>();
 
-        // What a person selected on the display: the accent, the variant, the
-        // speech output, and the count of the bars. The store reads the file in
-        // its constructor, thus it is a singleton and the disk gets one read.
+        // The store reads the file in its constructor, thus it is a singleton
+        // and the disk gets one read.
         services.AddSingleton<IUserSettingsStore, JsonUserSettingsStore>();
         services.AddSingleton<Appearance>();
 
-        // CAUTION: these are the two true differences of the platform in the
-        // software, and each one is hardware and not a fake.
-        //
         // The buttons: Avalonia gives no key event on the Raspberry Pi,
         // because the DRM backend raises a pointer event and a touch event
         // only. Thus Linux reads /dev/input and Windows uses the keys of
@@ -151,14 +126,11 @@ public static class ServiceRegistration
             services.AddSingleton<IPowerMonitor, NoPowerMonitor>();
         }
 
-        // The view models. The settings screen is a singleton because the
-        // selections of a person must stay while the screen opens and closes.
+        // The settings screen is a singleton because the selections of a
+        // person must stay while the screen opens and closes.
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<MainViewModel>();
 
-        // The speech-to-text part and the text-to-speech part come later.
-        // Each one gets an interface only if Windows and the Raspberry Pi
-        // need different code.
         return services;
     }
 }

@@ -28,64 +28,20 @@ using Microsoft.Extensions.Options;
 
 namespace GemmaTranslator.ViewModels;
 
-/// <summary>
-/// The shell of the user interface, and the one state machine of the
-/// appliance.
-/// </summary>
-/// <remarks>
-/// <para>
-/// This fork has no test project, thus a person must be able to read the
-/// sequence of the states in one location. Each change of the state writes one line of the
-/// log, and the journal of systemd is the record of what the appliance did.
-/// </para>
-/// <para>
-/// Upstream keeps the same condition in one React component, which shows one
-/// part or a different part, and it has no router. See <c>TranslatorApp.jsx</c>.
-/// </para>
-/// <para>
-/// CAUTION: the speech-to-text part has no C# code. The release of a button
-/// goes to <see cref="ExampleText"/> and not to the words of the person. Each
-/// other part of the sequence is complete.
-/// </para>
-/// </remarks>
 public sealed partial class MainViewModel : ObservableObject
 {
     /// <summary>
     /// The text that the software translates until the microphone gives words.
     /// </summary>
-    /// <remarks>
-    /// CAUTION: this constant goes away with the speech-to-text slice. Then
-    /// Moonshine makes this text from the audio of the person.
-    /// </remarks>
     private const string ExampleText = "Where is the nearest train station?";
 
-    /// <summary>
-    /// How long a message stays on the display.
-    /// </summary>
-    /// <remarks>
-    /// The value comes from the design. A message that stays for all time
-    /// covers the conversation, and the appliance has no keyboard that can
-    /// remove it.
-    /// </remarks>
     private static readonly TimeSpan StatusLife = TimeSpan.FromSeconds(6);
 
-    /// <summary>
-    /// The interval between two frames of the visualizer and of the time of the
-    /// recording.
-    /// </summary>
-    /// <remarks>
-    /// 33 ms is about 30 frames each second. The design gives 60, and the bars
-    /// are decoration: 30 looks the same to a person and it gives the Raspberry
-    /// Pi half of the work.
-    /// </remarks>
     private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(33);
 
-    /// <summary>
-    /// How long the warm-up screen stays.
-    /// </summary>
     /// <remarks>
     /// CAUTION: this is a time and it does NOT say how much of the model came
-    /// into the memory. The model comes into the memory in a different process, which systemd starts
+    /// in the memory. A different process puts the model there, and systemd starts
     /// at the same moment as this software, and that process gives no signal
     /// that this software can read. Thus the bar shows how much of this time
     /// went, and nothing else.
@@ -95,20 +51,11 @@ public sealed partial class MainViewModel : ObservableObject
     /// "Translation service isn't responding." and the person holds the button
     /// again.
     ///
-    /// A correct signal needs a test of the endpoint. Upstream had one and it is
-    /// gone (see the comment at frontend/src/App.jsx:33). To put it back is a
-    /// new function, and the owner must agree to it.
+    /// A correct signal needs a test of the endpoint before the first
+    /// translation. That is a new function and the owner must agree to it.
     /// </remarks>
     private static readonly TimeSpan WarmUpTime = TimeSpan.FromSeconds(20);
 
-    /// <summary>
-    /// How long the appliance waits before the screensaver comes.
-    /// </summary>
-    /// <remarks>
-    /// The appliance takes its electrical supply from two cells, and the panel
-    /// gives 500 cd/m2. A display that stays bright in a quiet room uses the
-    /// charge for nothing.
-    /// </remarks>
     private static readonly TimeSpan QuietTime = TimeSpan.FromMinutes(3);
 
     private readonly ITranslator _translator;
@@ -119,100 +66,48 @@ public sealed partial class MainViewModel : ObservableObject
 
     private long _pressTicks;
 
-    // The same limit as the buffer, on the side of the user interface. The
-    // buffer protects the memory; this gives the lane back. A release can go
-    // away, and then nothing else ends the recording.
     private DispatcherTimer? _limitTimer;
 
-    // The bars of the visualizer and the time of the recording.
     private DispatcherTimer? _frameTimer;
 
-    // The message goes away without a touch, because the appliance has no
-    // keyboard.
     private DispatcherTimer? _statusTimer;
 
-    // The warm-up screen, and the quiet time that gives the screensaver.
     private DispatcherTimer? _warmUpTimer;
     private DispatcherTimer? _quietTimer;
     private DispatcherTimer? _clockTimer;
     private long _warmUpTicks;
 
-    /// <summary>
-    /// What the appliance does at this moment.
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdlePrompt))]
     [NotifyPropertyChangedFor(nameof(IsRecording))]
     [NotifyPropertyChangedFor(nameof(IsStatusVisible))]
     private AppState _state = AppState.WarmUp;
 
-    /// <summary>
-    /// Which of the two operations of <see cref="AppState.Working"/> is in
-    /// operation.
-    /// </summary>
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdlePrompt))]
     private Exchange? _exchange;
 
-    /// <summary>
-    /// One short sentence for a person, or <c>null</c>.
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsStatusVisible))]
     private string? _statusText;
 
-    /// <summary>
-    /// The charge of the cells, as the display shows it.
-    /// </summary>
     [ObservableProperty]
     private BatteryStatus _battery = BatteryStatus.From(new PowerState(null, null));
 
-    /// <summary>
-    /// The lane that records, or 0.
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RecordingLabel))]
     private int _recordingLane;
 
-    /// <summary>
-    /// How long the person has held the button, as <c>m:ss</c>.
-    /// </summary>
     [ObservableProperty]
     private string _recordingTime = "0:00";
 
-    /// <summary>
-    /// <c>true</c> while the settings screen is on top of the surface.
-    /// </summary>
-    /// <remarks>
-    /// The DRM backend makes no popup, thus the settings screen is a layer of
-    /// the same surface and not a window.
-    /// </remarks>
     [ObservableProperty]
     private bool _isSettingsOpen;
 
-    /// <summary>The time that the screensaver shows, as <c>HH:mm</c>.</summary>
     [ObservableProperty]
     private string _clock = "--:--";
 
-    /// <summary>
-    /// How much of <see cref="WarmUpTime"/> went, from 0 to 100.
-    /// </summary>
-    /// <remarks>
-    /// This is a part of a time. It does not say how much of the model came
-    /// into the memory. See <see cref="WarmUpTime"/>.
-    /// </remarks>
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="MainViewModel"/> class.
-    /// </summary>
-    /// <param name="translator">The translation service from the container.</param>
-    /// <param name="capture">The microphone from the container.</param>
-    /// <param name="pushToTalk">The two buttons from the container.</param>
-    /// <param name="power">The electrical supply from the container.</param>
-    /// <param name="store">The selections of a person, from the container.</param>
-    /// <param name="settings">The settings screen, from the container.</param>
-    /// <param name="audioOptions">The settings of the microphone.</param>
-    /// <param name="logger">The logger from the container.</param>
     public MainViewModel(
         ITranslator translator,
         IAudioCapture capture,
@@ -239,8 +134,6 @@ public sealed partial class MainViewModel : ObservableObject
         _audioOptions = audioOptions.Value;
         _logger = logger;
 
-        // The two lanes cannot hold the same language. That rule is a rule
-        // about the pair, thus it is here and not in the lane.
         Lane1 = new LaneViewModel(1, Languages.FromCode("ja"), Turn);
         Lane2 = new LaneViewModel(2, Languages.FromCode("en"), Turn);
 
@@ -270,99 +163,42 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     public static string Attribution => "Powered by Moonshine AI";
 
-    /// <summary>The settings screen.</summary>
     public SettingsViewModel Settings { get; }
 
-    /// <summary>The person on the left.</summary>
     public LaneViewModel Lane1 { get; }
 
-    /// <summary>The person on the right.</summary>
     public LaneViewModel Lane2 { get; }
 
-    /// <summary>
-    /// The count of the bars of the visualizer, from the settings.
-    /// </summary>
     public int BarCount => _store.Current.VisualizerBars;
 
-    /// <summary>
-    /// <c>true</c> when the display shows "Hold a button to talk".
-    /// </summary>
-    /// <remarks>
-    /// The prompt goes away at the first conversation and it does not come
-    /// back. A person who used the appliance one time knows what to do.
-    /// </remarks>
     public bool IsIdlePrompt => State == AppState.Idle && Exchange is null;
 
-    /// <summary>
-    /// <c>true</c> when the display shows the two texts.
-    /// </summary>
 
-    /// <summary>
-    /// <c>true</c> while the software hears a person.
-    /// </summary>
     public bool IsRecording => State == AppState.Recording;
 
-    /// <summary>
-    /// <c>true</c> when the display shows a message.
-    /// </summary>
     /// <remarks>
     /// A message and the pill of the recording go in the same position. The
     /// recording wins: a person must see that the microphone is open.
     /// </remarks>
     public bool IsStatusVisible => StatusText is not null && !IsRecording;
 
-    /// <summary><c>true</c> while the model comes into the memory.</summary>
     public bool IsWarmUp => State == AppState.WarmUp;
 
-    /// <summary><c>true</c> while the display is dark and waits for a touch.</summary>
     public bool IsScreensaver => State == AppState.Screensaver;
 
-    /// <summary>
-    /// <c>true</c> while the display shows the conversation and the two lanes.
-    /// </summary>
     public bool IsConversation => State
         is AppState.Idle or AppState.Recording or AppState.Working or AppState.Result;
 
-    /// <summary>
-    /// <c>true</c> when the charge is so low that the warning covers the
-    /// surface.
-    /// </summary>
-    /// <remarks>
-    /// This warning goes above each other screen, and above the settings
-    /// screen. A person must see it, and the appliance stops in minutes.
-    /// </remarks>
     public bool IsCriticalBattery => Battery.IsCritical;
 
-    /// <summary>What the warm-up screen tells a person.</summary>
-    /// <remarks>
-    /// CAUTION: the design gives three texts here, and two of them name a stage
-    /// of the start: "Loading language model" and "Starting speech engine".
-    /// This software observes neither. The model comes into the memory in a
-    /// different process and gives no signal, thus a text of that kind is a
-    /// statement about a machine that the software cannot see. One text that
-    /// says "wait" is correct, and it is what stays.
-    /// </remarks>
 #pragma warning disable CA1822 // A binding of AXAML needs a member of the instance.
     public string WarmUpText => "The appliance is starting. This takes a few seconds.";
 #pragma warning restore CA1822
 
-    /// <summary>The percentage of the warm-up, for the display.</summary>
-
-    /// <summary>
-    /// The text of the pill while the microphone is open.
-    /// </summary>
     public string RecordingLabel => string.Create(
         CultureInfo.InvariantCulture,
         $"RECORDING · SPEAKER {(RecordingLane == 0 ? 1 : RecordingLane)}");
 
-    /// <summary>
-    /// Changes the state and writes one line of the log.
-    /// </summary>
-    /// <remarks>
-    /// Each change goes through this method. With no test project the journal
-    /// is what says that the appliance did what it must do.
-    /// </remarks>
-    /// <param name="next">The state that comes now.</param>
     private void GoTo(AppState next)
     {
         if (State == next)
@@ -377,10 +213,6 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsScreensaver));
         OnPropertyChanged(nameof(IsConversation));
 
-        // The quiet time counts while the appliance waits and while a person
-        // reads an answer. It does not count while the software hears a person
-        // or while it works: a screensaver in the middle of a sentence would
-        // hide the conversation.
         if (next is AppState.Idle or AppState.Result)
         {
             StartQuietTimer();
@@ -391,9 +223,6 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Opens the settings screen.
-    /// </summary>
     [RelayCommand]
     private void OpenSettings() => Safely(() =>
     {
@@ -401,9 +230,6 @@ public sealed partial class MainViewModel : ObservableObject
         IsSettingsOpen = true;
     });
 
-    /// <summary>
-    /// Closes the settings screen.
-    /// </summary>
     [RelayCommand]
     private void CloseSettings() => Safely(() =>
     {
@@ -411,14 +237,6 @@ public sealed partial class MainViewModel : ObservableObject
         IsSettingsOpen = false;
     });
 
-    /// <summary>
-    /// Ends the screensaver.
-    /// </summary>
-    /// <remarks>
-    /// The appliance comes back at the moment of the touch. A person who waits
-    /// for a display would hold a button and speak into a microphone that is
-    /// not open.
-    /// </remarks>
     [RelayCommand]
     private void Wake()
     {
@@ -435,9 +253,6 @@ public sealed partial class MainViewModel : ObservableObject
         GoTo(AppState.Idle);
     }
 
-    /// <summary>
-    /// A person touched the appliance, thus the quiet time starts again.
-    /// </summary>
     private void NoteActivity()
     {
         if (State is AppState.Idle or AppState.Result)
@@ -446,17 +261,8 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Shows the warm-up screen while the model comes into the memory.
-    /// </summary>
-    /// <remarks>
-    /// See <see cref="WarmUpTime"/>: this is a time and not the progress of the
-    /// model.
-    /// </remarks>
     private void StartWarmUp()
     {
-        // The field begins at WarmUp, thus GoTo has nothing to do here and the
-        // first edge of the journal is this line.
         LogWarmUpStarted(_logger, (int)WarmUpTime.TotalSeconds);
 
         _warmUpTicks = Stopwatch.GetTimestamp();
@@ -484,9 +290,6 @@ public sealed partial class MainViewModel : ObservableObject
         _warmUpTimer.Start();
     }
 
-    /// <summary>
-    /// Starts the count of the quiet time that gives the screensaver.
-    /// </summary>
     private void StartQuietTimer()
     {
         StopQuietTimer();
@@ -497,9 +300,6 @@ public sealed partial class MainViewModel : ObservableObject
         {
             StopQuietTimer();
 
-            // The settings screen goes away with the display. A person who
-            // comes back gets the conversation, and not a screen that a
-            // different person opened.
             IsSettingsOpen = false;
 
             // PRIVACY CONTROL. Do not remove this line to "keep the
@@ -527,9 +327,6 @@ public sealed partial class MainViewModel : ObservableObject
         _quietTimer = null;
     }
 
-    /// <summary>
-    /// Writes the time of the screensaver, and keeps it correct.
-    /// </summary>
     /// <remarks>
     /// CAUTION: one write is not sufficient. The screensaver shows this value
     /// at 150 pixels and it stays for hours. A value that a person reads as the
@@ -559,9 +356,6 @@ public sealed partial class MainViewModel : ObservableObject
     private void UpdateClock()
         => Clock = DateTime.Now.ToString("HH:mm", CultureInfo.InvariantCulture);
 
-    /// <summary>
-    /// Does the work of one tick, and catches each error.
-    /// </summary>
     /// <remarks>
     /// CAUTION: an error that goes out of a Tick has no catch and the process
     /// stops. Each one of these callbacks writes a property, and Avalonia then
@@ -569,7 +363,6 @@ public sealed partial class MainViewModel : ObservableObject
     /// has no keyboard: the display becomes black, systemd starts the software
     /// again, and the same condition stops it again.
     /// </remarks>
-    /// <param name="work">The work of the tick.</param>
     private void Safely(Action work)
     {
         try
@@ -584,16 +377,6 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// A person changed a setting on the settings screen.
-    /// </summary>
-    /// <remarks>
-    /// The count of the bars is the value that this screen must follow. A touch
-    /// on that screen is also the touch of a person, thus the quiet time starts
-    /// again and the display does not go dark below their fingers.
-    /// </remarks>
-    /// <param name="sender">The store.</param>
-    /// <param name="settings">The settings that the person made.</param>
     private void OnSettingsChanged(object? sender, UserSettings settings)
     {
         OnPropertyChanged(nameof(BarCount));
@@ -601,26 +384,17 @@ public sealed partial class MainViewModel : ObservableObject
         NoteActivity();
     }
 
-    /// <summary>
-    /// The charge changed. The settings screen and the warning follow it.
-    /// </summary>
-    /// <param name="value">The new charge.</param>
     partial void OnBatteryChanged(BatteryStatus value)
     {
         Settings.BatteryAbout = value.AboutText;
         OnPropertyChanged(nameof(IsCriticalBattery));
     }
 
-    /// <summary>
-    /// Turns the drum of one lane and keeps the two languages different.
-    /// </summary>
     /// <remarks>
     /// The step goes past the language of the other lane, in the direction that
     /// the person asked for. Thus a touch always changes the language, and the
     /// two lanes never agree.
     /// </remarks>
-    /// <param name="lane">The lane of the arrow that the person touched.</param>
-    /// <param name="direction">-1 for the arrow above, 1 for the arrow below.</param>
     private void Turn(LaneViewModel lane, int direction)
     {
         if (State == AppState.Recording)
@@ -645,10 +419,6 @@ public sealed partial class MainViewModel : ObservableObject
         LogLanguage(_logger, lane.Number, lane.Language.Name);
     }
 
-    /// <summary>
-    /// Shows one sentence, and removes it after <see cref="StatusLife"/>.
-    /// </summary>
-    /// <param name="text">The sentence for the person.</param>
     private void ShowStatus(string text)
     {
         StatusText = text;
@@ -666,16 +436,11 @@ public sealed partial class MainViewModel : ObservableObject
         _statusTimer.Start();
     }
 
-    /// <summary>
-    /// The electrical supply changed.
-    /// </summary>
     /// <remarks>
     /// CAUTION: this event comes on the thread that reads the files of the
     /// <c>power_supply</c> class. Each write to a property must go to the
     /// thread of the user interface.
     /// </remarks>
-    /// <param name="sender">The source of the event.</param>
-    /// <param name="state">The new condition of the electrical supply.</param>
     private void OnPowerChanged(object? sender, PowerState state)
     {
         if (Dispatcher.UIThread.CheckAccess())
@@ -688,17 +453,6 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Makes the sequence of the operation after a person releases a button.
-    /// </summary>
-    /// <remarks>
-    /// CAUTION: the first stage has no C# code. The speech-to-text part comes
-    /// later, thus the software takes <see cref="ExampleText"/> and goes to the
-    /// translation. The stages and the display are the stages and the display
-    /// of the complete operation.
-    /// </remarks>
-    /// <param name="lane">The lane of the person who spoke.</param>
-    /// <returns>The task of the operation.</returns>
     private async Task RunPipelineAsync(LaneViewModel lane)
     {
         LaneViewModel other = lane.Number == 1 ? Lane2 : Lane1;
@@ -762,19 +516,20 @@ public sealed partial class MainViewModel : ObservableObject
             ShowStatus("Translation service isn't responding.");
         }
 
+        // CAUTION: this line is inside the guard on purpose. GoTo raises
+        // PropertyChanged, Avalonia then applies a style, and that can throw.
+        // Nothing awaits this task, thus the error goes away in silence and the
+        // state stays at Working. StartRecording refuses each button in that
+        // state, and the appliance then hears nobody again and says nothing.
         Safely(() => GoTo(AppState.Result));
     }
 
-    /// <summary>
-    /// Starts the timer that ends a recording with no end.
-    /// </summary>
     /// <remarks>
     /// CAUTION: this is the one protection against a release that does not
     /// come. The limit of the buffer stops the memory from increasing, but only
     /// this gives the lane back. Without it the appliance shows a lane that is
     /// bright and it refuses the other person for ever.
     /// </remarks>
-    /// <param name="lane">The lane that records.</param>
     private void StartLimitTimer(int lane)
     {
         StopLimitTimer();
@@ -803,9 +558,6 @@ public sealed partial class MainViewModel : ObservableObject
         _limitTimer = null;
     }
 
-    /// <summary>
-    /// Starts the bars of the visualizer and the time of the pill.
-    /// </summary>
     private void StartFrameTimer(LaneViewModel lane)
     {
         StopFrameTimer();
@@ -837,9 +589,6 @@ public sealed partial class MainViewModel : ObservableObject
         ResetLevels();
     }
 
-    /// <summary>
-    /// Gives each lane a bar for each count of the settings, all at zero.
-    /// </summary>
     /// <remarks>
     /// CAUTION: an empty list is not the same as a list of zeros. The
     /// visualizer makes one bar for each value, thus an empty list gives a
@@ -857,17 +606,12 @@ public sealed partial class MainViewModel : ObservableObject
         Lane2.Levels = quiet;
     }
 
-    /// <summary>
-    /// A button of a person went down or came up.
-    /// </summary>
     /// <remarks>
     /// CAUTION: the event can come on a thread that is not the thread of the
     /// user interface. The Raspberry Pi reads the input device on its own
     /// thread. Each write to a property must go to the correct thread, or
     /// Avalonia throws.
     /// </remarks>
-    /// <param name="sender">The source of the event.</param>
-    /// <param name="change">The lane, and the new condition of the button.</param>
     private void OnButtonChanged(object? sender, PushToTalkChange change)
     {
         if (Dispatcher.UIThread.CheckAccess())
@@ -880,16 +624,12 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Does the work of one change of a button, and catches each error.
-    /// </summary>
     /// <remarks>
     /// CAUTION: this method operates in a callback of the dispatcher, thus an
     /// error that goes out of it has no catch and the process stops. The
     /// appliance has no keyboard: the display becomes black, systemd starts the
     /// software, and the same button stops it again.
     /// </remarks>
-    /// <param name="change">The lane, and the new condition of the button.</param>
     private void HandleButtonSafely(PushToTalkChange change)
     {
         try
@@ -905,10 +645,6 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Stops the microphone and the timers after an error, and lets the samples
-    /// go.
-    /// </summary>
     /// <remarks>
     /// CAUTION: each path that ends a recording must also stop the microphone.
     /// Without that the session stays open and the buffer keeps the speech of a
@@ -966,23 +702,28 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        // CAUTION: a button must do nothing below a layer that covers the
-        // conversation. The pill that says "RECORDING" is in that conversation,
-        // thus a recording that starts here is a microphone that is open with
-        // no signal on the panel. See MainView.axaml.
+        // CAUTION: a release goes to StopRecording before each test below it.
+        // The tests refuse a NEW recording; a release ends one that operates.
+        // A release that returns here leaves the microphone open, leaves the
+        // limit timer to repeat for ever with nothing in the journal, and
+        // leaves the lane bright. The buffer then keeps the speech of a person.
         if (!change.IsPressed)
         {
             StopRecording(change.Lane);
             return;
         }
+
+        // A push below a layer that covers the conversation does nothing. The
+        // pill that says "RECORDING" is in that conversation, thus a recording
+        // that starts here is a microphone that is open with no signal on the
+        // panel. See MainView.axaml.
         if (State == AppState.WarmUp || IsSettingsOpen || Battery.IsCritical)
         {
-                LogButtonIgnored(_logger, change.Lane);
-
+            LogButtonIgnored(_logger, change.Lane);
             return;
         }
 
-            StartRecording(change.Lane);
+        StartRecording(change.Lane);
     }
 
     private void StartRecording(int lane)
@@ -1007,10 +748,6 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        // The lane goes in the log here, and not in the audio service, which
-        // has no lane. Without this line each push of the two buttons gives the
-        // same text, thus the journal cannot say that the second button
-        // operates.
         LogRecordingStarted(_logger, lane);
 
         _pressTicks = Stopwatch.GetTimestamp();

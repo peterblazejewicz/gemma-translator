@@ -20,14 +20,8 @@ using Avalonia.Controls;
 
 namespace GemmaTranslator.Views;
 
-/// <summary>
-/// The settings screen of the appliance.
-/// </summary>
 public partial class SettingsView : UserControl
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SettingsView"/> class.
-    /// </summary>
     public SettingsView()
     {
         InitializeComponent();

@@ -20,9 +20,6 @@ using Avalonia.Media.Fonts;
 
 namespace GemmaTranslator.Fonts;
 
-/// <summary>
-/// The fonts that the software supplies with itself.
-/// </summary>
 /// <remarks>
 /// CAUTION: Raspberry Pi OS Lite can have no font for Arabic and no font for
 /// Chinese, Japanese, or Korean. Avalonia then throws
@@ -31,18 +28,12 @@ namespace GemmaTranslator.Fonts;
 /// </remarks>
 public sealed class GemmaFontCollection : EmbeddedFontCollection
 {
-    /// <summary>
-    /// The scheme and the key of the collection, for a font family address.
-    /// </summary>
     /// <remarks>
     /// The name is not <c>Key</c>, because <see cref="EmbeddedFontCollection"/>
     /// has a member with that name.
     /// </remarks>
     public const string CollectionUri = "fonts:GemmaTranslator";
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GemmaFontCollection"/> class.
-    /// </summary>
     public GemmaFontCollection()
         : base(
             new Uri(CollectionUri, UriKind.Absolute),

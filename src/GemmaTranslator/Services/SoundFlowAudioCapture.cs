@@ -28,9 +28,6 @@ using SoundFlow.Structs;
 
 namespace GemmaTranslator.Services;
 
-/// <summary>
-/// Records the microphone with miniaudio, through SoundFlow.
-/// </summary>
 /// <remarks>
 /// <para>
 /// The software asks for 16 kHz, one channel, and F32. miniaudio converts from
@@ -64,8 +61,6 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
     private long _startTicks;
     private int _deviceSampleRate;
 
-    // The audio thread writes these and the thread of the user interface reads
-    // them. They are volatile, thus no lock is necessary.
     // Two flags, and not one. _sessionOpen says that a person holds a button.
     // _accumulating says that the samples still go in the buffer. The buffer
     // becomes full before the person releases the button, thus the second
@@ -77,11 +72,6 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
     private volatile int _written;
     private volatile int _peakBits;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SoundFlowAudioCapture"/> class.
-    /// </summary>
-    /// <param name="options">The settings of the microphone.</param>
-    /// <param name="logger">The logger from the container.</param>
     public SoundFlowAudioCapture(
         IOptions<AudioOptions> options,
         ILogger<SoundFlowAudioCapture> logger)
@@ -96,7 +86,6 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         _deviceSampleRate = _options.SampleRate;
     }
 
-    /// <inheritdoc/>
     public void Prepare()
     {
         lock (_deviceLock)
@@ -105,7 +94,6 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         }
     }
 
-    /// <inheritdoc/>
     public void StartRecording()
     {
         lock (_deviceLock)
@@ -132,7 +120,6 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         }
     }
 
-    /// <inheritdoc/>
     public Recording? StopRecording()
     {
         bool wasOpen = _sessionOpen;
@@ -180,7 +167,6 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         return new Recording(samples, duration, peak, _deviceSampleRate, _reachedLimit);
     }
 
-    /// <inheritdoc/>
     public void Dispose()
     {
         AudioCaptureDevice? device;
@@ -208,9 +194,6 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         engine?.Dispose();
     }
 
-    /// <summary>
-    /// Opens the microphone and starts it, if it does not run.
-    /// </summary>
     /// <remarks>
     /// The caller holds <see cref="_deviceLock"/>.
     /// </remarks>
@@ -271,13 +254,9 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         }
     }
 
-    /// <summary>
-    /// Stops one device and releases it.
-    /// </summary>
     /// <remarks>
     /// CAUTION: the caller must not hold <see cref="_deviceLock"/>.
     /// </remarks>
-    /// <param name="device">The device, or <c>null</c>.</param>
     private void CloseDevice(AudioCaptureDevice? device)
     {
         if (device is null)
@@ -299,16 +278,6 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         device.Dispose();
     }
 
-    /// <summary>
-    /// Selects the microphone.
-    /// </summary>
-    /// <remarks>
-    /// The sequence is: the name that the settings give, then the default
-    /// device, then the first device. See
-    /// <see cref="AudioOptions.PreferredDeviceName"/> for the cause.
-    /// </remarks>
-    /// <param name="devices">Each capture device that the machine has.</param>
-    /// <returns>The device to open.</returns>
     private DeviceInfo SelectDevice(DeviceInfo[] devices)
     {
         if (devices.Length == 0)
@@ -347,15 +316,10 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         return devices[0];
     }
 
-    /// <summary>
-    /// Takes the samples from the audio thread of miniaudio.
-    /// </summary>
     /// <remarks>
     /// CAUTION: this operates on a thread with a high priority. It takes no
     /// lock, it makes no memory, and it does no work that has no limit.
     /// </remarks>
-    /// <param name="samples">The new samples.</param>
-    /// <param name="capability">The type of the device.</param>
     private void OnAudioProcessed(Span<float> samples, Capability capability)
     {
         if (!_accumulating)
@@ -368,9 +332,8 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
 
         if (room <= 0)
         {
-            // The button did not come up. This limit is the one protection
-            // against a recording with no end. The view model sees the flag
-            // and it gives the lane back.
+            // The button did not come up. The view model sees the flag and it
+            // gives the lane back.
             _reachedLimit = true;
             _accumulating = false;
             return;

@@ -22,16 +22,8 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
   <!--
-    The two variants of the surface.
-
-    Upstream has one variant: the background takes the colour of the theme and
-    all the ink is black (style.css). The design gives a light variant and a
-    dark variant, and the accent becomes one colour on top of them. Thus the
-    accent is not a variant: 6 accents and 2 variants are 12 combinations, and
-    a dictionary for each one is not correct. See Branding.axaml.
-
-    Each consumer must use DynamicResource. A StaticResource reads one time and
-    it does not change when a person selects the other variant.
+    The accent is NOT a variant and it is not in these dictionaries. Appearance
+    writes it into three keys of the resources instead.
   -->
 
   <ResourceDictionary.ThemeDictionaries>
@@ -44,8 +36,7 @@
       clear, and the panel of the appliance then shows the framebuffer. There
       is no keyboard to correct that condition.
 
-      The values are the values of Dark, because the appliance operates in a
-      public location and the dark variant uses less electrical supply.
+      The values are the values of Dark.
     -->
     <ResourceDictionary x:Key="Default">
       <SolidColorBrush x:Key="PageBrush" Color="#141412" />
@@ -69,9 +60,6 @@
            panel, and on a card, and one opaque grey cannot suit the three. -->
       <SolidColorBrush x:Key="HairBrush" Color="#1A1A18" Opacity="0.22" />
 
-      <!-- The lane of the person who speaks takes these two. The inversion is
-           the signal that says which person the software hears, and a person
-           who stands away must see it. -->
       <SolidColorBrush x:Key="InverseBrush" Color="#1A1A18" />
       <SolidColorBrush x:Key="InverseInkBrush" Color="#FAF9F5" />
     </ResourceDictionary>
@@ -90,9 +78,6 @@
   </ResourceDictionary.ThemeDictionaries>
 
   <!--
-    These colours do not change with the variant and they do not change with
-    the accent.
-
     CAUTION: the colour of a status message and the colour of a warning must
     not follow the accent. A person can select the green accent, and a warning
     in green says the opposite of what it means.
@@ -107,9 +92,7 @@
   <SolidColorBrush x:Key="BatteryDangerBrush" Color="#E5484D" />
 
   <!-- The screensaver and the warning of the very low charge make their own
-       ground. They are darker than the dark variant, because the first one
-       must use little electrical supply and the second one must stop a
-       person. -->
+       ground. They do not follow the variant. -->
   <SolidColorBrush x:Key="ScreensaverGroundBrush" Color="#0B0B0A" />
   <SolidColorBrush x:Key="ScreensaverInkBrush" Color="#FAF9F5" />
   <SolidColorBrush x:Key="ScreensaverMutedBrush" Color="#6B6A62" />

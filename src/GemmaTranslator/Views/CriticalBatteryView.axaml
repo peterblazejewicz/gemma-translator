@@ -16,12 +16,6 @@
              mc:Ignorable="d">
 
   <!--
-    The warning of the very low charge.
-
-    It covers the full surface because it must stop a person. A conversation
-    that continues here stops in the middle, and a person who did not see a
-    small mark in a corner does not know why.
-
     IMPORTANT: this screen gives the warning and it does nothing more. The
     software does not stop the machine. deploy/gemma-battery-guard.sh is a
     different service of the system and it does that work, because a machine

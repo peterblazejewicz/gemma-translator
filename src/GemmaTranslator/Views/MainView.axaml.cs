@@ -20,15 +20,8 @@ using Avalonia.Controls;
 
 namespace GemmaTranslator.Views;
 
-/// <summary>
-/// All the user interface. The two heads put this control in a different
-/// container. See <see cref="MainWindow"/> and <see cref="MainSingleView"/>.
-/// </summary>
 public partial class MainView : UserControl
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="MainView"/> class.
-    /// </summary>
     public MainView()
     {
         InitializeComponent();

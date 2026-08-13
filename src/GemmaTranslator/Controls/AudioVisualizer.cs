@@ -22,43 +22,24 @@ using Avalonia.Media;
 
 namespace GemmaTranslator.Controls;
 
-/// <summary>
-/// A row of vertical bars that shows the level of the audio of one lane.
-/// </summary>
 /// <remarks>
-/// <para>
-/// Each lane gets one instance. Upstream puts the two lanes on two canvas
-/// elements and moves one loop between them.
-/// </para>
-/// <para>
 /// CAUTION: this control holds no timer and it does not move by itself. The
 /// view model gives a new <see cref="Levels"/> for each frame. Thus the same
 /// values always make the same image.
-/// </para>
-/// <para>
-/// This is necessary because the software has no test project. Only an
-/// offscreen PNG shows the user interface. A control that moves by itself
-/// gives a different image at each start, and no image is then proof.
-/// </para>
 /// </remarks>
 public sealed class AudioVisualizer : Control
 {
-    // The design gives these values in pixels of the display, and not as a
-    // part of the area. They stay the same if the strip changes its height.
     private const double PadX = 24;
     private const double PadY = 10;
     private const double Gap = 3;
     private const float Radius = 2f;
 
-    // The height of each bar while the lane does not record.
     private const double IdleHeight = 6;
     private const double IdleOpacity = 0.4;
 
-    // A level of 1.0 makes a bar of 72 % of the height of the content.
     private const double ActiveScale = 0.72;
 
-    // A lane that records and hears nothing must not go empty. Each bar keeps
-    // this height, thus a person sees that the microphone is on.
+    // A lane that records and hears nothing must not go empty.
     private const double MinActiveHeight = 2;
 
     // A bar of less than one pixel makes a grey area and not a row of bars.
@@ -69,19 +50,15 @@ public sealed class AudioVisualizer : Control
     // a bar becomes 1 pixel is 148, thus 64 bars are not near the limit.
     private const double MinBarWidth = 1;
 
-    /// <summary>Defines the <see cref="Levels"/> property.</summary>
     public static readonly StyledProperty<IReadOnlyList<double>?> LevelsProperty =
         AvaloniaProperty.Register<AudioVisualizer, IReadOnlyList<double>?>(nameof(Levels));
 
-    /// <summary>Defines the <see cref="IsActive"/> property.</summary>
     public static readonly StyledProperty<bool> IsActiveProperty =
         AvaloniaProperty.Register<AudioVisualizer, bool>(nameof(IsActive));
 
-    /// <summary>Defines the <see cref="ActiveBrush"/> property.</summary>
     public static readonly StyledProperty<IBrush?> ActiveBrushProperty =
         AvaloniaProperty.Register<AudioVisualizer, IBrush?>(nameof(ActiveBrush));
 
-    /// <summary>Defines the <see cref="IdleBrush"/> property.</summary>
     public static readonly StyledProperty<IBrush?> IdleBrushProperty =
         AvaloniaProperty.Register<AudioVisualizer, IBrush?>(nameof(IdleBrush));
 
@@ -97,45 +74,30 @@ public sealed class AudioVisualizer : Control
     /// <summary>
     /// Gets or sets one value for each bar, from 0.0 to 1.0.
     /// </summary>
-    /// <remarks>
-    /// The count of the bars is the count of these values. A value of
-    /// <c>null</c>, or a count of 0, draws nothing. The control clamps each
-    /// value to the range.
-    /// </remarks>
     public IReadOnlyList<double>? Levels
     {
         get => GetValue(LevelsProperty);
         set => SetValue(LevelsProperty, value);
     }
 
-    /// <summary>
-    /// Gets or sets a value that says if this lane records.
-    /// </summary>
     public bool IsActive
     {
         get => GetValue(IsActiveProperty);
         set => SetValue(IsActiveProperty, value);
     }
 
-    /// <summary>
-    /// Gets or sets the brush of the bars while the lane records.
-    /// </summary>
     public IBrush? ActiveBrush
     {
         get => GetValue(ActiveBrushProperty);
         set => SetValue(ActiveBrushProperty, value);
     }
 
-    /// <summary>
-    /// Gets or sets the brush of the bars while the lane does not record.
-    /// </summary>
     public IBrush? IdleBrush
     {
         get => GetValue(IdleBrushProperty);
         set => SetValue(IdleBrushProperty, value);
     }
 
-    /// <inheritdoc/>
     public override void Render(DrawingContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -175,7 +137,6 @@ public sealed class AudioVisualizer : Control
         }
     }
 
-    /// <summary>Gives the left edge of one bar.</summary>
     private static double LeftOf(int index, double barWidth) =>
         PadX + (index * (barWidth + Gap));
 

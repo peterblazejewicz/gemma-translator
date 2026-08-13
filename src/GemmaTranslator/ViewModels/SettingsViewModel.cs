@@ -26,37 +26,20 @@ using Microsoft.Extensions.Options;
 
 namespace GemmaTranslator.ViewModels;
 
-/// <summary>
-/// One accent of the settings screen.
-/// </summary>
-/// <param name="Color">The value of the colour, for example <c>#FFD100</c>.</param>
-/// <param name="IsSelected">
-/// <c>true</c> for the accent that the appliance uses. The display gives it a
-/// ring.
-/// </param>
-/// <param name="Pick">What a touch on this swatch does.</param>
-/// <remarks>
-/// Each swatch holds its own command. A command with the colour as its
-/// parameter needs a binding to the parent of the item, and a compiled binding
-/// of that shape is not clear.
-/// </remarks>
 public sealed record AccentSwatch(string Color, bool IsSelected, ICommand Pick);
 
-/// <summary>
-/// The settings screen.
-/// </summary>
 /// <remarks>
 /// <para>
-/// Upstream has the endpoint, the name of the model, the key, the prompt, a
-/// mode of the keyboard, and a checkbox for the proxy. Each one of those is
-/// gone: the appliance has no keyboard, thus a person cannot type. Those
-/// values are in <c>appsettings.json</c> and in the <c>GEMMA_</c> variables of
-/// the environment.
+/// This screen holds what a person at the appliance can change, and no more. It
+/// has no text field, because the appliance has no keyboard. The endpoint, the
+/// name of the model, and the key are settings of the operator: they are in
+/// <c>appsettings.json</c> and in the <c>GEMMA_</c> variables of the
+/// environment.
 /// </para>
 /// <para>
-/// The volume of upstream is also gone. It calls <c>wpctl</c>, <c>pactl</c>,
-/// and <c>amixer</c>, which are Linux only, and Raspberry Pi OS Lite has no
-/// PipeWire. The speakerphone has its own buttons.
+/// There is no control of the volume. A control of that kind needs
+/// <c>wpctl</c>, <c>pactl</c>, or <c>amixer</c>, which are Linux only, and
+/// Raspberry Pi OS Lite has no PipeWire. The speakerphone has its own buttons.
 /// </para>
 /// </remarks>
 public sealed partial class SettingsViewModel : ObservableObject
@@ -64,22 +47,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IUserSettingsStore _store;
     private readonly Appearance _appearance;
 
-    /// <summary>
-    /// The line of the ABOUT panel that shows the charge.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="MainViewModel"/> writes this. The electrical supply has one
-    /// reader in the software, and this screen shows what that reader gives.
-    /// </remarks>
     [ObservableProperty]
     private string _batteryAbout = string.Empty;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SettingsViewModel"/> class.
-    /// </summary>
-    /// <param name="store">The settings of a person, from the container.</param>
-    /// <param name="appearance">The surface, from the container.</param>
-    /// <param name="liteRt">The settings of the LiteRT-LM server.</param>
     public SettingsViewModel(
         IUserSettingsStore store,
         Appearance appearance,
@@ -95,12 +65,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         ModelName = liteRt.Value.ModelName;
     }
 
-    /// <summary>The name of the model, from the settings of the operator.</summary>
     public string ModelName { get; }
 
-    /// <summary>
-    /// The version of the software.
-    /// </summary>
     /// <remarks>
     /// CAUTION: the text stops at the plus. SourceLink puts the hash of the
     /// commit after that character, which is 41 characters more and wider than
@@ -108,37 +74,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// </remarks>
     public static string Version { get; } = ShortVersion();
 
-    /// <summary>The 6 accents, and which one the appliance uses.</summary>
     public IReadOnlyList<AccentSwatch> Swatches => MakeSwatches();
 
-    /// <summary><c>true</c> if the surface uses the dark variant.</summary>
     public bool IsDark => _store.Current.IsDark;
 
-    /// <summary><c>true</c> if the appliance speaks the translation.</summary>
     public bool SpeakTranslations => _store.Current.SpeakTranslations;
 
-    /// <summary>The count of the bars of the visualizer.</summary>
     public int VisualizerBars => _store.Current.VisualizerBars;
 
-    /// <summary>
-    /// <c>true</c> while a person can make the count of the bars larger.
-    /// </summary>
     public bool CanAddBars => VisualizerBars < UserSettings.MaximumBars;
 
-    /// <summary>
-    /// <c>true</c> while a person can make the count of the bars smaller.
-    /// </summary>
     public bool CanRemoveBars => VisualizerBars > UserSettings.MinimumBars;
 
-    /// <summary>
-    /// Keeps new settings, writes them to the disk, and puts them on the
-    /// surface.
-    /// </summary>
-    /// <remarks>
-    /// The surface changes at the moment of the touch. A person on a display
-    /// with no keyboard must see that the appliance received the touch.
-    /// </remarks>
-    /// <param name="settings">The settings that the person made.</param>
     private void Apply(UserSettings settings)
     {
         _store.Save(settings);

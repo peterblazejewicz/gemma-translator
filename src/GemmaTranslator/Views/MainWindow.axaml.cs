@@ -20,16 +20,8 @@ using Avalonia.Controls;
 
 namespace GemmaTranslator.Views;
 
-/// <summary>
-/// The container of <see cref="MainView"/> on the Windows development host.
-/// The Raspberry Pi does not use this window, because it has no window
-/// manager.
-/// </summary>
 public partial class MainWindow : Window
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="MainWindow"/> class.
-    /// </summary>
     public MainWindow()
     {
         InitializeComponent();

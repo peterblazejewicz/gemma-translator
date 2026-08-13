@@ -20,15 +20,8 @@ using Avalonia.Controls;
 
 namespace GemmaTranslator.Views;
 
-/// <summary>
-/// The container of <see cref="MainView"/> on the Raspberry Pi. The DRM
-/// backend gives one view that fills the display.
-/// </summary>
 public partial class MainSingleView : UserControl
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="MainSingleView"/> class.
-    /// </summary>
     public MainSingleView()
     {
         InitializeComponent();

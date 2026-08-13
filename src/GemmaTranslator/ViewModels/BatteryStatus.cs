@@ -6,34 +6,20 @@ using GemmaTranslator.Services;
 
 namespace GemmaTranslator.ViewModels;
 
-/// <summary>
-/// The charge of the cells, as the display shows it.
-/// </summary>
 /// <remarks>
-/// <para>
-/// NEW FUNCTION. Upstream has no cells and no UPS. The owner approved this
-/// addition, and its limits are narrow: it shows a condition and it does not
-/// diagnose. There is no estimate of the time that stays, no rate of charge,
-/// and no diagnostic of the charger.
-/// </para>
-/// <para>
-/// This record makes the numbers of <see cref="PowerState"/> into the values
-/// that the display needs. It starts no shutdown: a control that stops the
-/// machine is in a different service. See <see cref="IPowerMonitor"/>.
-/// </para>
+/// CAUTION: this record shows a condition and it does not diagnose. Do not add
+/// a time that stays, a rate of charge, or a diagnostic of the charger. The
+/// owner made that limit, and each one of the three is a measurement that this
+/// hardware cannot make correctly.
 /// </remarks>
 public sealed record BatteryStatus
 {
-    /// <summary>The charge at which the indicator gives a warning.</summary>
     public const int WarningPercent = 20;
 
-    /// <summary>The charge at which the indicator gives a danger.</summary>
     public const int DangerPercent = 10;
 
-    /// <summary>The charge that puts a warning on the full surface.</summary>
     public const int CriticalPercent = 5;
 
-    /// <summary>The text that the display shows for a charge that nobody read.</summary>
     private const string UnknownText = "—";
 
     /// <summary>
@@ -46,9 +32,6 @@ public sealed record BatteryStatus
     /// </remarks>
     public int? Percent { get; private init; }
 
-    /// <summary>
-    /// <c>true</c> if the appliance has its electrical supply.
-    /// </summary>
     public bool IsCharging => MainsOnline == true;
 
     /// <summary>
@@ -64,24 +47,10 @@ public sealed record BatteryStatus
     /// </remarks>
     public bool? MainsOnline { get; private init; }
 
-    /// <summary>
-    /// <c>true</c> if there is no fuel gauge, thus no charge to show.
-    /// </summary>
-    /// <remarks>
-    /// A charge that nobody read must not look like 0 % and must not look like
-    /// a full battery. The glyph shows a question mark and no fill.
-    /// </remarks>
     public bool IsUnknown => Percent is null;
 
-    /// <summary>
-    /// <c>true</c> when the charge is low and the appliance is on its cells.
-    /// </summary>
     public bool IsWarning => IsBelow(WarningPercent);
 
-    /// <summary>
-    /// <c>true</c> when the charge is very low and the appliance is on its
-    /// cells.
-    /// </summary>
     public bool IsDanger => IsBelow(DangerPercent);
 
     /// <summary>
@@ -97,16 +66,10 @@ public sealed record BatteryStatus
         && Percent is { } percent
         && percent <= CriticalPercent;
 
-    /// <summary>
-    /// The charge for the indicator, for example <c>64%</c>.
-    /// </summary>
     public string Text => Percent is { } percent
         ? string.Create(CultureInfo.InvariantCulture, $"{percent}%")
         : UnknownText;
 
-    /// <summary>
-    /// The line of the ABOUT panel of the settings screen.
-    /// </summary>
     public string AboutText => this switch
     {
         { IsUnknown: true } => "State unknown",
@@ -115,10 +78,6 @@ public sealed record BatteryStatus
         _ => $"On battery · {Text}",
     };
 
-    /// <summary>
-    /// Makes the condition that the display shows from the condition that the
-    /// hardware gave.
-    /// </summary>
     /// <remarks>
     /// CAUTION: a machine that gives a charge but no mains line counts as a
     /// machine on its cells for the COLOUR of the indicator. A warning while
@@ -126,8 +85,6 @@ public sealed record BatteryStatus
     /// go empty stops the appliance in the middle of a conversation. The
     /// warning that covers the surface is different: see IsCritical.
     /// </remarks>
-    /// <param name="state">The condition that <see cref="IPowerMonitor"/> read.</param>
-    /// <returns>The condition for the display.</returns>
     public static BatteryStatus From(PowerState state)
     {
         ArgumentNullException.ThrowIfNull(state);

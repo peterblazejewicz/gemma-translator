@@ -29,23 +29,13 @@ namespace GemmaTranslator.Services;
 /// Puts the selections of a person on the surface.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Upstream writes one CSS variable and the browser does the remainder. This
-/// class is the same operation: it writes the variant and the accent, and each
-/// <c>DynamicResource</c> of the user interface follows.
-/// </para>
-/// <para>
-/// This class has no interface. Section 5.2 of CLAUDE.md gives one cause for an
-/// interface in this fork, which is a part that is not the same on Windows and
-/// on the Raspberry Pi. This code is the same on the two machines.
-/// </para>
+/// The surface is the same on Windows and on the Raspberry Pi, thus this class
+/// needs no interface.
 /// </remarks>
 public sealed partial class Appearance
 {
-    /// <summary>The key that each accent surface reads.</summary>
     public const string AccentKey = "AccentBrush";
 
-    /// <summary>The key of the ink that goes on top of the accent.</summary>
     public const string AccentInkKey = "AccentInkBrush";
 
     /// <summary>The key of the accent that stays legible on a light surface.</summary>
@@ -53,28 +43,19 @@ public sealed partial class Appearance
 
     private readonly ILogger<Appearance> _logger;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="Appearance"/> class.
-    /// </summary>
-    /// <param name="logger">The logger from the container.</param>
     public Appearance(ILogger<Appearance> logger)
     {
         ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
     }
 
-    /// <summary>
-    /// Applies the variant and the accent of these settings.
-    /// </summary>
     /// <remarks>
     /// CAUTION: a write to the resources of the application raises
     /// <c>ResourcesChanged</c> and Avalonia then walks the tree. Off the thread
     /// of the user interface that gives no error at all: it gives a frame that
-    /// is torn. Thus this method makes sure of the thread and does not trust a
-    /// comment. <see cref="IPowerMonitor.Changed"/> comes on a thread of the
+    /// is torn. <see cref="IPowerMonitor.Changed"/> comes on a thread of the
     /// pool and is one call away from here.
     /// </remarks>
-    /// <param name="settings">The settings of the person.</param>
     public void Apply(UserSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -87,10 +68,9 @@ public sealed partial class Appearance
             return;
         }
 
-        // The store gives a value that is inside its limits, and this method is
-        // public. A settings screen that shows a colour before it keeps the
-        // selection would else give a value that Color.Parse refuses, and the
-        // panel would go black.
+        // This method is public and a caller can give a value that the store
+        // did not make safe. Color.Parse then refuses it and the panel goes
+        // black.
         UserSettings safe = settings.Sanitized();
 
         application.RequestedThemeVariant = safe.IsDark ? ThemeVariant.Dark : ThemeVariant.Light;

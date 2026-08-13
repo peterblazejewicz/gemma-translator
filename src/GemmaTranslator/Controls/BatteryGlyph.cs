@@ -9,22 +9,11 @@ using Avalonia.Media.Immutable;
 
 namespace GemmaTranslator.Controls;
 
-/// <summary>
-/// The icon of the battery: a body, a terminal, a bar of the charge, and a
-/// sign for the charge that comes in or for a charge that is not known.
-/// </summary>
 /// <remarks>
-/// <para>
-/// This control draws only. It does not say if a charge is low or bad: the
-/// caller binds <see cref="Stroke"/> and <see cref="Fill"/> to the brush of
-/// that condition.
-/// </para>
-/// <para>
 /// The design is an SVG with a viewBox of 42 by 22. Each value below is in
 /// that space, and <see cref="Render"/> puts one transform on all of it. Thus
 /// the primary display uses the icon at 42 by 22 and the display of the low
 /// charge uses the same code at 120 by 60.
-/// </para>
 /// </remarks>
 public sealed class BatteryGlyph : Control
 {
@@ -56,23 +45,18 @@ public sealed class BatteryGlyph : Control
     // M20 4 L13 12 h5 l-2 6 7-8 h-5 z, with each point made absolute.
     private static readonly Geometry Bolt = MakeBolt();
 
-    /// <summary>Defines the <see cref="Percent"/> property.</summary>
     public static readonly StyledProperty<int?> PercentProperty =
         AvaloniaProperty.Register<BatteryGlyph, int?>(nameof(Percent));
 
-    /// <summary>Defines the <see cref="IsCharging"/> property.</summary>
     public static readonly StyledProperty<bool> IsChargingProperty =
         AvaloniaProperty.Register<BatteryGlyph, bool>(nameof(IsCharging));
 
-    /// <summary>Defines the <see cref="Stroke"/> property.</summary>
     public static readonly StyledProperty<IBrush?> StrokeProperty =
         AvaloniaProperty.Register<BatteryGlyph, IBrush?>(nameof(Stroke));
 
-    /// <summary>Defines the <see cref="Fill"/> property.</summary>
     public static readonly StyledProperty<IBrush?> FillProperty =
         AvaloniaProperty.Register<BatteryGlyph, IBrush?>(nameof(Fill));
 
-    /// <summary>Defines the <see cref="GroundBrush"/> property.</summary>
     public static readonly StyledProperty<IBrush?> GroundBrushProperty =
         AvaloniaProperty.Register<BatteryGlyph, IBrush?>(nameof(GroundBrush));
 
@@ -99,9 +83,6 @@ public sealed class BatteryGlyph : Control
         set => SetValue(PercentProperty, value);
     }
 
-    /// <summary>
-    /// Gets or sets a value that says if the charge increases.
-    /// </summary>
     public bool IsCharging
     {
         get => GetValue(IsChargingProperty);
@@ -136,7 +117,6 @@ public sealed class BatteryGlyph : Control
         set => SetValue(GroundBrushProperty, value);
     }
 
-    /// <inheritdoc/>
     public override void Render(DrawingContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -158,7 +138,6 @@ public sealed class BatteryGlyph : Control
         }
     }
 
-    /// <inheritdoc/>
     protected override Size MeasureOverride(Size availableSize) => new(
         Math.Min(availableSize.Width, DesignWidth),
         Math.Min(availableSize.Height, DesignHeight));
@@ -186,7 +165,6 @@ public sealed class BatteryGlyph : Control
         // The default family comes from FontManagerOptions, which the software
         // sets at the start. Raspberry Pi OS Lite can supply no font of the
         // system, thus a family that the system gives is not a safe selection.
-        // See Fonts/AppFonts.cs.
         FormattedText text = new(
             "?",
             CultureInfo.InvariantCulture,
@@ -265,8 +243,7 @@ public sealed class BatteryGlyph : Control
         IBrush? ground = GroundBrush;
 
         // The bolt is on top of the bar of the charge, and the two brushes can
-        // be almost the same colour. A line of the colour of the page keeps
-        // the shape of the bolt clear on each colour below it.
+        // be almost the same colour.
         IPen? edge = ground is null ? null : new ImmutablePen(ground.ToImmutable(), BoltStroke);
 
         context.DrawGeometry(stroke, edge, Bolt);

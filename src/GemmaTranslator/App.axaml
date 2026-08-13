@@ -24,20 +24,15 @@
              RequestedThemeVariant="Dark">
 
   <!--
-    The variant here is the value before a person selects one. Appearance
-    writes the value of the settings over it at the start, and again each time
-    that a person touches a swatch. See Services/Appearance.cs.
+    Appearance writes the variant of the person over this value at the start,
+    and again at each change of the settings screen.
   -->
 
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
-        <!-- The colours of the two variants, and the colours that do not
-             change with a variant. -->
         <ResourceInclude Source="avares://GemmaTranslator/Assets/Theme.axaml" />
 
-        <!-- The mark of the appliance and the accent before a selection.
-             THE ONE LOCATION for a change of the mark. -->
         <ResourceInclude Source="avares://GemmaTranslator/Assets/Branding.axaml" />
       </ResourceDictionary.MergedDictionaries>
 

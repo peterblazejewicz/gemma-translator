@@ -22,25 +22,13 @@ using System.Text.Json;
 
 namespace GemmaTranslator.Services;
 
-/// <summary>
-/// Tells the model to answer with one JSON object, and reads that answer.
-/// </summary>
 /// <remarks>
 /// The two methods are one pair. The message tells the model what to send, and
 /// the reader accepts what the model sends. A change to one without the other
-/// gives an empty display. They are here, and not in
-/// <see cref="LiteRtTranslator"/>, because they are a property of the model and
-/// not of the connection. A translator that uses the C API needs this same
-/// pair.
+/// gives an empty display.
 /// </remarks>
 internal static class JsonEnvelopePrompt
 {
-    /// <summary>
-    /// Makes the system message for one direction of translation.
-    /// </summary>
-    /// <param name="source">The language of the person who spoke.</param>
-    /// <param name="target">The language of the other person.</param>
-    /// <returns>The text of the system message.</returns>
     // Two dollar signs make the interpolation {{ }}, thus a single brace is a
     // literal brace. The message shows JSON to the model.
     public static string Make(Language source, Language target)
@@ -55,18 +43,11 @@ internal static class JsonEnvelopePrompt
               Do NOT return anything else except this JSON object. No Markdown block wraps (no ```json), no introductory text, no conversational text. Start directly with "{" and end directly with "}".
               """);
 
-    /// <summary>
-    /// Reads the translation out of the text that the model sent.
-    /// </summary>
     /// <remarks>
     /// The method takes the text between the first brace and the last brace.
     /// Thus a Markdown fence, an introduction, and a text after the object all
-    /// go away with one rule. Upstream uses three text tests
-    /// (<c>api.js:128-137</c>), and those tests fail if the model writes
-    /// <c>```JSON</c> with capital letters.
+    /// go away with one rule.
     /// </remarks>
-    /// <param name="modelText">The text that the model sent.</param>
-    /// <param name="translation">The translation, if the method gives true.</param>
     /// <returns>
     /// True if the model obeyed the format. False if the caller must show
     /// <paramref name="modelText"/> and write a line in the log.

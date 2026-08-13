@@ -23,16 +23,7 @@ using Microsoft.Extensions.Logging;
 
 namespace GemmaTranslator.Services;
 
-/// <summary>
-/// The two buttons, from one input device of Linux.
-/// </summary>
 /// <remarks>
-/// <para>
-/// CAUTION: this class is necessary because Avalonia gives no key event on the
-/// Raspberry Pi. The DRM backend of <c>Avalonia.LinuxFramebuffer</c> 12.1.1
-/// gives a pointer event and a touch event only. <c>RawKeyEventArgs</c> is not
-/// in that assembly, thus <c>KeyDown</c> does not occur.
-/// </para>
 /// <para>
 /// SECURITY CONTROL. This class opens one path, and that path is a symlink
 /// that udev makes for the GPIO button harness. Do not change it to a scan of
@@ -63,9 +54,6 @@ namespace GemmaTranslator.Services;
 /// </remarks>
 public sealed partial class EvdevPushToTalk : IPushToTalk
 {
-    /// <summary>
-    /// The one device that this class opens.
-    /// </summary>
     /// <remarks>
     /// The udev rule of <c>deploy/99-gemma-translator.rules</c> makes this
     /// symlink. The number of an event device is not the same after each
@@ -81,32 +69,23 @@ public sealed partial class EvdevPushToTalk : IPushToTalk
 
     private FileStream? _stream;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="EvdevPushToTalk"/> class.
-    /// </summary>
-    /// <param name="logger">The logger from the container.</param>
     public EvdevPushToTalk(ILogger<EvdevPushToTalk> logger)
     {
         ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
     }
 
-    /// <inheritdoc/>
     public event EventHandler<PushToTalkChange>? Changed;
 
-    /// <inheritdoc/>
     public void Start(TopLevel? topLevel)
     {
-        // The Raspberry Pi reads the device of Linux, thus it needs no top
-        // level. The argument is for the Windows implementation.
+        // This class reads the device of Linux. The argument is for the
+        // Windows implementation.
         _ = topLevel;
 
         // CAUTION: a second call opens the device again. Each open of an
         // input device makes its own reader in the kernel, and each reader
         // gets each event. Thus the software then gets each press two times.
-        //
-        // The test is _stream, which is not null only after an open that
-        // operates. Thus a call after a failure can try again.
         if (_stream is not null)
         {
             LogAlreadyStarted(_logger, DevicePath);
@@ -121,8 +100,6 @@ public sealed partial class EvdevPushToTalk : IPushToTalk
         }
         catch (FileNotFoundException)
         {
-            // The appliance has no console. This line is the first thing to
-            // read if a button does nothing.
             LogDeviceMissing(_logger, DevicePath);
             return;
         }
@@ -150,7 +127,6 @@ public sealed partial class EvdevPushToTalk : IPushToTalk
         thread.Start();
     }
 
-    /// <inheritdoc/>
     public void Dispose()
     {
         // CAUTION: this method does nothing on purpose, and that is not an
@@ -165,11 +141,6 @@ public sealed partial class EvdevPushToTalk : IPushToTalk
         // file back immediately after this.
     }
 
-    /// <summary>
-    /// Gets the lane of one key code, or 0 if the key is not a button.
-    /// </summary>
-    /// <param name="code">The code of the key, from the Linux headers.</param>
-    /// <returns>1, 2, or 0.</returns>
     private static int LaneOf(ushort code) => code switch
     {
         KeyF13 => 1,
@@ -190,9 +161,6 @@ public sealed partial class EvdevPushToTalk : IPushToTalk
             catch (Exception exception) when (
                 exception is IOException or ObjectDisposedException)
             {
-                // The device is gone. A read gives no more data, thus the
-                // thread stops here.
-                //
                 // CAUTION: the filter is narrow on purpose. An error of a
                 // different type is a defect of this software. It goes out of
                 // this thread, the process stops, and systemd starts it again.
@@ -231,12 +199,6 @@ public sealed partial class EvdevPushToTalk : IPushToTalk
             catch (Exception exception)
 #pragma warning restore CA1031
             {
-                // This catch is insurance and it is not a live path today.
-                // The one subscriber posts to the dispatcher and returns
-                // immediately. Thus its error comes on the thread of the user
-                // interface. A subscriber that does its work here would give
-                // its error here.
-                //
                 // CAUTION: an event goes to each subscriber in sequence. A
                 // subscriber that gives an error stops the subscribers after
                 // it, thus this event can go to no subscriber.
@@ -258,22 +220,16 @@ public sealed partial class EvdevPushToTalk : IPushToTalk
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct InputEvent
     {
-        /// <summary>The size of one record, in bytes.</summary>
         public const int Size = 24;
 
-        /// <summary>The seconds of the time of the event.</summary>
         public readonly long Seconds;
 
-        /// <summary>The microseconds of the time of the event.</summary>
         public readonly long Microseconds;
 
-        /// <summary>The type of the event. 1 is a key.</summary>
         public readonly ushort Type;
 
-        /// <summary>The code of the key.</summary>
         public readonly ushort Code;
 
-        /// <summary>0 is up, 1 is down, and 2 is autorepeat.</summary>
         public readonly int Value;
     }
 

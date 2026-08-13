@@ -51,9 +51,6 @@
   </UserControl.Resources>
 
   <UserControl.Styles>
-    <!-- The lane of the person who speaks inverts its full ground. A person
-         who stands away must see which person the appliance hears, thus the
-         signal is the ground and not a border. -->
     <Style Selector="Border#Lane">
       <Setter Property="Background" Value="Transparent" />
     </Style>
@@ -68,12 +65,6 @@
       <Setter Property="Foreground" Value="{DynamicResource InverseInkBrush}" />
     </Style>
 
-    <!--
-      The two arrows. A Button gives the pushed condition and the condition
-      that takes no touch with no code behind the file: :pressed fills the
-      circle with the accent, and :disabled makes it faint while a lane
-      records.
-    -->
     <Style Selector="Button.arrow">
       <Setter Property="Width" Value="112" />
       <Setter Property="Height" Value="112" />
@@ -118,8 +109,6 @@
       <Setter Property="BorderBrush" Value="{DynamicResource InverseInkBrush}" />
     </Style>
 
-    <!-- The row in the window of the drum. The other rows are smaller and
-         faint, which is what makes the window legible with no highlight. -->
     <Style Selector="TextBlock.drumItem">
       <Setter Property="FontSize" Value="24" />
       <Setter Property="FontWeight" Value="Normal" />
@@ -222,9 +211,6 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
 
-          <!-- The window of the drum. It takes no touch: the two arrows turn
-               the drum, because a list that a person drags needs a scroll bar
-               that this surface has no room for. -->
           <Border Height="44"
                   VerticalAlignment="Top"
                   Margin="0,44,0,0"
@@ -243,7 +229,6 @@
         </Panel>
       </Border>
 
-      <!-- The arrow below. -->
       <Button Grid.Column="3"
               Classes="arrow"
               Margin="14,0,0,0"

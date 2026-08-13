@@ -15,23 +15,8 @@
              d:DesignHeight="720"
              mc:Ignorable="d">
 
-  <!--
-    The screen that comes after a quiet interval.
-
-    The cause is the electrical supply. The appliance operates from two cells,
-    and the panel uses more of that supply than each other part. Thus this
-    screen keeps the charge: its ground is darker than the dark variant, and
-    it shows three items only.
-
-    The full surface takes the touch. A person who comes to the appliance in
-    this condition must not look for a small control on a dark panel.
-  -->
-
   <UserControl.Styles>
     <!--
-      The button of the full surface. It has no content and it gives no
-      signal: the screen that follows is the answer to the touch.
-
       RenderTransform stays at none. The Fluent theme makes the button
       smaller while a finger is on it, and that moves all of this screen.
     -->
@@ -70,9 +55,6 @@
                  Foreground="{DynamicResource ScreensaverInkBrush}"
                  HorizontalAlignment="Center" />
 
-      <!-- The charge of the cells. This screen gives no warning at the two
-           limits: a person does not look at a screensaver. The primary
-           surface shows the warning. -->
       <StackPanel Orientation="Horizontal"
                   Spacing="12"
                   Margin="0,22,0,0"
@@ -100,8 +82,6 @@
                  HorizontalAlignment="Center" />
     </StackPanel>
 
-    <!-- The mark comes from Assets/Branding.axaml, which is the one location
-         for it. The box of the mark is a proportion, thus one dimension. -->
     <Path Data="{StaticResource BrandMarkGeometry}"
           Stretch="Uniform"
           Width="200"

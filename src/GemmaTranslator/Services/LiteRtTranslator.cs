@@ -43,12 +43,6 @@ public sealed partial class LiteRtTranslator : ITranslator
     private readonly LiteRtOptions _options;
     private readonly ILogger<LiteRtTranslator> _logger;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="LiteRtTranslator"/> class.
-    /// </summary>
-    /// <param name="httpClient">The client from the container.</param>
-    /// <param name="options">The settings of the server.</param>
-    /// <param name="logger">The logger from the container.</param>
     public LiteRtTranslator(
         HttpClient httpClient,
         IOptions<LiteRtOptions> options,
@@ -63,7 +57,6 @@ public sealed partial class LiteRtTranslator : ITranslator
         _logger = logger;
     }
 
-    /// <inheritdoc/>
     public async Task<TranslationResult> TranslateAsync(
         string text,
         Language source,
@@ -211,8 +204,6 @@ public sealed partial class LiteRtTranslator : ITranslator
 
             if (!JsonEnvelopePrompt.TryRead(modelText, out string translation))
             {
-                // Upstream shows the full text of the model, and a person must
-                // see something. But the log must say that this occurred.
                 LogModelDidNotObey(_logger, modelText.Length);
                 translation = modelText;
             }

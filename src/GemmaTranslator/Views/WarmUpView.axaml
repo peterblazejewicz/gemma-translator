@@ -15,13 +15,6 @@
              d:DesignHeight="720"
              mc:Ignorable="d">
 
-  <!--
-    The screen that the appliance shows while the model comes into the memory.
-
-    This screen takes no touch. There is no control to hold and no control to
-    stop the operation. A person waits, and the bar shows how much went.
-  -->
-
   <UserControl.Styles>
     <!-- The bar of the ProgressBar has its own corner and the control does not
          give it the value of CornerRadius. -->
@@ -32,9 +25,6 @@
 
   <Panel Background="{DynamicResource PageBrush}">
 
-    <!-- The charge of the cells, in the same corner as the primary surface. A
-         person who starts the appliance must see if it has electrical
-         supply. -->
     <StackPanel Orientation="Horizontal"
                 Spacing="10"
                 HorizontalAlignment="Right"
@@ -57,8 +47,6 @@
 
     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
 
-      <!-- The mark comes from Assets/Branding.axaml, which is the one location
-           for it. The box of the mark is a proportion, thus one dimension. -->
       <Path Data="{StaticResource BrandMarkGeometry}"
             Stretch="Uniform"
             Width="250"
@@ -79,9 +67,19 @@
 
       <!--
         CAUTION: the bar gives no quantity, and it must not give one. The model
-        goes into the memory in a different process, and that process gives this
-        software no signal. Thus a percentage here is a number that nobody
-        measured.
+        goes into the memory in a different process. That process gives this
+        software no signal, thus a percentage here is a number that nobody
+        measured. The design shows one, and a design cannot make a measurement
+        that the machine does not supply.
+
+        A bar with no quantity says "wait", which is true. A bar at 43 % says
+        that 43 % of the work is complete, which nothing here knows.
+
+        The correct answer is a test of the endpoint before the first
+        translation. That is a port and not a new function: upstream has
+        testConnectionAPI in frontend/src/utils/api.js, and this fork removed
+        it before there was a caller. Put it back with the speech-to-text
+        slice, and this bar can then show a true condition.
       -->
       <ProgressBar Width="520"
                    Height="12"
@@ -92,11 +90,16 @@
                    Background="{DynamicResource PanelBrush}"
                    Foreground="{DynamicResource AccentBrush}"
                    HorizontalAlignment="Center" />
-
     </StackPanel>
+
+    <!--
+      The Moonshine licence conditions make this text necessary, and NOTICE
+      records that the user interface shows it. This screen comes at each start,
+      thus each user sees it one time for each start of the appliance.
+    -->
     <TextBlock Text="{x:Static vm:MainViewModel.Attribution}"
                FontSize="20"
-                 Foreground="{DynamicResource MutedBrush}"
+               Foreground="{DynamicResource MutedBrush}"
                HorizontalAlignment="Center"
                VerticalAlignment="Bottom"
                Margin="0,0,0,28" />

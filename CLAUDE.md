@@ -844,6 +844,62 @@ An XML documentation comment on a public member is idiomatic .NET, thus
 `<summary>` stays. But a `<remarks>` element of ten lines is usually prose that
 belongs in a document, and not adjacent to the code.
 
+### 11.1 One comment in, one comment out
+
+Section 5.3 says that the move removes as much as it adds. **That rule applies
+to the comments and not to the code only.**
+
+Two rules, and they operate together:
+
+1. **A comment of upstream goes in the port.** Somebody wrote it because the
+   code alone did not give that knowledge. Do not drop it. Move it to the C#
+   code that replaces that function, in the words of section 8.
+
+   The one cause to remove it: the port makes it incorrect or empty. A comment
+   about `useEffect`, about the same-origin rule of a browser, or about a CSS
+   variable does not apply to Avalonia. Say in the commit message which comments
+   went away for this cause.
+
+2. **A comment that upstream does not have needs a cause.** The causes are the
+   four in the list above: a measured property, a decision and its cost, a trap,
+   or a number that a person computed. "It makes the code more clear" is not one
+   of them, because that is what the code does.
+
+**Count the comments of the two sides. The quantity must be about equal.**
+
+A measurement of the user interface shows why this rule is here. The React user
+interface had 271 lines of comment for 1244 lines of code, which is 0.22. The
+first Avalonia user interface had 3362 for 4337, which is 0.78: **3.6 times as
+dense.** Each new comment obeyed the four causes on its own, and the sum broke
+the rule at the top of this section. Nobody saw it, because nobody counted.
+
+To count:
+
+```bash
+git ls-tree -r --name-only <the commit before the move> <the upstream directory>
+git ls-tree -r --name-only HEAD src/GemmaTranslator
+```
+
+Count the lines that start with `//`, `///`, or `<!--`, and the lines that do
+not. Put the two numbers in the commit message of the slice that removes the
+upstream code.
+
+**CAUTION: a doc comment that says again what the name of the member says is
+not a comment. It is noise with an XML tag on it.** `CS1591` is in `NoWarn`,
+thus a public member needs no `<summary>` and no error occurs. Do not write
+these:
+
+| Do not write | Why |
+| --- | --- |
+| `/// Starts the software.` on `Main` | That is what `Main` is. |
+| `/// Initializes a new instance of the X class.` | It is the text that an IDE makes. It gives nothing. |
+| `/// <param name="logger">The logger from the container.</param>` | The type is `ILogger<T>` and each service comes from the container. |
+| `/// <returns>The exit code.</returns>` on a method that gives `int` | The signature says it. |
+| `/// <summary><c>true</c> if the lane records.</summary>` on `IsRecording` | The name says it. |
+
+Write a `<summary>` when it gives a fact that the signature does not: a unit, a
+limit, a condition of the thread, or what occurs at an error.
+
 ---
 
 ## 12. CAD and OpenSCAD

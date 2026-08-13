@@ -23,21 +23,14 @@
         xmlns:fonts="using:GemmaTranslator.Fonts">
 
   <!--
-    The type of the design.
+    The panel gives 11.6 pixels for one millimetre, thus a control that a
+    finger touches needs 105 pixels and the smallest text at the distance of an
+    arm is 24 pixels.
 
-    Upstream uses a monospace stack at each position and its canvas is 480
-    pixels wide (style.css). This canvas is 1280 pixels wide on a panel of
-    11.6 pixels for one millimetre, thus the dimensions of upstream do not
-    move here and each one comes from the design.
-
-    A class gives the dimension and the weight. It does not give the family
-    for the text of a conversation: that family comes from the language of the
-    lane, because Chinese and Japanese use the same characters with a
-    different correct shape. See Fonts/AppFonts.cs.
+    A class here gives no family for the text of a conversation. That family
+    comes from the language of the lane. See Fonts/AppFonts.cs.
   -->
 
-  <!-- The one line of the idle screen, and the headline of the warning of the
-       very low charge. -->
   <Style Selector="TextBlock.headline">
     <Setter Property="FontSize" Value="46" />
     <Setter Property="FontWeight" Value="Medium" />
@@ -48,15 +41,11 @@
     <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
   </Style>
 
-  <!-- The message of the status pill. It wraps: see the comment of the pill in
-       MainView. -->
   <Style Selector="TextBlock.status">
     <Setter Property="FontSize" Value="28" />
     <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
   </Style>
 
-  <!-- "ENGLISH · HEARD", "JAPANESE · TRANSLATION", and
-       "RECORDING · SPEAKER 1". The tracking is 2 pixels in the design. -->
   <Style Selector="TextBlock.label">
     <Setter Property="FontSize" Value="24" />
     <Setter Property="FontWeight" Value="Medium" />
@@ -64,17 +53,14 @@
     <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
   </Style>
 
-  <!-- The text that a person said, and the translation. The design gives 42,
-       and 34 when the text is longer than 70 characters. The view model gives
-       the dimension, thus this class gives only what does not change. -->
+  <!-- The view model gives the dimension: 42, and 34 when the text is longer
+       than 70 characters. -->
   <Style Selector="TextBlock.conversation">
     <Setter Property="FontSize" Value="42" />
     <Setter Property="TextWrapping" Value="Wrap" />
     <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
   </Style>
 
-  <!-- "ACCENT COLOR", "APPEARANCE", "SPEECH OUTPUT", "VISUALIZER DENSITY",
-       "ABOUT", and "STARTING UP". -->
   <Style Selector="TextBlock.section-label">
     <Setter Property="FontSize" Value="20" />
     <Setter Property="FontWeight" Value="Medium" />
@@ -89,16 +75,11 @@
   </Style>
 
   <!--
-    Each numeral that the display shows: the charge of the cells, the time of a
-    recording, the clock, the count of the bars, and the percentage of the
-    warm-up.
-
-    This class gives the family and not the dimension, because the design uses
-    the same face at 22, 26, 34, 44, and 150 pixels.
+    This class gives the family and not the dimension. The design uses the same
+    face at 22, 26, 34, 44, and 150 pixels.
 
     "+tnum" gives one width to each numeral. Each font of this software already
-    does that, thus the value is a statement of what the display needs and not
-    a correction of the font.
+    does that.
   -->
   <Style Selector="TextBlock.numeric">
     <Setter Property="FontFamily" Value="{x:Static fonts:AppFonts.MonoFamily}" />

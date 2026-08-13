@@ -14,21 +14,16 @@
     below, and no other part of the software reads it.
 
     The accent that the software uses before a person selects one is NOT here.
-    It is UserSettings.AccentColor, because the store must refuse a value that
-    no swatch holds.
+    It is UserSettings.AccentColor.
 
-    The mark here is a placeholder. It is 5 bars, which is the shape of a
-    voice. It is not the mark of a company and it must not become one that
-    looks like the mark of a company.
+    The mark here is a placeholder. It is not the mark of a company and it must
+    not become one that looks like the mark of a company.
 
     CAUTION: do not put a file of a brand in git. The owner of the appliance
     keeps that file and puts it here on the machine that makes the build.
 
     A designer gives a mark as the path of an SVG. Put that path in the
-    StreamGeometry below and the swap is complete: the geometry takes the
-    colour of the theme, thus it is correct in the light variant and in the
-    dark one. An image of pixels does not do that and it needs a file for each
-    variant.
+    StreamGeometry below.
   -->
 
   <!--

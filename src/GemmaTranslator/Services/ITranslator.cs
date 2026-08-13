@@ -18,32 +18,8 @@
 
 namespace GemmaTranslator.Services;
 
-/// <summary>
-/// Translates text from one language into a different language.
-/// </summary>
-/// <remarks>
-/// <para>
-/// The interface is here because the source of the translation can change. Now
-/// it is the LiteRT-LM server, which speaks the OpenAI protocol on port 9379.
-/// A C API is in the LiteRT-LM package (<c>c/engine.h</c>), thus a machine with
-/// no Python is possible later. That change must be a change of one line in
-/// <c>ServiceRegistration.cs</c>, and not a change at each call.
-/// </para>
-/// <para>
-/// An interface is for a different platform or a different distribution, and
-/// not for a fake.
-/// </para>
-/// </remarks>
 public interface ITranslator
 {
-    /// <summary>
-    /// Translates the text that the microphone heard.
-    /// </summary>
-    /// <param name="text">The text in the language of the person who spoke.</param>
-    /// <param name="source">The language of the person who spoke.</param>
-    /// <param name="target">The language of the other person.</param>
-    /// <param name="cancellationToken">Stops the call.</param>
-    /// <returns>The translation, the time, and the quantity of tokens.</returns>
     /// <exception cref="TranslationException">
     /// The server is not available, or it sends an error.
     /// </exception>

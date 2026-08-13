@@ -18,15 +18,11 @@
 
 namespace GemmaTranslator.Services;
 
-/// <summary>
-/// What one translation gives back.
-/// </summary>
 /// <param name="Translation">The text in the language of the other person.</param>
 /// <param name="Duration">The time that the call to the server took.</param>
 /// <param name="TotalTokens">
 /// The quantity of tokens that the model used, or 0 if the server sends no
 /// count. `litert-lm serve` sends no <c>usage</c> object, thus it is 0 today.
-/// Upstream does the same at <c>api.js:149</c>.
 /// </param>
 public sealed record TranslationResult(
     string Translation,

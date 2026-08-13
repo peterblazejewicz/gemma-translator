@@ -49,9 +49,6 @@
   -->
 
   <UserControl.Styles>
-    <!-- The charge of the cells. The two conditions do not follow the accent:
-         a person can select the green swatch, and a warning in green says the
-         opposite of what it means. -->
     <Style Selector="controls|BatteryGlyph">
       <Setter Property="Stroke" Value="{DynamicResource InkBrush}" />
       <Setter Property="Fill" Value="{DynamicResource AccentBrush}" />
@@ -75,7 +72,6 @@
       <Setter Property="Foreground" Value="{DynamicResource BatteryDangerBrush}" />
     </Style>
 
-    <!-- A text of the conversation that is a message and not speech. -->
     <Style Selector="TextBlock.conversation.muted">
       <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
     </Style>
@@ -131,12 +127,8 @@
   <Panel Background="{DynamicResource PageBrush}">
     <Grid RowDefinitions="*,56,168" IsVisible="{Binding IsConversation}">
 
-      <!-- ================= the conversation ================= -->
       <Panel Grid.Row="0">
 
-        <!-- The prompt of the idle screen. It goes away at the first
-             conversation and does not come back: a person who used the
-             appliance one time knows what to do. -->
         <StackPanel IsVisible="{Binding IsIdlePrompt}"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
@@ -156,11 +148,19 @@
                      HorizontalAlignment="Center" />
         </StackPanel>
 
-        <!-- The two texts. The bubble of the speaker goes above the lane of
-             that speaker. -->
-        <!-- The visibility reads the shell and the content reads the exchange,
-             thus the two are on different elements: x:DataType applies to each
-             binding of the element that carries it. -->
+        <!--
+          The two texts. The bubble of the speaker goes above the lane of that
+          speaker.
+
+          CAUTION: the two texts need a different type from the shell, and a
+          DataTemplate is the one way to change it. x:DataType applies to the
+          element that carries it, thus a DataContext binding on that same
+          element would look for its own path in the new type and not in the
+          shell.
+
+          A Content of null draws nothing, thus this needs no test of the
+          visibility.
+        -->
         <ContentControl Content="{Binding Exchange}" VerticalAlignment="Center">
           <ContentControl.ContentTemplate>
             <DataTemplate x:DataType="vm:Exchange">
@@ -188,7 +188,6 @@
               <StackPanel Orientation="Horizontal" Spacing="12">
                 <TextBlock Classes="label" Text="{Binding TargetLabel}" />
 
-                <!-- The appliance speaks the translation now. -->
                 <Viewbox Width="22" Height="22" IsVisible="{Binding IsSpeaking}">
                   <Canvas Width="24" Height="24">
                     <Path Data="M11,5 L6,9 L2,9 L2,15 L6,15 L11,19 Z"
@@ -223,7 +222,6 @@
           </ContentControl.ContentTemplate>
         </ContentControl>
 
-        <!-- The charge of the cells. -->
         <StackPanel Orientation="Horizontal"
                     Spacing="10"
                     HorizontalAlignment="Right"
@@ -244,9 +242,6 @@
                      FontSize="26"
                      VerticalAlignment="Center" />
 
-          <!-- The way into the settings. It goes away while the microphone is
-               open: a person must not open a screen in the middle of a
-               sentence, and the recording pill needs the room. -->
           <Button Classes="chrome"
                   Margin="8,0,0,0"
                   IsVisible="{Binding !IsRecording}"
@@ -266,9 +261,6 @@
           </Button>
         </StackPanel>
 
-        <!-- One sentence for a person. It wraps and it does not stop with
-             three points: the appliance has no keyboard, thus a person cannot
-             ask for the remainder of a message that is cut. -->
         <Border Classes="pill"
                 IsVisible="{Binding IsStatusVisible}"
                 MaxWidth="760"
@@ -289,8 +281,6 @@
           </StackPanel>
         </Border>
 
-        <!-- The microphone is open. A person who is not the speaker must see
-             this from a distance. -->
         <Border Classes="pill"
                 IsVisible="{Binding IsRecording}"
                 Background="{DynamicResource InverseBrush}">
@@ -315,7 +305,6 @@
         </Border>
       </Panel>
 
-      <!-- ================= the visualizer ================= -->
       <Grid Grid.Row="1"
             ColumnDefinitions="*,2,*"
             Background="{DynamicResource PageBrush}">
@@ -338,7 +327,6 @@
                                   IdleBrush="{DynamicResource MutedBrush}" />
       </Grid>
 
-      <!-- ================= the two lanes ================= -->
       <Grid Grid.Row="2" ColumnDefinitions="*,2,*">
         <Border Grid.ColumnSpan="3"
                 BorderThickness="0,2,0,0"
@@ -353,12 +341,8 @@
 
     </Grid>
 
-    <!-- The model comes into the memory. -->
     <v:WarmUpView IsVisible="{Binding IsWarmUp}" />
 
-    <!-- The settings screen, and the way out of it. The target is here and not
-         in that screen, because this view model owns the condition of the
-         layer. -->
     <Panel IsVisible="{Binding IsSettingsOpen}">
       <v:SettingsView DataContext="{Binding Settings}" />
 
@@ -380,11 +364,8 @@
       </Button>
     </Panel>
 
-    <!-- The display is dark and it waits for a touch. -->
     <v:ScreensaverView IsVisible="{Binding IsScreensaver}" />
 
-    <!-- The charge is so low that the appliance stops in minutes. This goes
-         above each other layer. -->
     <v:CriticalBatteryView IsVisible="{Binding IsCriticalBattery}" />
   </Panel>
 
