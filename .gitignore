@@ -161,3 +161,11 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 *~
+
+# -----------------------------------------------------------------------------
+# Development tools
+# tools/ holds the screenshot harness, which renders the Avalonia views to PNG
+# so they can be inspected without a display. It is not part of the appliance
+# and is not listed in GemmaTranslator.slnx. See CLAUDE.md section 5.2.
+# -----------------------------------------------------------------------------
+/tools/

@@ -50,6 +50,17 @@ public partial class App : Application
     /// </remarks>
     public override void OnFrameworkInitializationCompleted()
     {
+        // Avalonia calls this method also when there is no lifetime, which is
+        // what SetupWithoutStarting does. The work below opens the microphone
+        // and starts the monitor of the electrical supply. Neither is correct
+        // when nothing shows a view: the software would hold the capture device
+        // of the appliance with no display and no way to release it.
+        if (ApplicationLifetime is null)
+        {
+            base.OnFrameworkInitializationCompleted();
+            return;
+        }
+
         IConfiguration configuration = ServiceRegistration.BuildConfiguration();
 
         ServiceCollection services = new();

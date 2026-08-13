@@ -45,6 +45,15 @@ public static class AppFonts
     /// <summary>The family for Korean text.</summary>
     public const string Korean = $"{GemmaFontCollection.CollectionUri}#Noto Sans KR";
 
+    /// <summary>The family for a numeral that the display shows.</summary>
+    /// <remarks>
+    /// The design gives a monospace face to the charge of the cells, to the
+    /// time of a recording, to the clock, and to the count of the bars. Each
+    /// one of the 5 other files also gives one width to each numeral, thus this
+    /// family is for the appearance of the design and not for the function.
+    /// </remarks>
+    public const string Mono = $"{GemmaFontCollection.CollectionUri}#Noto Sans Mono";
+
     /// <summary>
     /// Gets the font for the text of one language.
     /// </summary>

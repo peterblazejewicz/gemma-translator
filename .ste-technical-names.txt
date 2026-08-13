@@ -278,3 +278,56 @@ state
 fuel gauge
 significant
 repeated
+
+# --- names of the user interface ---
+#
+# design       - the design (n), which Claude Design made. It is the artefact
+#                that specifies the user interface, and the name of the tool
+#                that made it. The dictionary approves the verb only.
+# medium       - Medium, the name of the weight 500 of a font. It is a value
+#                of Avalonia FontWeight and part of a file name.
+# idle         - Idle, the name of the state where the appliance waits for a
+#                button. It is the term of the brief and a value of the state.
+# screensaver  - the screen that comes after a quiet interval. It is the term
+#                of the brief.
+# drum         - the language selector. The list turns behind a small window,
+#                like the drum of a revolver. It is the term of the brief and
+#                of the upstream component LanguageLane.jsx.
+# visualizer   - the bars that show the level of the audio. It is the name of
+#                the upstream component Visualizer.jsx.
+# accent       - the accent colour, which a person selects. It is the name of
+#                the token in the design and of the row in the settings.
+# theme        - the theme (n) of the display: the light variant and the dark
+#                variant. It is the name of the Avalonia facility
+#                (ThemeVariant, ThemeDictionaries).
+# overlay      - a layer above the surface. The DRM backend makes no popup,
+#                thus each dialog is an overlay. It is also the name of the
+#                upstream component SettingsOverlay.jsx and of the device tree
+#                overlay of the GPIO configuration.
+# glyph        - the shape of one character in a font. It is the name in
+#                Avalonia GlyphTypeface and in OpenType.
+# bitmap       - an image of pixels. It is the name of the Avalonia type.
+# headless     - the Avalonia platform that makes no window. It is the name of
+#                the package Avalonia.Headless.
+# screenshot   - an image of the display, which the harness writes to a file.
+# harness      - the software that starts the user interface and writes a
+#                screenshot. It is not a test project. See section 5.2.
+# battery      - the two cells of the appliance, and the name that the display
+#                shows. The Linux power_supply class uses this word.
+# splash       - the image that the system shows before the software starts.
+design
+medium
+idle
+screensaver
+drum
+visualizer
+accent
+theme
+overlay
+glyph
+bitmap
+headless
+screenshot
+harness
+battery
+splash
