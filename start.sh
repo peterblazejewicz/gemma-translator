@@ -13,16 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Unified startup script for Gemma Audio Web App
-# Launches litert-lm + backend/server.py (+ Vite dev server in dev mode)
+# The startup of the appliance. It starts three processes:
+#
+#   litert-lm            the model, which speaks the OpenAI protocol
+#   backend/server.py    the speech-to-text part and the text-to-speech part
+#   publish/GemmaTranslator --drm   the user interface, on the panel
+#
+# The Vite dev server is gone with frontend/. The user interface is the
+# Avalonia software now, and it needs no browser and no web server.
+#
+# --prod and -p do nothing. The systemd unit gives --prod, and this script
+# takes it so that an old unit does not stop the appliance.
 
 set -e
 
-PROD_MODE=0
 for arg in "$@"; do
-    if [ "$arg" = "--prod" ] || [ "$arg" = "-p" ]; then
-        PROD_MODE=1
-    fi
+    case "$arg" in
+        --prod|-p) ;;
+        *) echo "[start.sh] WARNING: ${arg} is not a known argument." ;;
+    esac
 done
 
 # Ensure PipeWire env is available for volume control (wpctl)
@@ -40,11 +49,13 @@ fi
 
 LITERT_PORT=9379
 API_PORT=3000
-WEB_PORT=5173
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LITERT_CMD="${PROJECT_DIR}/venv/bin/litert-lm serve"
 API_CMD="${PROJECT_DIR}/venv/bin/python3 ${PROJECT_DIR}/backend/server.py"
-WEB_CMD="npm --prefix ${PROJECT_DIR}/frontend run dev"
+
+# The user interface is the Avalonia software. --drm makes it draw on the panel
+# with no window manager and no browser. deploy-pi.sh puts the files here.
+UI_CMD="${PROJECT_DIR}/publish/GemmaTranslator --drm"
 
 CLEANING_UP=0
 cleanup() {
@@ -52,7 +63,7 @@ cleanup() {
     CLEANING_UP=1
     echo "[start.sh] Shutting down..."
     # Kill only tracked child processes, not the entire process group
-    for pid in $LITERT_PID $API_PID $WEB_PID; do
+    for pid in $LITERT_PID $API_PID $UI_PID; do
         [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
     done
     wait 2>/dev/null || true
@@ -70,17 +81,14 @@ for i in $(seq 1 15); do
     sleep 1
 done
 
-# Check node_modules
-cd "${PROJECT_DIR}/frontend"
-if [ ! -d "node_modules" ]; then
-    echo "[start.sh] Installing npm dependencies in frontend..."
-    npm install
+# The user interface must be there before anything starts. A missing binary
+# gives a black panel with no cause on it, and the appliance has no console.
+if [ ! -x "${PROJECT_DIR}/publish/GemmaTranslator" ]; then
+    echo "[start.sh] ERROR: ${PROJECT_DIR}/publish/GemmaTranslator is not there."
+    echo "[start.sh] Run deploy-pi.sh, or publish it by hand:"
+    echo "[start.sh]   dotnet publish src/GemmaTranslator -c Release -r linux-arm64 -o publish"
+    exit 1
 fi
-if [ "$PROD_MODE" -eq 1 ] && [ ! -d "dist" ]; then
-    echo "[start.sh] Building production frontend assets..."
-    npm run build
-fi
-cd "$PROJECT_DIR"
 
 # Set system volume to max
 echo "[start.sh] Setting system volume to max..."
@@ -111,24 +119,15 @@ echo "[start.sh] Starting API server on port ${API_PORT}..."
 $API_CMD &
 API_PID=$!
 
-if [ "$PROD_MODE" -eq 1 ]; then
-    echo "[start.sh] Running in PRODUCTION mode (Vite dev server skipped)."
-    echo "[start.sh] All services running."
-    echo "[start.sh] LiteRT-LM PID: $LITERT_PID"
-    echo "[start.sh] API Server PID: $API_PID"
-    echo "[start.sh] Access the UI at http://localhost:${API_PORT}"
-else
-    # Start web UI server
-    echo "[start.sh] Starting Web UI on port ${WEB_PORT}..."
-    $WEB_CMD &
-    WEB_PID=$!
+# Start the user interface on the panel.
+echo "[start.sh] Starting the user interface..."
+$UI_CMD &
+UI_PID=$!
 
-    echo "[start.sh] All services running."
-    echo "[start.sh] LiteRT-LM PID: $LITERT_PID"
-    echo "[start.sh] API Server PID: $API_PID"
-    echo "[start.sh] Web UI PID: $WEB_PID"
-    echo "[start.sh] Access the UI at http://localhost:${WEB_PORT}"
-fi
+echo "[start.sh] All services running."
+echo "[start.sh] LiteRT-LM PID: $LITERT_PID"
+echo "[start.sh] API Server PID: $API_PID"
+echo "[start.sh] User interface PID: $UI_PID"
 
 # Wait for any child to exit (then the trap will clean up the others)
 wait -n

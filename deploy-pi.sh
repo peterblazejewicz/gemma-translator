@@ -47,22 +47,16 @@ else
     echo "[INFO] apt-get not detected. Skipping Debian package installation."
 fi
 
-# Node.js/npm preflight — the frontend build (step 3) requires Node 18+ (Vite 5).
-# Debian/Raspberry Pi OS Bookworm ships Node 18 via apt, which satisfies this.
-if ! command -v npm &> /dev/null; then
-    if command -v apt-get &> /dev/null; then
-        echo "[INFO] Node.js/npm not found. Installing via apt..."
-        sudo apt-get install -y nodejs npm
-    else
-        echo "[ERROR] npm is required but not installed, and apt-get is unavailable."
-        echo "[ERROR] Install Node.js 18+ (https://nodejs.org/) and re-run this script."
-        exit 1
-    fi
+# The .NET SDK makes the user interface. Node.js is gone with frontend/.
+if ! command -v dotnet &> /dev/null; then
+    echo "[ERROR] The .NET SDK is not installed."
+    echo "[ERROR] Install .NET 10 for linux-arm64: https://dot.net/download"
+    exit 1
 fi
-NODE_MAJOR="$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1)"
-if [ -n "$NODE_MAJOR" ] && [ "$NODE_MAJOR" -lt 18 ] 2>/dev/null; then
-    echo "[WARNING] Node.js v${NODE_MAJOR} detected, but v18+ is required by the frontend build."
-    echo "[WARNING] Step 3 (npm build) may fail. Please upgrade Node.js first."
+DOTNET_MAJOR="$(dotnet --version 2>/dev/null | cut -d. -f1)"
+if [ -n "$DOTNET_MAJOR" ] && [ "$DOTNET_MAJOR" -lt 10 ] 2>/dev/null; then
+    echo "[WARNING] .NET v${DOTNET_MAJOR} is installed and the software needs v10."
+    echo "[WARNING] Step 4 can fail. Install .NET 10 first."
 fi
 
 echo "[2/10] Installing the GPIO overlay and the udev rule..."
@@ -174,9 +168,13 @@ fi
 echo "[3/10] Running backend environment setup..."
 "${PROJECT_DIR}/setup.sh"
 
-echo "[4/10] Installing frontend dependencies & building production UI..."
-npm --prefix "${PROJECT_DIR}/frontend" install
-npm --prefix "${PROJECT_DIR}/frontend" run build
+echo "[4/10] Publishing the user interface..."
+# The Avalonia software replaces the React user interface. It goes in publish/,
+# which start.sh starts with --drm.
+#
+# CAUTION: the runtime identifier must be linux-arm64. A publish with no
+# identifier gives a binary that this machine cannot start.
+dotnet publish "${PROJECT_DIR}/src/GemmaTranslator"     -c Release     -r linux-arm64     --self-contained false     -o "${PROJECT_DIR}/publish"
 
 echo "[5/10] Downloading LiteRT model..."
 "${PROJECT_DIR}/download_model.sh"

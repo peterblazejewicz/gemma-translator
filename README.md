@@ -2,7 +2,7 @@
 
 # Gemma Translator
 
-This repo was built with the assistance of [Google Antigravity](https://antigravity.google/) and includes code to run an on-device, fully offline voice translator powered by [Gemma 4](https://ai.google.dev/gemma/docs/core) and [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-lm). This project features a web frontend optimized for small handheld displays (e.g., 480x320) and a Python API server (`http.server`) that communicates with Gemma. Text-to-speech is powered by [Moonshine](https://github.com/moonshine-ai/moonshine).
+This repo was built with the assistance of [Google Antigravity](https://antigravity.google/) and includes code to run an on-device, fully offline voice translator powered by [Gemma 4](https://ai.google.dev/gemma/docs/core) and [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-lm). This fork replaces the web frontend with an Avalonia user interface on .NET, which draws on the panel of the appliance with no browser and no window manager. A Python API server (`http.server`) holds the speech-to-text part and the text-to-speech part. Text-to-speech is powered by [Moonshine](https://github.com/moonshine-ai/moonshine).
 
 https://github.com/user-attachments/assets/343072ce-dc78-44a7-a783-99312845cabe
 
@@ -11,12 +11,12 @@ https://github.com/user-attachments/assets/343072ce-dc78-44a7-a783-99312845cabe
 - **On-Device Inference**: Uses LiteRT-LM to run the `gemma4-e2b` model entirely locally. No internet required after setup.
 - **Voice Interface**: Captures microphone audio, processes it, and sends it to the local model.
 - **Optimized UI**: Retro-terminal styling custom-built for small hardware screens (like Raspberry Pi displays).
-- **Unified Startup**: One script to launch the LLM server, the Python API, and the React frontend.
+- **Unified Startup**: One script to launch the LLM server, the Python API, and the Avalonia user interface.
 
 ## Prerequisites
 
 - Python 3.10+
-- Node.js 18+ (20 LTS recommended) & npm — installed automatically by `deploy-pi.sh` on Raspberry Pi OS / Debian
+- .NET SDK 10 for `linux-arm64` — `deploy-pi.sh` makes sure that it is there
 - Linux or macOS
 
 ## Required Hardware
@@ -50,19 +50,18 @@ https://github.com/user-attachments/assets/343072ce-dc78-44a7-a783-99312845cabe
 
 ## Running the Application
 
-Start all services (LiteRT-LM, the Python API server, and the Vite Web UI) in development mode:
+Start all services (LiteRT-LM, the Python API server, and the user interface):
 ```bash
 ./start.sh
 ```
 
-To run in production mode (skipping Vite dev server and serving compiled UI assets from `frontend/dist/` via `backend/server.py` on port 3000):
-```bash
-./start.sh --prod
-```
+`--prod` and `-p` do nothing. The systemd unit gives `--prod`, and `start.sh`
+takes it so that an old unit does not stop the appliance.
 
-The application will be accessible at:
-- **Web UI (Dev)**: `http://localhost:5173`
-- **Web UI (Prod) / API server**: `http://localhost:3000`
+The user interface draws on the panel of the appliance. It is not a page, thus
+there is no address for it. The two servers are here:
+
+- **API server (speech-to-text, text-to-speech)**: `http://localhost:3000`
 - **LiteRT-LM**: `http://localhost:9379`
 
 ## Raspberry Pi Appliance Deployment
@@ -75,7 +74,7 @@ This automated script installs Debian audio/venv packages, sets up the Python en
 
 ## Project Structure
 
-- `frontend/` - React (Vite) web frontend (`index.html`, `src/`, styles, and Vite configuration).
+- `src/GemmaTranslator/` - the Avalonia user interface on .NET 10.
 - `backend/` - Python API server (`server.py` and `requirements.txt`) for Moonshine STT, moonshine-voice TTS, and model proxying.
 - `deploy/` - Parameterizable systemd service unit template (`gemma-translator.service`).
 - `stl/` - STL files for 3D printing the hardware case.

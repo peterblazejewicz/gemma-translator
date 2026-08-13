@@ -15,8 +15,6 @@
 import http.server
 import socketserver
 import urllib.request
-import urllib.error
-import urllib.parse
 import os
 import base64
 import io
@@ -33,6 +31,11 @@ from collections import OrderedDict
 # Multilingual STT via Moonshine.
 # Language is fixed at recognizer construction, so we lazily build (and cache) one
 # recognizer per language actually used.
+# This server holds the speech-to-text part and the text-to-speech part, and
+# nothing else. The static files, /proxy and /api/volume went away with
+# frontend/: the user interface is the Avalonia software now, it needs no
+# browser, it speaks to litert-lm directly, and the speakerphone has its own
+# buttons for the volume.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUPPORTED_STT_LANGS = {"en", "ar", "es", "ja", "zh", "ko"}
 MAX_MODELS = 2
@@ -104,82 +107,6 @@ def get_stt_recognizer(language="en"):
 PORT = 3000
 
 class ProxyHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
-    def end_headers(self):
-        # Add CORS headers
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE')
-        self.send_header('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, x-target-url, authorization')
-        super().end_headers()
-
-    def do_OPTIONS(self):
-        self.send_response(200)
-        self.end_headers()
-
-    def handle_proxy(self):
-        # Parse query parameter "url"
-        parsed_path = urllib.parse.urlparse(self.path)
-        query = urllib.parse.parse_qs(parsed_path.query)
-        target_url = query.get('url', [None])[0]
-
-        if not target_url:
-            self.send_response(400)
-            self.end_headers()
-            self.wfile.write(b'Error: Missing "url" query parameter.')
-            return
-
-        # Restrict target URL to local LLM endpoint (http/https localhost/127.0.0.1)
-        parsed_target = urllib.parse.urlparse(target_url)
-        if parsed_target.scheme not in ('http', 'https') or parsed_target.hostname not in ('localhost', '127.0.0.1') or parsed_target.port not in (9379, None):
-            self.send_response(403)
-            self.end_headers()
-            self.wfile.write(b'Forbidden: Proxy target must be localhost:9379')
-            return
-
-        print(f"[Proxy] Routing {self.command} request to: {target_url}")
-        
-        # Read request body if method is POST/PUT/PATCH
-        body = None
-        if self.command in ['POST', 'PUT', 'PATCH']:
-            content_length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(content_length)
-
-        # Build request to target url
-        req = urllib.request.Request(
-            target_url,
-            data=body,
-            method=self.command
-        )
-
-        # Forward headers (Content-Type, Authorization, etc.)
-        for key, val in self.headers.items():
-            if key.lower() not in ['host', 'connection', 'content-length', 'x-target-url']:
-                req.add_header(key, val)
-
-        try:
-            with urllib.request.urlopen(req, timeout=300) as response:
-                res_body = response.read()
-                self.send_response(response.status)
-                # Forward response headers
-                for key, val in response.headers.items():
-                    if key.lower() not in ['content-length', 'connection']:
-                        self.send_header(key, val)
-                self.end_headers()
-                self.wfile.write(res_body)
-        except urllib.error.HTTPError as e:
-            print(f"[Proxy Error] HTTP Error {e.code}: {e.reason}")
-            try:
-                res_body = e.read()
-            except Exception:
-                res_body = str(e).encode('utf-8')
-            self.send_response(e.code)
-            self.end_headers()
-            self.wfile.write(res_body)
-        except Exception as e:
-            print(f"[Proxy Error] Exception: {e}")
-            self.send_response(500)
-            self.end_headers()
-            self.wfile.write(str(e).encode('utf-8'))
-
     def handle_tts(self):
         parsed_path = urllib.parse.urlparse(self.path)
         query = urllib.parse.parse_qs(parsed_path.query)
@@ -260,209 +187,21 @@ class ProxyHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(str(e).encode('utf-8'))
 
-    def handle_volume(self):
-        client_ip = self.client_address[0]
-        if client_ip not in ('127.0.0.1', '::1', 'localhost'):
-            self.send_response(403)
-            self.end_headers()
-            self.wfile.write(b'Forbidden: Volume control is only accessible locally')
-            return
-
-        try:
-            content_length = int(self.headers.get('Content-Length', 0))
-            if content_length > 0:
-                body = self.rfile.read(content_length)
-                data = json.loads(body.decode('utf-8')) if body else {}
-                action = data.get('action')
-            else:
-                action = "get"
-            
-            import subprocess
-            import re
-            
-            # PipeWire/wpctl needs XDG_RUNTIME_DIR to find its socket.
-            # The server process may not have it set (e.g. when launched by systemd).
-            env = os.environ.copy()
-            if 'XDG_RUNTIME_DIR' not in env:
-                uid = os.getuid()
-                env['XDG_RUNTIME_DIR'] = f'/run/user/{uid}'
-            
-            def get_vol():
-                # Try wpctl (PipeWire) first - outputs "Volume: 0.75"
-                try:
-                    out = subprocess.check_output(
-                        ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"],
-                        text=True, timeout=2, env=env
-                    )
-                    m = re.search(r'Volume:\s+([0-9.]+)', out)
-                    if m:
-                        return round(float(m.group(1)) * 100)
-                except Exception:
-                    pass
-                # Try pactl (PulseAudio)
-                try:
-                    out = subprocess.check_output(
-                        ["pactl", "get-sink-volume", "@DEFAULT_SINK@"],
-                        text=True, timeout=2, env=env
-                    )
-                    m = re.search(r'(\d+)%', out)
-                    if m:
-                        return int(m.group(1))
-                except Exception:
-                    pass
-                # Try amixer
-                try:
-                    out = subprocess.check_output(
-                        ["amixer", "sget", "Master"],
-                        text=True, timeout=2, env=env
-                    )
-                    m = re.search(r'\[(\d+)%\]', out)
-                    if m:
-                        return int(m.group(1))
-                except Exception:
-                    pass
-                return None
-
-            def set_vol(direction):
-                # Try wpctl first
-                try:
-                    arg = "5%+" if direction == "up" else "5%-"
-                    subprocess.run(
-                        ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", arg],
-                        check=True, timeout=2, env=env,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                    )
-                    return True
-                except Exception:
-                    pass
-                # Try pactl
-                try:
-                    arg = "+5%" if direction == "up" else "-5%"
-                    subprocess.run(
-                        ["pactl", "set-sink-volume", "@DEFAULT_SINK@", arg],
-                        check=True, timeout=2, env=env,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                    )
-                    return True
-                except Exception:
-                    pass
-                # Try amixer
-                try:
-                    arg = "5%+" if direction == "up" else "5%-"
-                    subprocess.run(
-                        ["amixer", "sset", "Master", arg],
-                        check=True, timeout=2, env=env,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                    )
-                    return True
-                except Exception:
-                    pass
-                return False
-
-            success = False
-            if action in ("up", "down"):
-                success = set_vol(action)
-            elif action == "get":
-                success = True
-
-            if success:
-                current_vol = get_vol()
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "ok", "volume": current_vol}).encode('utf-8'))
-            else:
-                self.send_response(500)
-                self.end_headers()
-                self.wfile.write(b'Failed to change system volume')
-        except Exception as e:
-            self.send_response(500)
-            self.end_headers()
-            self.wfile.write(str(e).encode('utf-8'))
-
     def do_POST(self):
-        if self.path.startswith('/proxy'):
-            self.handle_proxy()
-            return
         if self.path.startswith('/api/stt'):
             self.handle_stt()
             return
-        if self.path.startswith('/api/volume'):
-            self.handle_volume()
-            return
-        
+
         self.send_response(404)
         self.end_headers()
 
     def do_GET(self):
-        if self.path.startswith('/proxy'):
-            self.handle_proxy()
-            return
-
         if self.path.startswith('/api/tts'):
             self.handle_tts()
             return
-            
-        if self.path.startswith('/api/volume'):
-            self.handle_volume()
-            return
 
-        # Clean path to serve static files (strip any ?query cache-buster)
-        url_path = self.path.split('?', 1)[0]
-        if url_path == '/':
-            url_path = '/index.html'
-
-        dist_dir = os.path.realpath(os.path.join(BASE_DIR, '..', 'frontend', 'dist'))
-        if not os.path.exists(dist_dir):
-            dist_dir = os.path.realpath(os.path.join(BASE_DIR, 'dist'))
-        if not os.path.exists(dist_dir):
-            self.send_response(404)
-            self.end_headers()
-            self.wfile.write(b'dist/ directory not found')
-            return
-
-        filename = url_path.lstrip('/')
-        filepath = os.path.realpath(os.path.join(dist_dir, filename))
-        
-        # Check if the file is within dist directory
-        if not filepath.startswith(dist_dir + os.sep) and filepath != dist_dir:
-            self.send_response(403)
-            self.end_headers()
-            self.wfile.write(b'Forbidden')
-            return
-
-        if not os.path.exists(filepath) or os.path.isdir(filepath):
-            self.send_response(404)
-            self.end_headers()
-            self.wfile.write(b'File not found')
-            return
-
-        # Determine MIME type
-        ext = os.path.splitext(filepath)[1].lower()
-        mime_types = {
-            '.html': 'text/html',
-            '.css': 'text/css',
-            '.js': 'application/javascript',
-            '.json': 'application/json',
-            '.png': 'image/png',
-            '.jpg': 'image/jpeg',
-            '.gif': 'image/gif',
-            '.svg': 'image/svg+xml',
-            '.ico': 'image/x-icon',
-        }
-        content_type = mime_types.get(ext, 'application/octet-stream')
-
-        # Read and serve file
-        try:
-            with open(filepath, 'rb') as f:
-                self.send_response(200)
-                self.send_header('Content-Type', content_type)
-                self.end_headers()
-                self.wfile.write(f.read())
-        except Exception as e:
-            self.send_response(500)
-            self.end_headers()
-            self.wfile.write(str(e).encode('utf-8'))
+        self.send_response(404)
+        self.end_headers()
 
 if __name__ == '__main__':
     # Allow port reuse

@@ -1,0 +1,17 @@
+# Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+# SPDX-License-Identifier: Apache-2.0
+#
+# The theme that shows the mark of the appliance at the start and at the stop.
+#
+# CAUTION: the two images are 720 x 1280 and the art in them is 90 degrees
+# around. The panel is native portrait, and nothing turns the framebuffer
+# before the software of the appliance starts. See section 11 of README.md.
+
+[Plymouth Theme]
+Name=Gemma Translator
+Description=The mark of the appliance on a black ground
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/gemma
+ScriptFile=/usr/share/plymouth/themes/gemma/gemma.script

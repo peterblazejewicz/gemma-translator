@@ -894,3 +894,107 @@ operate, thus a person can put `config.txt` back.
 
 The panel is `ili9881c-dsi`. The driver gives it the name `dsi-5inch`, with 2
 lanes, on `1f00118000.dsi`.
+
+---
+
+## 11. The images of the start and the stop
+
+The appliance shows a mark on a black ground while the system starts and while
+it stops. The software of the appliance does not make these images: the system
+shows them before the process starts and after it stops.
+
+### 11.1 The files
+
+| File | Function |
+| --- | --- |
+| `deploy/assets/boot-splash-720x1280.png` | The start |
+| `deploy/assets/shutdown-splash-720x1280.png` | The stop |
+| `deploy/plymouth/gemma.plymouth` | The theme |
+| `deploy/plymouth/gemma.script` | The script of the theme |
+
+**CAUTION: the two images are 720 x 1280 and the art in them is 90 degrees
+around.** The panel is native portrait. `video=` of `cmdline.txt` turns the
+console only, and Plymouth draws before that applies. Thus an image that is
+upright in its file comes on the panel on its side.
+
+To make sure of an image, turn it 90 degrees in the other direction and look at
+it. The art must then be upright.
+
+The mark in these two files is the mark of `Assets/Branding.axaml`, which is a
+placeholder. The owner puts the mark of the brand in its position. Do not put a
+file of a brand in git.
+
+### 11.2 Installation
+
+```bash
+sudo apt-get install -y plymouth plymouth-themes
+sudo mkdir -p /usr/share/plymouth/themes/gemma
+sudo cp deploy/plymouth/gemma.plymouth deploy/plymouth/gemma.script \
+        deploy/assets/*.png /usr/share/plymouth/themes/gemma/
+sudo plymouth-set-default-theme -R gemma
+```
+
+`-R` makes the initramfs again. Without it the system keeps the theme that it
+had.
+
+Then put these words in `/boot/firmware/cmdline.txt`, on the one line that is
+already there:
+
+```text
+quiet splash logo.nologo vt.global_cursor_default=0 loglevel=3
+```
+
+| Word | Function |
+| --- | --- |
+| `quiet` | The kernel writes less. |
+| `splash` | Plymouth operates. |
+| `logo.nologo` | The raspberries at the top of the display go away. |
+| `vt.global_cursor_default=0` | The cursor of the console does not blink. |
+| `loglevel=3` | A message of the system does not come on top of the image. |
+
+**CAUTION: `cmdline.txt` is one line. A new line in it stops the machine at the
+start.** See section 8.13.
+
+### 11.3 How to make sure of the work
+
+**IMPORTANT: nobody has done these steps on the appliance.** The commands come
+from the documents of Plymouth and of Raspberry Pi OS. Do each step and record
+what occurs.
+
+1. `plymouth-set-default-theme` with no argument gives the name of the theme.
+   It must give `gemma`.
+2. Start the machine again and look at the display. The mark must be upright
+   and in the middle.
+3. `sudo plymouthd; sudo plymouth --show-splash` shows the image with no start
+   of the machine.
+
+   **CAUTION: do this step through SSH, and not on the console of the
+   appliance.** `plymouthd` takes the DRM device. While it holds that device
+   the software of the appliance cannot get the panel, thus the display keeps
+   the image and the translator does not come. There is no keyboard on the
+   appliance to correct that condition.
+
+   `sudo plymouth --quit` is necessary and it is not optional. If the panel
+   keeps the image after it:
+
+   ```bash
+   sudo systemctl stop plymouth-quit-wait.service
+   sudo plymouth --quit
+   sudo systemctl restart gemma-translator
+   ```
+4. `sudo systemctl poweroff` shows the image of the stop.
+
+If the mark is on its side, the images are not correct: turn each one 90
+degrees and put them in the theme again. If the display stays black, examine
+`journalctl -b -u plymouth-start` and make sure that `splash` is in
+`/proc/cmdline`.
+
+### 11.4 Before the disk of the appliance gets encryption
+
+**CAUTION: `gemma.script` has no `display_password` callback.** The appliance
+has no keyboard and no password now, thus it needs none.
+
+A disk with encryption asks for a password at the start. Plymouth calls
+`display_password`, it finds nothing, and the machine stays at the image with
+no prompt and no cause, for ever. Put that callback in the theme before the
+disk gets encryption, and not after.
