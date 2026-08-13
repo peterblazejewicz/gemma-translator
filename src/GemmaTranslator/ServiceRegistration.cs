@@ -151,7 +151,9 @@ public static class ServiceRegistration
             services.AddSingleton<IPowerMonitor, NoPowerMonitor>();
         }
 
-        // The view models.
+        // The view models. The settings screen is a singleton because the
+        // selections of a person must stay while the screen opens and closes.
+        services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<MainViewModel>();
 
         // The speech-to-text part and the text-to-speech part come later.

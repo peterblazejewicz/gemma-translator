@@ -49,7 +49,20 @@ public sealed record BatteryStatus
     /// <summary>
     /// <c>true</c> if the appliance has its electrical supply.
     /// </summary>
-    public bool IsCharging { get; private init; }
+    public bool IsCharging => MainsOnline == true;
+
+    /// <summary>
+    /// The mains line: <c>true</c>, <c>false</c>, or <c>null</c> for a line
+    /// that the software cannot read or that is not stable.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: the three values are not two. SysfsPowerMonitor gives
+    /// <c>null</c> while the line changes many times each second, which is what
+    /// occurs when the supply cannot give the current that the X1201 and the
+    /// Raspberry Pi use together. That is the condition of a person who
+    /// connects a small charger to an appliance with empty cells.
+    /// </remarks>
+    public bool? MainsOnline { get; private init; }
 
     /// <summary>
     /// <c>true</c> if there is no fuel gauge, thus no charge to show.
@@ -74,7 +87,15 @@ public sealed record BatteryStatus
     /// <summary>
     /// <c>true</c> when the display must show the warning on the full surface.
     /// </summary>
-    public bool IsCritical => IsBelow(CriticalPercent);
+    /// <remarks>
+    /// CAUTION: this one needs <c>false</c> and not "not true". The warning
+    /// covers the surface and nothing below it takes a touch. A mains line
+    /// that is not stable would else show "Connect power now" on a panel that
+    /// answers nothing, to a person who already connected the supply.
+    /// </remarks>
+    public bool IsCritical => MainsOnline == false
+        && Percent is { } percent
+        && percent <= CriticalPercent;
 
     /// <summary>
     /// The charge for the indicator, for example <c>64%</c>.
@@ -100,9 +121,10 @@ public sealed record BatteryStatus
     /// </summary>
     /// <remarks>
     /// CAUTION: a machine that gives a charge but no mains line counts as a
-    /// machine on its cells. A warning while the appliance charges is a small
-    /// problem. No warning while the cells go empty stops the appliance in the
-    /// middle of a conversation.
+    /// machine on its cells for the COLOUR of the indicator. A warning while
+    /// the appliance charges is a small problem, and no warning while the cells
+    /// go empty stops the appliance in the middle of a conversation. The
+    /// warning that covers the surface is different: see IsCritical.
     /// </remarks>
     /// <param name="state">The condition that <see cref="IPowerMonitor"/> read.</param>
     /// <returns>The condition for the display.</returns>
@@ -113,7 +135,7 @@ public sealed record BatteryStatus
         return new BatteryStatus
         {
             Percent = state.Cells is { } cells ? Math.Clamp(cells.Percent, 0, 100) : null,
-            IsCharging = state.MainsOnline == true,
+            MainsOnline = state.MainsOnline,
         };
     }
 

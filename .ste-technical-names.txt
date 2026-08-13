@@ -346,3 +346,37 @@ splash
 #         design and the name of the identifier in the code.
 brush
 bolt
+
+# --- names of the user interface work, second group ---
+#
+# branding  - part of the file name Assets/Branding.axaml. The checker sees an
+#             "-ing" form. Section 8 exempts a file name from STE.
+# binding   - a binding (n) of Avalonia, which connects a property of a view to
+#             a property of a view model. The checker sees an "-ing" form. It is
+#             the name of the facility (Binding, CompiledBinding).
+# padding   - Padding, the property of a control of Avalonia that gives the
+#             space inside its border. The checker sees an "-ing" form.
+# store     - the store (n) of the settings, which is IUserSettingsStore. The
+#             dictionary approves the verb only.
+# thread    - a thread (n) of the process. "The thread of the user interface" is
+#             the name of the one thread that Avalonia permits to touch a
+#             control. The dictionary approves the verb only.
+# recording - a Recording (n), the type that holds the samples of one push of a
+#             button. The checker sees an "-ing" form.
+# danger    - the condition of the cells at 10 % and less. It is the name in the
+#             code (IsDanger, BatteryDangerBrush) and in the design.
+# list      - a list (n): a fallback list of fonts, a list of the languages. The
+#             dictionary approves the verb only. This is the same class of false
+#             result as file, log, and request above.
+# process   - a process (n) of the operating system. litert-lm operates in a
+#             process of its own, which systemd starts. The dictionary approves
+#             PROCEDURE (n) and DO (v), which have a different meaning.
+branding
+binding
+padding
+store
+thread
+recording
+danger
+list
+process

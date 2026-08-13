@@ -1,0 +1,337 @@
+<!--
+  Copyright 2026 Google LLC
+  Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+
+  This file is part of a fork of google-gemma/gemma-translator and has
+  been modified. It replaces frontend/src/components/SettingsOverlay.jsx.
+-->
+
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GemmaTranslator.ViewModels"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GemmaTranslator.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel"
+             d:DesignWidth="1280"
+             d:DesignHeight="720"
+             mc:Ignorable="d">
+
+  <!--
+    The settings screen. It fills the surface, because the DRM backend makes no
+    window and no popup.
+
+    Each control that a person touches is 104 pixels or more. The panel gives
+    11.6 pixels for one millimetre, thus a finger needs 105.
+
+    Upstream has 4 text fields, a mode of the keyboard, a checkbox for the
+    proxy, and a control of the volume. Each one is gone. See
+    SettingsViewModel.
+  -->
+
+  <UserControl.Styles>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+      <Setter Property="CornerRadius" Value="16" />
+      <Setter Property="Padding" Value="26,18" />
+    </Style>
+
+    <!-- A large target that a person touches. Its shape is a full radius. -->
+    <Style Selector="Button.round">
+      <Setter Property="Width" Value="104" />
+      <Setter Property="Height" Value="104" />
+      <Setter Property="CornerRadius" Value="52" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource HairBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="Button.round:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource HairBrush}" />
+    </Style>
+    <Style Selector="Button.round:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    </Style>
+    <Style Selector="Button.round:pressed Path">
+      <Setter Property="Stroke" Value="{DynamicResource AccentInkBrush}" />
+    </Style>
+    <Style Selector="Button.round:disabled">
+      <Setter Property="Opacity" Value="0.35" />
+    </Style>
+    <Style Selector="Button.round Path">
+      <Setter Property="Stroke" Value="{DynamicResource InkBrush}" />
+    </Style>
+
+    <!-- Light and Dark. The one that the appliance uses takes the ink as its
+         ground, which is the same signal that the lane of a speaker uses. -->
+    <Style Selector="Button.variant">
+      <Setter Property="Height" Value="104" />
+      <Setter Property="CornerRadius" Value="52" />
+      <Setter Property="BorderThickness" Value="1.5" />
+      <Setter Property="FontSize" Value="28" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource HairBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.variant:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.variant.chosen /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource InkBrush}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource PageBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.about">
+      <Setter Property="FontSize" Value="22" />
+    </Style>
+  </UserControl.Styles>
+
+  <Panel Background="{DynamicResource PageBrush}">
+    <Grid RowDefinitions="Auto,*" Margin="44,8,36,4">
+
+      <!--
+        The header. The control that closes this screen is not here. The shell owns the
+        condition of this layer, thus MainView draws that target on top of this
+        screen and gives it a command of its own.
+      -->
+      <StackPanel Grid.Row="0" VerticalAlignment="Center">
+        <TextBlock Classes="title" Text="Settings" />
+        <Border Width="48"
+                Height="3"
+                Margin="0,12,0,0"
+                HorizontalAlignment="Left"
+                Background="{DynamicResource AccentBrush}" />
+      </StackPanel>
+
+      <Grid Grid.Row="1"
+            ColumnDefinitions="*,16,*"
+            RowDefinitions="Auto,16,*"
+            Margin="0,8,0,0">
+
+        <!-- ACCENT COLOR, across the two columns. -->
+        <Border Grid.Row="0" Grid.ColumnSpan="3" Classes="card">
+          <StackPanel>
+            <TextBlock Classes="section-label" Text="ACCENT COLOR" />
+            <ItemsControl ItemsSource="{Binding Swatches}" Margin="0,14,0,0">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" Spacing="16" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:AccentSwatch">
+                  <!-- The ring of the swatch that the appliance uses. The
+                       design draws it as two shadows; a border with padding
+                       gives the same two rings and needs no shadow. -->
+                  <Button Width="120"
+                          Height="120"
+                          CornerRadius="60"
+                          Padding="5"
+                          BorderThickness="3"
+                          Background="Transparent"
+                          Classes.ringed="{Binding IsSelected}"
+                          Command="{Binding Pick}">
+                    <Button.Styles>
+                      <!-- CAUTION: the value with no ring is in a style and not
+                           on the element. A value on the element beats a
+                           style, and the ring then does not come. -->
+                      <Style Selector="Button">
+                        <Setter Property="BorderBrush" Value="Transparent" />
+                      </Style>
+                      <Style Selector="Button.ringed">
+                        <Setter Property="BorderBrush" Value="{DynamicResource InkBrush}" />
+                      </Style>
+                      <Style Selector="Button:pointerover /template/ ContentPresenter">
+                        <Setter Property="Background" Value="Transparent" />
+                      </Style>
+                    </Button.Styles>
+                    <Border Width="104"
+                            Height="104"
+                            CornerRadius="52"
+                            Background="{Binding Color}" />
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <!-- The left column. -->
+        <StackPanel Grid.Row="2" Grid.Column="0" Spacing="16">
+
+          <Border Classes="card">
+            <StackPanel>
+              <TextBlock Classes="section-label" Text="APPEARANCE" />
+              <Grid ColumnDefinitions="*,14,*" Margin="0,18,0,0">
+                <Button Grid.Column="0"
+                        Classes="variant"
+                        Classes.chosen="{Binding !IsDark}"
+                        Content="Light"
+                        Command="{Binding UseLightCommand}" />
+                <Button Grid.Column="2"
+                        Classes="variant"
+                        Classes.chosen="{Binding IsDark}"
+                        Content="Dark"
+                        Command="{Binding UseDarkCommand}" />
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <Button Padding="0"
+                  Background="Transparent"
+                  BorderThickness="0"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Stretch"
+                  Command="{Binding ToggleSpeechCommand}">
+            <Border Classes="card" BorderThickness="2" BorderBrush="{DynamicResource HairBrush}">
+              <StackPanel>
+                <TextBlock Classes="section-label" Text="SPEECH OUTPUT" />
+                <Grid ColumnDefinitions="*,Auto" Margin="0,16,0,0">
+                  <TextBlock Grid.Column="0"
+                             Text="Speak translations aloud"
+                             FontSize="26"
+                             VerticalAlignment="Center"
+                             Foreground="{DynamicResource InkBrush}" />
+
+                  <!-- The switch. The knob moves to the other end, thus a
+                       person sees the condition and not only a colour. -->
+                  <Border Grid.Column="1"
+                          Width="160"
+                          Height="88"
+                          CornerRadius="44"
+                          Classes.on="{Binding SpeakTranslations}">
+                    <Border.Styles>
+                      <Style Selector="Border">
+                        <Setter Property="Background" Value="{DynamicResource HairBrush}" />
+                      </Style>
+                      <Style Selector="Border.on">
+                        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+                      </Style>
+                      <Style Selector="Border Border.knob">
+                        <Setter Property="HorizontalAlignment" Value="Left" />
+                      </Style>
+                      <Style Selector="Border.on Border.knob">
+                        <Setter Property="HorizontalAlignment" Value="Right" />
+                      </Style>
+                    </Border.Styles>
+                    <Border Classes="knob"
+                            Width="72"
+                            Height="72"
+                            CornerRadius="36"
+                            Margin="8,0"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource CardBrush}" />
+                  </Border>
+                </Grid>
+                <TextBlock Text="Volume follows the speakerphone buttons"
+                           FontSize="24"
+                           Margin="0,6,0,0"
+                           Foreground="{DynamicResource MutedBrush}" />
+              </StackPanel>
+            </Border>
+          </Button>
+        </StackPanel>
+
+        <!-- The right column. -->
+        <StackPanel Grid.Row="2" Grid.Column="2" Spacing="16">
+
+          <Border Classes="card">
+            <StackPanel>
+              <TextBlock Classes="section-label" Text="VISUALIZER DENSITY" />
+              <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,16,0,0">
+                <Button Grid.Column="0" Classes="round" Command="{Binding RemoveBarsCommand}">
+                  <!-- CAUTION: a Viewbox and not Stretch="Uniform" on the Path.
+                       A line with no height has no area, and Uniform then makes
+                       it a point. -->
+                  <Viewbox Width="32" Height="32">
+                    <Canvas Width="24" Height="24">
+                      <Path Data="M5,12 H19" StrokeThickness="2" StrokeLineCap="Round" />
+                    </Canvas>
+                  </Viewbox>
+                </Button>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                  <TextBlock Classes="numeric"
+                             Text="{Binding VisualizerBars}"
+                             FontSize="44"
+                             Foreground="{DynamicResource InkBrush}"
+                             VerticalAlignment="Center" />
+                  <TextBlock Text="bars"
+                             FontSize="24"
+                             Foreground="{DynamicResource MutedBrush}"
+                             VerticalAlignment="Bottom"
+                             Margin="0,0,0,6" />
+                </StackPanel>
+
+                <Button Grid.Column="2" Classes="round" Command="{Binding AddBarsCommand}">
+                  <Viewbox Width="32" Height="32">
+                    <Canvas Width="24" Height="24">
+                      <Path Data="M5,12 H19 M12,5 V19" StrokeThickness="2" StrokeLineCap="Round" />
+                    </Canvas>
+                  </Viewbox>
+                </Button>
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card">
+            <StackPanel>
+              <TextBlock Classes="section-label" Text="ABOUT" />
+              <StackPanel Margin="0,8,0,0">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Grid.Column="0" Classes="about" Text="Model"
+                             Foreground="{DynamicResource MutedBrush}" />
+                  <TextBlock Grid.Column="1" Classes="about" Text="{Binding ModelName}"
+                             Foreground="{DynamicResource InkBrush}" />
+                </Grid>
+                <Border Height="2" Margin="0,6" Background="{DynamicResource HairBrush}" />
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Grid.Column="0" Classes="about" Text="Battery"
+                             Foreground="{DynamicResource MutedBrush}" />
+                  <TextBlock Grid.Column="1" Classes="about" Text="{Binding BatteryAbout}"
+                             Foreground="{DynamicResource InkBrush}" />
+                </Grid>
+                <Border Height="2" Margin="0,6" Background="{DynamicResource HairBrush}" />
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Grid.Column="0" Classes="about" Text="Version"
+                             Foreground="{DynamicResource MutedBrush}" />
+                  <TextBlock Grid.Column="1" Classes="about"
+                             Text="{x:Static vm:SettingsViewModel.Version}"
+                             Foreground="{DynamicResource InkBrush}" />
+                </Grid>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Grid>
+    </Grid>
+  </Panel>
+
+</UserControl>

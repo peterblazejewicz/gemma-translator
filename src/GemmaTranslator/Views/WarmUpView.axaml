@@ -1,0 +1,114 @@
+<!--
+  Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:controls="using:GemmaTranslator.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GemmaTranslator.ViewModels"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GemmaTranslator.Views.WarmUpView"
+             x:DataType="vm:MainViewModel"
+             d:DesignWidth="1280"
+             d:DesignHeight="720"
+             mc:Ignorable="d">
+
+  <!--
+    The screen that the appliance shows while the model comes into the memory.
+
+    This screen takes no touch. There is no control to hold and no control to
+    stop the operation. A person waits, and the bar shows how much went.
+  -->
+
+  <UserControl.Styles>
+    <!-- The bar of the ProgressBar has its own corner and the control does not
+         give it the value of CornerRadius. -->
+    <Style Selector="ProgressBar /template/ Border#PART_Indicator">
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+  </UserControl.Styles>
+
+  <Panel Background="{DynamicResource PageBrush}">
+
+    <!-- The charge of the cells, in the same corner as the primary surface. A
+         person who starts the appliance must see if it has electrical
+         supply. -->
+    <StackPanel Orientation="Horizontal"
+                Spacing="10"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="0,24,28,0">
+      <controls:BatteryGlyph Width="42"
+                             Height="22"
+                             VerticalAlignment="Center"
+                             Percent="{Binding Battery.Percent}"
+                             IsCharging="{Binding Battery.IsCharging}"
+                             Stroke="{DynamicResource InkBrush}"
+                             Fill="{DynamicResource AccentBrush}"
+                             GroundBrush="{DynamicResource PageBrush}" />
+      <TextBlock Classes="numeric"
+                 Text="{Binding Battery.Text}"
+                 FontSize="26"
+                 Foreground="{DynamicResource MutedBrush}"
+                 VerticalAlignment="Center" />
+    </StackPanel>
+
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+
+      <!-- The mark comes from Assets/Branding.axaml, which is the one location
+           for it. The box of the mark is a proportion, thus one dimension. -->
+      <Path Data="{StaticResource BrandMarkGeometry}"
+            Stretch="Uniform"
+            Width="250"
+            Fill="{DynamicResource InkBrush}"
+            HorizontalAlignment="Center" />
+
+      <TextBlock Classes="section-label"
+                 Text="STARTING UP"
+                 LetterSpacing="3"
+                 Margin="0,52,0,0"
+                 HorizontalAlignment="Center" />
+
+      <TextBlock Text="{Binding WarmUpText}"
+                 FontSize="32"
+                 Foreground="{DynamicResource InkBrush}"
+                 Margin="0,16,0,0"
+                 HorizontalAlignment="Center" />
+
+      <!--
+        The bar is a ProgressBar and not two columns of a Grid. A column takes
+        a GridLength, and WarmUpPercent is a number.
+
+        Thus a Grid needs a class that makes the one from the other. The
+        ProgressBar computes the proportion in the control, and this screen
+        needs no such class and no code behind this file.
+
+        CAUTION: the Value of a RangeBase binds in two directions if you give
+        no Mode. The view model computes this number from a clock, and no
+        part of the display must write it back.
+      -->
+      <ProgressBar Width="520"
+                   Height="12"
+                   MinHeight="12"
+                   CornerRadius="6"
+                   Margin="0,34,0,0"
+                   Minimum="0"
+                   Maximum="100"
+                   Value="{Binding WarmUpPercent, Mode=OneWay}"
+                   Background="{DynamicResource PanelBrush}"
+                   Foreground="{DynamicResource AccentBrush}"
+                   HorizontalAlignment="Center" />
+
+      <TextBlock Classes="numeric"
+                 Text="{Binding WarmUpPercentText}"
+                 FontSize="26"
+                 Foreground="{DynamicResource MutedBrush}"
+                 Margin="0,14,0,0"
+                 HorizontalAlignment="Center" />
+    </StackPanel>
+
+  </Panel>
+
+</UserControl>

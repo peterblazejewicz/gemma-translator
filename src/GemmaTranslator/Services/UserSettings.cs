@@ -36,11 +36,20 @@ namespace GemmaTranslator.Services;
 /// <c>App.jsx:37-41</c>, and it keeps <c>themeColor</c> in <c>localStorage</c>.
 /// </para>
 /// <para>
-/// CAUTION: each member gives its value here and not in a constructor of
-/// positions. <c>System.Text.Json</c> gives an absent member the value of the
-/// type, which is <c>false</c> for a Boolean. With a constructor of positions a
-/// file that holds the accent only would make an appliance that is light and
-/// quiet, and the journal would say nothing.
+/// CAUTION: this type is not the shape of the file. A member that gives its
+/// value here does NOT get that value from <c>System.Text.Json</c>: the
+/// generated code makes the object and then writes each member from the file,
+/// thus a member that the file does not hold becomes the value of its type.
+/// That is <c>false</c> for a Boolean, and a file that holds the accent only
+/// would make an appliance that is light and quiet with no line in the journal.
+/// A measurement of the generated code gives this result; it is not a
+/// supposition.
+/// </para>
+/// <para>
+/// <see cref="UserSettingsFile"/> is the shape of the file. Each of its members
+/// can be absent, and it gives the default for each one that is. A new setting
+/// must go in that type also, or each appliance that has a file already gives
+/// the new setting the value of its type.
 /// </para>
 /// </remarks>
 public sealed record UserSettings

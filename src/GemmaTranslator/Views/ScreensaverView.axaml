@@ -1,0 +1,122 @@
+<!--
+  Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:controls="using:GemmaTranslator.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GemmaTranslator.ViewModels"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GemmaTranslator.Views.ScreensaverView"
+             x:DataType="vm:MainViewModel"
+             d:DesignWidth="1280"
+             d:DesignHeight="720"
+             mc:Ignorable="d">
+
+  <!--
+    The screen that comes after a quiet interval.
+
+    The cause is the electrical supply. The appliance operates from two cells,
+    and the panel uses more of that supply than each other part. Thus this
+    screen keeps the charge: its ground is darker than the dark variant, and
+    it shows three items only.
+
+    The full surface takes the touch. A person who comes to the appliance in
+    this condition must not look for a small control on a dark panel.
+  -->
+
+  <UserControl.Styles>
+    <!--
+      The button of the full surface. It has no content and it gives no
+      signal: the screen that follows is the answer to the touch.
+
+      RenderTransform stays at none. The Fluent theme makes the button
+      smaller while a finger is on it, and that moves all of this screen.
+    -->
+    <Style Selector="Button.wake">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="VerticalAlignment" Value="Stretch" />
+    </Style>
+
+    <Style Selector="Button.wake:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
+    <Style Selector="Button.wake:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
+    <Style Selector="Button.wake:pressed">
+      <Setter Property="RenderTransform" Value="none" />
+    </Style>
+  </UserControl.Styles>
+
+  <Panel Background="{DynamicResource ScreensaverGroundBrush}">
+
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+
+      <TextBlock Classes="numeric"
+                 Text="{Binding Clock}"
+                 FontSize="150"
+                 LetterSpacing="6"
+                 Foreground="{DynamicResource ScreensaverInkBrush}"
+                 HorizontalAlignment="Center" />
+
+      <!-- The charge of the cells. This screen gives no warning at the two
+           limits: a person does not look at a screensaver. The primary
+           surface shows the warning. -->
+      <StackPanel Orientation="Horizontal"
+                  Spacing="12"
+                  Margin="0,22,0,0"
+                  HorizontalAlignment="Center">
+        <controls:BatteryGlyph Width="42"
+                               Height="22"
+                               VerticalAlignment="Center"
+                               Percent="{Binding Battery.Percent}"
+                               IsCharging="{Binding Battery.IsCharging}"
+                               Stroke="{DynamicResource ScreensaverMutedBrush}"
+                               Fill="{DynamicResource ScreensaverBatteryBrush}"
+                               GroundBrush="{DynamicResource ScreensaverGroundBrush}" />
+        <TextBlock Classes="numeric"
+                   Text="{Binding Battery.Text}"
+                   FontSize="24"
+                   Foreground="{DynamicResource ScreensaverBatteryBrush}"
+                   VerticalAlignment="Center" />
+      </StackPanel>
+
+      <TextBlock Text="TOUCH OR PRESS TO WAKE"
+                 FontSize="22"
+                 LetterSpacing="3"
+                 Margin="0,60,0,0"
+                 Foreground="{DynamicResource ScreensaverMutedBrush}"
+                 HorizontalAlignment="Center" />
+    </StackPanel>
+
+    <!-- The mark comes from Assets/Branding.axaml, which is the one location
+         for it. The box of the mark is a proportion, thus one dimension. -->
+    <Path Data="{StaticResource BrandMarkGeometry}"
+          Stretch="Uniform"
+          Width="200"
+          Fill="{DynamicResource ScreensaverMutedBrush}"
+          HorizontalAlignment="Center"
+          VerticalAlignment="Bottom"
+          Margin="0,0,0,44" />
+
+    <!--
+      The button comes after the other children, thus it is above them and it
+      gets each touch. A TextBlock takes a touch on its full area although it
+      has no ground, thus a button below the clock does not get a touch on
+      the clock.
+    -->
+    <Button Classes="wake" Command="{Binding WakeCommand}" />
+  </Panel>
+
+</UserControl>

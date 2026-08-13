@@ -1,0 +1,72 @@
+<!--
+  Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+  SPDX-License-Identifier: Apache-2.0
+-->
+
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:controls="using:GemmaTranslator.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:GemmaTranslator.ViewModels"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GemmaTranslator.Views.CriticalBatteryView"
+             x:DataType="vm:MainViewModel"
+             d:DesignWidth="1280"
+             d:DesignHeight="720"
+             mc:Ignorable="d">
+
+  <!--
+    The warning of the very low charge.
+
+    It covers the full surface because it must stop a person. A conversation
+    that continues here stops in the middle, and a person who did not see a
+    small mark in a corner does not know why.
+
+    IMPORTANT: this screen gives the warning and it does nothing more. The
+    software does not stop the machine. deploy/gemma-battery-guard.sh is a
+    different service of the system and it does that work, because a machine
+    that goes down must go down also if this software is not in operation.
+  -->
+
+  <Panel Background="{DynamicResource CriticalGroundBrush}">
+
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+
+      <!--
+        The values here are constants and they do not come from the view model.
+        The icon is the picture of the condition, thus it must show a body that
+        is almost empty and no sign of a charge that comes in. The number of
+        the cells is below, in the text.
+      -->
+      <controls:BatteryGlyph Width="120"
+                             Height="60"
+                             Percent="3"
+                             IsCharging="False"
+                             Stroke="{DynamicResource BatteryDangerBrush}"
+                             Fill="{DynamicResource BatteryDangerBrush}"
+                             GroundBrush="{DynamicResource CriticalGroundBrush}"
+                             HorizontalAlignment="Center" />
+
+      <TextBlock Classes="headline"
+                 Text="Battery critically low"
+                 Foreground="{DynamicResource CriticalInkBrush}"
+                 Margin="0,36,0,0"
+                 HorizontalAlignment="Center" />
+
+      <TextBlock Text="Connect power now. The device will shut down soon."
+                 FontSize="26"
+                 Foreground="{DynamicResource CriticalMutedBrush}"
+                 Margin="0,16,0,0"
+                 HorizontalAlignment="Center" />
+
+      <TextBlock Classes="numeric"
+                 Text="{Binding Battery.Text}"
+                 FontSize="34"
+                 Foreground="{DynamicResource BatteryDangerBrush}"
+                 Margin="0,30,0,0"
+                 HorizontalAlignment="Center" />
+    </StackPanel>
+
+  </Panel>
+
+</UserControl>

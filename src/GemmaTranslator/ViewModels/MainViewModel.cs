@@ -20,6 +20,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using GemmaTranslator.Configuration;
 using GemmaTranslator.Services;
 using Microsoft.Extensions.Logging;
@@ -33,13 +34,13 @@ namespace GemmaTranslator.ViewModels;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This fork has no test project, thus the sequence of the states must be
-/// legible in one location. Each change of the state writes one line of the
+/// This fork has no test project, thus a person must be able to read the
+/// sequence of the states in one location. Each change of the state writes one line of the
 /// log, and the journal of systemd is the record of what the appliance did.
 /// </para>
 /// <para>
-/// Upstream keeps the same condition in one React component with a conditional
-/// render, and it has no router. See <c>TranslatorApp.jsx</c>.
+/// Upstream keeps the same condition in one React component, which shows one
+/// part or a different part, and it has no router. See <c>TranslatorApp.jsx</c>.
 /// </para>
 /// <para>
 /// CAUTION: the speech-to-text part has no C# code. The release of a button
@@ -79,9 +80,40 @@ public sealed partial class MainViewModel : ObservableObject
     /// </remarks>
     private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(33);
 
+    /// <summary>
+    /// How long the warm-up screen stays.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: this is a time and it does NOT say how much of the model came
+    /// into the memory. The model comes into the memory in a different process, which systemd starts
+    /// at the same moment as this software, and that process gives no signal
+    /// that this software can read. Thus the bar shows how much of this time
+    /// went, and nothing else.
+    ///
+    /// TO BE MEASURED: nobody has measured the true time on the appliance. If
+    /// the model needs more than this, the first translation gives
+    /// "Translation service isn't responding." and the person holds the button
+    /// again.
+    ///
+    /// A correct signal needs a test of the endpoint. Upstream had one and it is
+    /// gone (see the comment at frontend/src/App.jsx:33). To put it back is a
+    /// new function, and the owner must agree to it.
+    /// </remarks>
+    private static readonly TimeSpan WarmUpTime = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// How long the appliance waits before the screensaver comes.
+    /// </summary>
+    /// <remarks>
+    /// The appliance takes its electrical supply from two cells, and the panel
+    /// gives 500 cd/m2. A display that stays bright in a quiet room uses the
+    /// charge for nothing.
+    /// </remarks>
+    private static readonly TimeSpan QuietTime = TimeSpan.FromMinutes(3);
+
     private readonly ITranslator _translator;
     private readonly IAudioCapture _capture;
-    private readonly IUserSettingsStore _settings;
+    private readonly IUserSettingsStore _store;
     private readonly AudioOptions _audioOptions;
     private readonly ILogger<MainViewModel> _logger;
 
@@ -99,17 +131,24 @@ public sealed partial class MainViewModel : ObservableObject
     // keyboard.
     private DispatcherTimer? _statusTimer;
 
+    // The warm-up screen, and the quiet time that gives the screensaver.
+    private DispatcherTimer? _warmUpTimer;
+    private DispatcherTimer? _quietTimer;
+    private DispatcherTimer? _clockTimer;
+    private long _warmUpTicks;
+
     /// <summary>
-    /// What the appliance does now.
+    /// What the appliance does at this moment.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdlePrompt))]
     [NotifyPropertyChangedFor(nameof(IsRecording))]
     [NotifyPropertyChangedFor(nameof(IsStatusVisible))]
-    private AppState _state = AppState.Idle;
+    private AppState _state = AppState.WarmUp;
 
     /// <summary>
-    /// Which of the two operations of <see cref="AppState.Working"/> operates.
+    /// Which of the two operations of <see cref="AppState.Working"/> is in
+    /// operation.
     /// </summary>
     [ObservableProperty]
     private WorkStage _workStage;
@@ -141,7 +180,7 @@ public sealed partial class MainViewModel : ObservableObject
     private BatteryStatus _battery = BatteryStatus.From(new PowerState(null, null));
 
     /// <summary>
-    /// The lane that records now, or 0.
+    /// The lane that records, or 0.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RecordingLabel))]
@@ -154,13 +193,39 @@ public sealed partial class MainViewModel : ObservableObject
     private string _recordingTime = "0:00";
 
     /// <summary>
+    /// <c>true</c> while the settings screen is on top of the surface.
+    /// </summary>
+    /// <remarks>
+    /// The DRM backend makes no popup, thus the settings screen is a layer of
+    /// the same surface and not a window.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isSettingsOpen;
+
+    /// <summary>The time that the screensaver shows, as <c>HH:mm</c>.</summary>
+    [ObservableProperty]
+    private string _clock = "--:--";
+
+    /// <summary>
+    /// How much of <see cref="WarmUpTime"/> went, from 0 to 100.
+    /// </summary>
+    /// <remarks>
+    /// This is a part of a time. It does not say how much of the model came
+    /// into the memory. See <see cref="WarmUpTime"/>.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WarmUpPercentText))]
+    private double _warmUpPercent;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="MainViewModel"/> class.
     /// </summary>
     /// <param name="translator">The translation service from the container.</param>
     /// <param name="capture">The microphone from the container.</param>
     /// <param name="pushToTalk">The two buttons from the container.</param>
     /// <param name="power">The electrical supply from the container.</param>
-    /// <param name="settings">The selections of a person, from the container.</param>
+    /// <param name="store">The selections of a person, from the container.</param>
+    /// <param name="settings">The settings screen, from the container.</param>
     /// <param name="audioOptions">The settings of the microphone.</param>
     /// <param name="logger">The logger from the container.</param>
     public MainViewModel(
@@ -168,7 +233,8 @@ public sealed partial class MainViewModel : ObservableObject
         IAudioCapture capture,
         IPushToTalk pushToTalk,
         IPowerMonitor power,
-        IUserSettingsStore settings,
+        IUserSettingsStore store,
+        SettingsViewModel settings,
         IOptions<AudioOptions> audioOptions,
         ILogger<MainViewModel> logger)
     {
@@ -176,13 +242,15 @@ public sealed partial class MainViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(capture);
         ArgumentNullException.ThrowIfNull(pushToTalk);
         ArgumentNullException.ThrowIfNull(power);
+        ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(audioOptions);
         ArgumentNullException.ThrowIfNull(logger);
 
         _translator = translator;
         _capture = capture;
-        _settings = settings;
+        _store = store;
+        Settings = settings;
         _audioOptions = audioOptions.Value;
         _logger = logger;
 
@@ -196,9 +264,18 @@ public sealed partial class MainViewModel : ObservableObject
         // when the container makes this class.
         pushToTalk.Changed += OnButtonChanged;
         power.Changed += OnPowerChanged;
+        store.Changed += OnSettingsChanged;
 
         Battery = BatteryStatus.From(power.Current);
+
+        // CAUTION: the line above can change nothing. BatteryStatus is a record
+        // and it compares by value, thus a machine with no fuel gauge gives the
+        // same value that the field already had and OnBatteryChanged does not
+        // run. Then the settings screen would show an empty line for ever.
+        Settings.BatteryAbout = Battery.AboutText;
+
         ResetLevels();
+        StartWarmUp();
 
         LogUserInterfaceStarted(_logger, Lane1.Language.Name, Lane2.Language.Name);
     }
@@ -207,6 +284,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// The text that the Moonshine licence conditions make necessary.
     /// </summary>
     public static string Attribution => "Powered by Moonshine AI";
+
+    /// <summary>The settings screen.</summary>
+    public SettingsViewModel Settings { get; }
 
     /// <summary>The person on the left.</summary>
     public LaneViewModel Lane1 { get; }
@@ -217,7 +297,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>
     /// The count of the bars of the visualizer, from the settings.
     /// </summary>
-    public int BarCount => _settings.Current.VisualizerBars;
+    public int BarCount => _store.Current.VisualizerBars;
 
     /// <summary>
     /// <c>true</c> when the display shows "Hold a button to talk".
@@ -247,6 +327,46 @@ public sealed partial class MainViewModel : ObservableObject
     /// </remarks>
     public bool IsStatusVisible => StatusText is not null && !IsRecording;
 
+    /// <summary><c>true</c> while the model comes into the memory.</summary>
+    public bool IsWarmUp => State == AppState.WarmUp;
+
+    /// <summary><c>true</c> while the display is dark and waits for a touch.</summary>
+    public bool IsScreensaver => State == AppState.Screensaver;
+
+    /// <summary>
+    /// <c>true</c> while the display shows the conversation and the two lanes.
+    /// </summary>
+    public bool IsConversation => State
+        is AppState.Idle or AppState.Recording or AppState.Working or AppState.Result;
+
+    /// <summary>
+    /// <c>true</c> when the charge is so low that the warning covers the
+    /// surface.
+    /// </summary>
+    /// <remarks>
+    /// This warning goes above each other screen, and above the settings
+    /// screen. A person must see it, and the appliance stops in minutes.
+    /// </remarks>
+    public bool IsCriticalBattery => Battery.IsCritical;
+
+    /// <summary>What the warm-up screen tells a person.</summary>
+    /// <remarks>
+    /// CAUTION: the design gives three texts here, and two of them name a stage
+    /// of the start: "Loading language model" and "Starting speech engine".
+    /// This software observes neither. The model comes into the memory in a
+    /// different process and gives no signal, thus a text of that kind is a
+    /// statement about a machine that the software cannot see. One text that
+    /// says "wait" is correct, and it is what stays.
+    /// </remarks>
+#pragma warning disable CA1822 // A binding of AXAML needs a member of the instance.
+    public string WarmUpText => "The appliance is starting. This takes a few seconds.";
+#pragma warning restore CA1822
+
+    /// <summary>The percentage of the warm-up, for the display.</summary>
+    public string WarmUpPercentText => string.Create(
+        CultureInfo.InvariantCulture,
+        $"{(int)WarmUpPercent}%");
+
     /// <summary>
     /// The text of the pill while the microphone is open.
     /// </summary>
@@ -271,6 +391,247 @@ public sealed partial class MainViewModel : ObservableObject
 
         LogState(_logger, State, next);
         State = next;
+
+        OnPropertyChanged(nameof(IsWarmUp));
+        OnPropertyChanged(nameof(IsScreensaver));
+        OnPropertyChanged(nameof(IsConversation));
+
+        // The quiet time counts while the appliance waits and while a person
+        // reads an answer. It does not count while the software hears a person
+        // or while it works: a screensaver in the middle of a sentence would
+        // hide the conversation.
+        if (next is AppState.Idle or AppState.Result)
+        {
+            StartQuietTimer();
+        }
+        else
+        {
+            StopQuietTimer();
+        }
+    }
+
+    /// <summary>
+    /// Opens the settings screen.
+    /// </summary>
+    [RelayCommand]
+    private void OpenSettings()
+    {
+        NoteActivity();
+        IsSettingsOpen = true;
+    }
+
+    /// <summary>
+    /// Closes the settings screen.
+    /// </summary>
+    [RelayCommand]
+    private void CloseSettings()
+    {
+        NoteActivity();
+        IsSettingsOpen = false;
+    }
+
+    /// <summary>
+    /// Ends the screensaver.
+    /// </summary>
+    /// <remarks>
+    /// The appliance comes back at the moment of the touch. A person who waits
+    /// for a display would hold a button and speak into a microphone that is
+    /// not open.
+    /// </remarks>
+    [RelayCommand]
+    private void Wake()
+    {
+        if (State != AppState.Screensaver)
+        {
+            return;
+        }
+
+        LogWake(_logger);
+        StopClock();
+
+        // Always Idle. The screensaver removed the conversation, thus there is
+        // nothing to come back to. See the privacy control in StartQuietTimer.
+        GoTo(AppState.Idle);
+    }
+
+    /// <summary>
+    /// A person touched the appliance, thus the quiet time starts again.
+    /// </summary>
+    private void NoteActivity()
+    {
+        if (State is AppState.Idle or AppState.Result)
+        {
+            StartQuietTimer();
+        }
+    }
+
+    /// <summary>
+    /// Shows the warm-up screen while the model comes into the memory.
+    /// </summary>
+    /// <remarks>
+    /// See <see cref="WarmUpTime"/>: this is a time and not the progress of the
+    /// model.
+    /// </remarks>
+    private void StartWarmUp()
+    {
+        // The field begins at WarmUp, thus GoTo has nothing to do here and the
+        // first edge of the journal is this line.
+        LogWarmUpStarted(_logger, (int)WarmUpTime.TotalSeconds);
+
+        _warmUpTicks = Stopwatch.GetTimestamp();
+
+        _warmUpTimer = new DispatcherTimer { Interval = FrameInterval };
+
+        _warmUpTimer.Tick += (_, _) => Safely(() =>
+        {
+            double part = Stopwatch.GetElapsedTime(_warmUpTicks) / WarmUpTime;
+
+            WarmUpPercent = Math.Clamp(part * 100, 0, 100);
+
+            if (part < 1)
+            {
+                return;
+            }
+
+            _warmUpTimer?.Stop();
+            _warmUpTimer = null;
+
+            // The test is necessary. A person can push a button, and the state
+            // is then not WarmUp when this timer comes to its end.
+            if (State == AppState.WarmUp)
+            {
+                GoTo(AppState.Idle);
+            }
+        });
+
+        _warmUpTimer.Start();
+    }
+
+    /// <summary>
+    /// Starts the count of the quiet time that gives the screensaver.
+    /// </summary>
+    private void StartQuietTimer()
+    {
+        StopQuietTimer();
+
+        _quietTimer = new DispatcherTimer { Interval = QuietTime };
+
+        _quietTimer.Tick += (_, _) => Safely(() =>
+        {
+            StopQuietTimer();
+
+            // The settings screen goes away with the display. A person who
+            // comes back gets the conversation, and not a screen that a
+            // different person opened.
+            IsSettingsOpen = false;
+
+            // PRIVACY CONTROL. Do not remove this line to "keep the
+            // conversation on the display".
+            //
+            // This appliance stands in a public place. The screensaver is the
+            // end of a session: the person who spoke has walked away. Without
+            // this line, the next person to touch the panel reads what the
+            // previous person said and the translation of it, in two
+            // languages, at 42 pixels. In the European Union the speech of a
+            // person is personal data, and showing it to an unrelated person
+            // is a disclosure.
+            Exchange = null;
+
+            StartClock();
+            GoTo(AppState.Screensaver);
+        });
+
+        _quietTimer.Start();
+    }
+
+    private void StopQuietTimer()
+    {
+        _quietTimer?.Stop();
+        _quietTimer = null;
+    }
+
+    /// <summary>
+    /// Writes the time of the screensaver, and keeps it correct.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: one write is not sufficient. The screensaver shows this value
+    /// at 150 pixels and it stays for hours. A value that a person reads as the
+    /// time, and that stopped when the display went dark, is worse than no
+    /// clock at all.
+    ///
+    /// TO BE UNDERSTOOD: the appliance is fully offline and it has no NTP. If
+    /// the Raspberry Pi has no cell for its clock, this value is not correct
+    /// after each start. Measure this on the appliance.
+    /// </remarks>
+    private void StartClock()
+    {
+        StopClock();
+        UpdateClock();
+
+        _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+        _clockTimer.Tick += (_, _) => Safely(UpdateClock);
+        _clockTimer.Start();
+    }
+
+    private void StopClock()
+    {
+        _clockTimer?.Stop();
+        _clockTimer = null;
+    }
+
+    private void UpdateClock()
+        => Clock = DateTime.Now.ToString("HH:mm", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Does the work of one tick, and catches each error.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: an error that goes out of a Tick has no catch and the process
+    /// stops. Each one of these callbacks writes a property, and Avalonia then
+    /// applies a style on this thread, thus each one can throw. The appliance
+    /// has no keyboard: the display becomes black, systemd starts the software
+    /// again, and the same condition stops it again.
+    /// </remarks>
+    /// <param name="work">The work of the tick.</param>
+    private void Safely(Action work)
+    {
+        try
+        {
+            work();
+        }
+#pragma warning disable CA1031 // The appliance must not stop. See the remark.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            LogTickFailed(_logger, exception);
+        }
+    }
+
+    /// <summary>
+    /// A person changed a setting on the settings screen.
+    /// </summary>
+    /// <remarks>
+    /// The count of the bars is the value that this screen must follow. A touch
+    /// on that screen is also the touch of a person, thus the quiet time starts
+    /// again and the display does not go dark below their fingers.
+    /// </remarks>
+    /// <param name="sender">The store.</param>
+    /// <param name="settings">The settings that the person made.</param>
+    private void OnSettingsChanged(object? sender, UserSettings settings)
+    {
+        OnPropertyChanged(nameof(BarCount));
+        ResetLevels();
+        NoteActivity();
+    }
+
+    /// <summary>
+    /// The charge changed. The settings screen and the warning follow it.
+    /// </summary>
+    /// <param name="value">The new charge.</param>
+    partial void OnBatteryChanged(BatteryStatus value)
+    {
+        Settings.BatteryAbout = value.AboutText;
+        OnPropertyChanged(nameof(IsCriticalBattery));
     }
 
     /// <summary>
@@ -303,6 +664,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         lane.Language = Languages.All[index];
 
+        NoteActivity();
         LogLanguage(_logger, lane.Number, lane.Language.Name);
     }
 
@@ -317,12 +679,12 @@ public sealed partial class MainViewModel : ObservableObject
         _statusTimer?.Stop();
         _statusTimer = new DispatcherTimer { Interval = StatusLife };
 
-        _statusTimer.Tick += (_, _) =>
+        _statusTimer.Tick += (_, _) => Safely(() =>
         {
             _statusTimer?.Stop();
             _statusTimer = null;
             StatusText = null;
-        };
+        });
 
         _statusTimer.Start();
     }
@@ -477,7 +839,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         _frameTimer = new DispatcherTimer { Interval = FrameInterval };
 
-        _frameTimer.Tick += (_, _) =>
+        _frameTimer.Tick += (_, _) => Safely(() =>
         {
             double seconds = Stopwatch.GetElapsedTime(start).TotalSeconds;
 
@@ -487,7 +849,7 @@ public sealed partial class MainViewModel : ObservableObject
             RecordingTime = string.Create(
                 CultureInfo.InvariantCulture,
                 $"{whole / 60}:{whole % 60:D2}");
-        };
+        });
 
         _frameTimer.Start();
     }
@@ -616,6 +978,33 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void HandleButton(PushToTalkChange change)
     {
+        // A push on a button while the display is dark wakes the appliance and
+        // does nothing else. The microphone is not open at that moment, thus a
+        // recording loses the first word of the person.
+        if (State == AppState.Screensaver)
+        {
+            if (change.IsPressed)
+            {
+                Wake();
+            }
+
+            return;
+        }
+
+        // CAUTION: a button must do nothing below a layer that covers the
+        // conversation. The pill that says "RECORDING" is in that conversation,
+        // thus a recording that starts here is a microphone that is open with
+        // no signal on the panel. See MainView.axaml.
+        if (State == AppState.WarmUp || IsSettingsOpen || Battery.IsCritical)
+        {
+            if (change.IsPressed)
+            {
+                LogButtonIgnored(_logger, change.Lane);
+            }
+
+            return;
+        }
+
         if (change.IsPressed)
         {
             StartRecording(change.Lane);
@@ -725,6 +1114,21 @@ public sealed partial class MainViewModel : ObservableObject
         ILogger logger,
         string lane1Language,
         string lane2Language);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The warm-up screen is on the panel for {seconds} s.")]
+    private static partial void LogWarmUpStarted(ILogger logger, int seconds);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "A timer of the user interface gave an error.")]
+    private static partial void LogTickFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "A person woke the appliance.")]
+    private static partial void LogWake(ILogger logger);
 
     [LoggerMessage(
         Level = LogLevel.Information,

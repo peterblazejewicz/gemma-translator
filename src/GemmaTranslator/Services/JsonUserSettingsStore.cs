@@ -88,6 +88,9 @@ public sealed partial class JsonUserSettingsStore : IUserSettingsStore
     public UserSettings Current => _current;
 
     /// <inheritdoc/>
+    public event EventHandler<UserSettings>? Changed;
+
+    /// <inheritdoc/>
     public void Save(UserSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -101,7 +104,14 @@ public sealed partial class JsonUserSettingsStore : IUserSettingsStore
 
         _current = next;
 
-        if (_path is null || unchanged)
+        if (unchanged)
+        {
+            return;
+        }
+
+        Changed?.Invoke(this, next);
+
+        if (_path is null)
         {
             return;
         }
@@ -111,13 +121,23 @@ public sealed partial class JsonUserSettingsStore : IUserSettingsStore
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
 
             // CAUTION: write beside the file and then move it. A move on one
-            // file system is one operation, thus a person gets the old file or
+            // file system is one operation, thus a reader gets the old file or
             // the new one and never one half of each. The appliance takes its
             // electrical supply from cells, and the guard of the low charge
             // stops the machine while this software operates.
             string temporary = _path + ".tmp";
 
-            File.WriteAllText(temporary, JsonSerializer.Serialize(_current, StoreJson.Default.UserSettings));
+            using (FileStream stream = File.Create(temporary))
+            {
+                JsonSerializer.Serialize(stream, UserSettingsFile.From(_current), StoreJson.Default.UserSettingsFile);
+
+                // The flush goes to the disk and not to the cache of the
+                // operating system. Without it the rename can reach the journal
+                // of the file system before the bytes do, and a machine that
+                // stops between the two finds a file of zero length.
+                stream.Flush(flushToDisk: true);
+            }
+
             File.Move(temporary, _path, overwrite: true);
         }
 #pragma warning disable CA1031 // The appliance must not stop. See the remark.
@@ -147,11 +167,11 @@ public sealed partial class JsonUserSettingsStore : IUserSettingsStore
                 return UserSettings.Default;
             }
 
-            UserSettings? read = JsonSerializer.Deserialize(
+            UserSettingsFile? read = JsonSerializer.Deserialize(
                 File.ReadAllText(path),
-                StoreJson.Default.UserSettings);
+                StoreJson.Default.UserSettingsFile);
 
-            return (read ?? UserSettings.Default).Sanitized();
+            return (read?.ToSettings() ?? UserSettings.Default).Sanitized();
         }
 #pragma warning disable CA1031 // The appliance must not stop. See the remark.
         catch (Exception exception)
@@ -192,5 +212,5 @@ public sealed partial class JsonUserSettingsStore : IUserSettingsStore
 /// The software uses a generated context for the LiteRT-LM protocol also.
 /// </remarks>
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNameCaseInsensitive = true)]
-[JsonSerializable(typeof(UserSettings))]
+[JsonSerializable(typeof(UserSettingsFile))]
 internal sealed partial class StoreJson : JsonSerializerContext;

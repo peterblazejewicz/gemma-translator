@@ -34,6 +34,22 @@ public interface IUserSettingsStore
     UserSettings Current { get; }
 
     /// <summary>
+    /// Occurs when <see cref="Save"/> keeps a value that is not the value that
+    /// the store had.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: two view models read this store. Without this event a touch on
+    /// the settings screen does not reach the primary screen: a person changes
+    /// the count of the bars, and the visualizer keeps the count that it had
+    /// until the end of the next recording, with no message and no line in the
+    /// journal.
+    ///
+    /// The event comes on the thread that called <see cref="Save"/>, which is
+    /// the thread of the user interface.
+    /// </remarks>
+    event EventHandler<UserSettings>? Changed;
+
+    /// <summary>
     /// Keeps new settings and writes them to the disk.
     /// </summary>
     /// <remarks>

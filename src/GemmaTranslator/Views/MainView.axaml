@@ -90,6 +90,25 @@
       <Setter Property="BoxShadow" Value="0 1 3 0 #121A1A18" />
     </Style>
 
+    <!-- A target of 105 pixels with no chrome. The panel gives 11.6 pixels for
+         one millimetre and a finger needs 9 mm, thus 105 is the minimum. -->
+    <Style Selector="Button.chrome">
+      <Setter Property="Width" Value="105" />
+      <Setter Property="Height" Value="105" />
+      <Setter Property="CornerRadius" Value="53" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.chrome:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.chrome:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+    </Style>
+
     <Style Selector="Border.pill">
       <Setter Property="CornerRadius" Value="40" />
       <Setter Property="Padding" Value="30,14" />
@@ -99,8 +118,18 @@
     </Style>
   </UserControl.Styles>
 
+  <!--
+    Each screen is a layer of this one surface and each one exists at the start.
+    The DRM backend makes no window and no popup, thus a dialog cannot be
+    anything else. IsVisible selects the layer, and the Raspberry Pi then makes
+    no template at the moment that a person pushes a button.
+
+    The sequence is the sequence of the layers: the warning of the very low
+    charge goes above the settings screen, and the settings screen goes above
+    the conversation.
+  -->
   <Panel Background="{DynamicResource PageBrush}">
-    <Grid RowDefinitions="*,56,168">
+    <Grid RowDefinitions="*,56,168" IsVisible="{Binding IsConversation}">
 
       <!-- ================= the conversation ================= -->
       <Panel Grid.Row="0">
@@ -212,6 +241,27 @@
                      Text="{Binding Battery.Text}"
                      FontSize="26"
                      VerticalAlignment="Center" />
+
+          <!-- The way into the settings. It goes away while the microphone is
+               open: a person must not open a screen in the middle of a
+               sentence, and the recording pill needs the room. -->
+          <Button Classes="chrome"
+                  Margin="8,0,0,0"
+                  IsVisible="{Binding !IsRecording}"
+                  Command="{Binding OpenSettingsCommand}">
+            <Viewbox Width="34" Height="34">
+              <Canvas Width="24" Height="24">
+                <Path Data="M21,6 H14 M10,6 H3 M21,12 H12 M8,12 H3 M21,18 H16 M12,18 H3"
+                      Stroke="{DynamicResource MutedBrush}"
+                      StrokeThickness="2"
+                      StrokeLineCap="Round" />
+                <Path Data="M14,4 V8 M8,10 V14 M16,16 V20"
+                      Stroke="{DynamicResource MutedBrush}"
+                      StrokeThickness="2"
+                      StrokeLineCap="Round" />
+              </Canvas>
+            </Viewbox>
+          </Button>
         </StackPanel>
 
         <!-- One sentence for a person. It wraps and it does not stop with
@@ -300,6 +350,40 @@
       </Grid>
 
     </Grid>
+
+    <!-- The model comes into the memory. -->
+    <v:WarmUpView IsVisible="{Binding IsWarmUp}" />
+
+    <!-- The settings screen, and the way out of it. The target is here and not
+         in that screen, because this view model owns the condition of the
+         layer. -->
+    <Panel IsVisible="{Binding IsSettingsOpen}">
+      <v:SettingsView DataContext="{Binding Settings}" />
+
+      <Button Classes="chrome"
+              HorizontalAlignment="Right"
+              VerticalAlignment="Top"
+              Margin="0,8,36,0"
+              BorderThickness="2"
+              BorderBrush="{DynamicResource HairBrush}"
+              Command="{Binding CloseSettingsCommand}">
+        <Viewbox Width="32" Height="32">
+          <Canvas Width="24" Height="24">
+            <Path Data="M18,6 L6,18 M6,6 L18,18"
+                  Stroke="{DynamicResource InkBrush}"
+                  StrokeThickness="2"
+                  StrokeLineCap="Round" />
+          </Canvas>
+        </Viewbox>
+      </Button>
+    </Panel>
+
+    <!-- The display is dark and it waits for a touch. -->
+    <v:ScreensaverView IsVisible="{Binding IsScreensaver}" />
+
+    <!-- The charge is so low that the appliance stops in minutes. This goes
+         above each other layer. -->
+    <v:CriticalBatteryView IsVisible="{Binding IsCriticalBattery}" />
   </Panel>
 
 </UserControl>
