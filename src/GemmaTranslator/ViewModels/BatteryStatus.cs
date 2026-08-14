@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Globalization;
-using GemmaTranslator.Services;
+using GemmaTranslator.Services.Power;
 
 namespace GemmaTranslator.ViewModels;
 

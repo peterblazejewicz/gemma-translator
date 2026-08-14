@@ -3,7 +3,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Power;
 
 /// <remarks>
 /// CAUTION: this class gives no value and it makes no value. A class that says

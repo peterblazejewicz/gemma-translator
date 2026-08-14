@@ -26,7 +26,7 @@ using GemmaTranslator.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Translation;
 
 /// <summary>
 /// Translates with the LiteRT-LM server, which speaks the OpenAI protocol.

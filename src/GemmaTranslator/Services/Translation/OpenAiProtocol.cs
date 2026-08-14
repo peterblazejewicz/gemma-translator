@@ -18,7 +18,7 @@
 
 using System.Text.Json.Serialization;
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Translation;
 
 // The part of the OpenAI protocol that this software uses.
 

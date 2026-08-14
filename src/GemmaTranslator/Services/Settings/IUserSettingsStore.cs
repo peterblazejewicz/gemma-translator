@@ -17,7 +17,7 @@
 // been modified. It replaces the localStorage calls of
 // frontend/src/App.jsx:40 and App.jsx:48.
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Settings;
 
 public interface IUserSettingsStore
 {

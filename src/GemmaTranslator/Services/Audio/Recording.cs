@@ -16,7 +16,7 @@
 // This file is part of a fork of google-gemma/gemma-translator and has
 // been modified. It replaces frontend/src/hooks/useAudioRecorder.js.
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Audio;
 
 /// <param name="Samples">
 /// The audio, as 16 kHz mono samples in the range -1 to 1. This is the form
@@ -50,51 +50,4 @@ public sealed record Recording(
     /// until a later allocation takes that memory.
     /// </remarks>
     public void Dispose() => Array.Clear(Samples);
-}
-
-/// <remarks>
-/// The upstream hook makes 16 kHz mono Float32 in the browser and does the
-/// change of the rate in JavaScript, at <c>audioHelpers.js:35-52</c>, with no
-/// filter against aliasing. miniaudio does this work in native code and it
-/// puts a low-pass filter first, thus the C# code asks for the format and
-/// writes no resampler.
-/// </remarks>
-public interface IAudioCapture : IDisposable
-{
-    /// <summary>
-    /// Opens the microphone before the first press.
-    /// </summary>
-    /// <remarks>
-    /// CAUTION: the Jabra Speak2 40 gives 1.22 s from the start of the device
-    /// to the first sample. If the software opens the device at the press,
-    /// each person loses the first word.
-    /// </remarks>
-    void Prepare();
-
-    /// <exception cref="AudioCaptureException">The microphone did not open.</exception>
-    void StartRecording();
-
-    /// <remarks>
-    /// The name is not <c>Stop</c>. <c>Stop</c> is a keyword of Visual Basic,
-    /// and rule CA1716 does not permit it on an interface.
-    /// </remarks>
-    /// <returns>The audio, or <c>null</c> if no recording was in operation.</returns>
-    Recording? StopRecording();
-}
-
-public sealed class AudioCaptureException : Exception
-{
-    public AudioCaptureException()
-    {
-    }
-
-    public AudioCaptureException(string message)
-        : base(message)
-    {
-    }
-
-    public AudioCaptureException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
 }

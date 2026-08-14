@@ -55,7 +55,7 @@
     <!-- IHttpClientFactory, for the calls to the LiteRT-LM server. The factory
          controls the life of the handler. A new HttpClient for each call makes
          the sockets go away slowly and the software then stops. See
-         Services/LiteRtTranslator.cs. -->
+         Services/Translation/LiteRtTranslator.cs. -->
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
 
     <!-- ILogger. Abstractions holds the [LoggerMessage] source generator, thus

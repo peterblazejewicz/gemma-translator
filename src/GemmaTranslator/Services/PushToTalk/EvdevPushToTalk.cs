@@ -21,7 +21,7 @@ using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Microsoft.Extensions.Logging;
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.PushToTalk;
 
 /// <remarks>
 /// <para>

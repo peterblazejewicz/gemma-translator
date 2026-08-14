@@ -20,7 +20,7 @@
 using System.Globalization;
 using System.Text.Json;
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Translation;
 
 /// <remarks>
 /// The two methods are one pair. The message tells the model what to send, and

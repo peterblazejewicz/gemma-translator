@@ -22,7 +22,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Microsoft.Extensions.Logging;
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.PushToTalk;
 
 /// <remarks>
 /// This class operates on the Windows development host. The keys are Z and X,

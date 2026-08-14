@@ -14,23 +14,23 @@
 // limitations under the License.
 //
 // This file is part of a fork of google-gemma/gemma-translator and has
-// been modified.
+// been modified. It replaces frontend/src/hooks/useAudioRecorder.js.
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Audio;
 
-public interface ITranslator
+public sealed class AudioCaptureException : Exception
 {
-    /// <exception cref="TranslationException">
-    /// The server is not available, or it sends an error.
-    /// </exception>
-    /// <remarks>
-    /// The names are <c>source</c> and <c>target</c> and not <c>from</c> and
-    /// <c>to</c>. <c>To</c> is a keyword of Visual Basic, and rule CA1716 does
-    /// not permit it on an interface.
-    /// </remarks>
-    Task<TranslationResult> TranslateAsync(
-        string text,
-        Language source,
-        Language target,
-        CancellationToken cancellationToken = default);
+    public AudioCaptureException()
+    {
+    }
+
+    public AudioCaptureException(string message)
+        : base(message)
+    {
+    }
+
+    public AudioCaptureException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
 }

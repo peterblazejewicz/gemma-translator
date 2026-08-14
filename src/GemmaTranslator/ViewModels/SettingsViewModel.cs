@@ -21,7 +21,8 @@ using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GemmaTranslator.Configuration;
-using GemmaTranslator.Services;
+using GemmaTranslator.Services.Settings;
+using GemmaTranslator.Theming;
 using Microsoft.Extensions.Options;
 
 namespace GemmaTranslator.ViewModels;

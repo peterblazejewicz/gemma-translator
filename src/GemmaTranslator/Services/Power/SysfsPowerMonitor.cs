@@ -5,7 +5,7 @@ using System.Globalization;
 using System.Numerics;
 using Microsoft.Extensions.Logging;
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Power;
 
 /// <summary>
 /// The electrical supply of the appliance, from the <c>power_supply</c> class

@@ -61,8 +61,16 @@ public sealed class AudioOptions
     /// The shortest press that starts a recording, in milliseconds.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A physical button in a public location gets an accidental touch. A
     /// press that is shorter than this value does nothing.
+    /// </para>
+    /// <para>
+    /// This value is a property of the buttons and not of the microphone, and
+    /// the one reader of it is the view model. It stays in the Audio section
+    /// because a move changes <c>appsettings.json</c>, the systemd unit, and
+    /// <c>deploy/README.md</c> together.
+    /// </para>
     /// </remarks>
     public int MinimumPressMilliseconds { get; set; } = 250;
 

@@ -16,7 +16,7 @@
 // This file is part of a fork of google-gemma/gemma-translator and has
 // been modified.
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Translation;
 
 /// <param name="Translation">The text in the language of the other person.</param>
 /// <param name="Duration">The time that the call to the server took.</param>

@@ -17,7 +17,12 @@
 // been modified.
 
 using GemmaTranslator.Configuration;
-using GemmaTranslator.Services;
+using GemmaTranslator.Services.Audio;
+using GemmaTranslator.Services.Power;
+using GemmaTranslator.Services.PushToTalk;
+using GemmaTranslator.Services.Settings;
+using GemmaTranslator.Services.Translation;
+using GemmaTranslator.Theming;
 using GemmaTranslator.ViewModels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

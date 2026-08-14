@@ -16,7 +16,7 @@
 // This file is part of a fork of google-gemma/gemma-translator and has
 // been modified.
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Translation;
 
 /// <remarks>
 /// <c>MainViewModel</c> puts the message of this exception on the display, thus

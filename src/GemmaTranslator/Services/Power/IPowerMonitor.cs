@@ -1,7 +1,7 @@
 // Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
 // SPDX-License-Identifier: Apache-2.0
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Power;
 
 /// <summary>
 /// The cells of the X1201, from the fuel gauge.

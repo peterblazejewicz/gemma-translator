@@ -26,7 +26,7 @@ using SoundFlow.Backends.MiniAudio.Devices;
 using SoundFlow.Enums;
 using SoundFlow.Structs;
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Audio;
 
 /// <remarks>
 /// <para>

@@ -1,7 +1,7 @@
 // Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
 // SPDX-License-Identifier: Apache-2.0
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Settings;
 
 /// <summary>
 /// The shape of the file of the settings, where each member can be absent.

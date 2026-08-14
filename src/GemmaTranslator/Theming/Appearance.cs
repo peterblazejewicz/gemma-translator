@@ -21,9 +21,11 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using GemmaTranslator.Services.Power;
+using GemmaTranslator.Services.Settings;
 using Microsoft.Extensions.Logging;
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Theming;
 
 /// <summary>
 /// Puts the selections of a person on the surface.

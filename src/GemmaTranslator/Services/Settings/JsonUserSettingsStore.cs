@@ -21,7 +21,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Settings;
 
 public sealed partial class JsonUserSettingsStore : IUserSettingsStore
 {

@@ -22,7 +22,11 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GemmaTranslator.Configuration;
-using GemmaTranslator.Services;
+using GemmaTranslator.Services.Audio;
+using GemmaTranslator.Services.Power;
+using GemmaTranslator.Services.PushToTalk;
+using GemmaTranslator.Services.Settings;
+using GemmaTranslator.Services.Translation;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

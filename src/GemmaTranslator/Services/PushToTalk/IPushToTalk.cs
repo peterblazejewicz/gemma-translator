@@ -19,7 +19,7 @@
 
 using Avalonia.Controls;
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.PushToTalk;
 
 /// <param name="Lane">The lane of the person: 1 or 2.</param>
 /// <param name="IsPressed">True if the button went down.</param>

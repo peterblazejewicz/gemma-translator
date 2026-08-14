@@ -19,7 +19,7 @@
 
 using Avalonia.Media;
 
-namespace GemmaTranslator.Services;
+namespace GemmaTranslator.Services.Settings;
 
 /// <remarks>
 /// <para>
