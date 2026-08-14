@@ -651,6 +651,45 @@ that a person can move, and that do not agree with each other, are worse than
 one control. Section 9 of CLAUDE.md gives a gain of the software, and that
 decision comes from a time before this measurement.
 
+### 8.21 The synthesis is more fast than the sound that it makes
+
+A design that cuts the text in pieces, and that speaks piece N while it makes
+piece N+1, is of use only if the synthesis keeps in front of the speaker. This
+is the measurement of that.
+
+The method: `warm` the language, then one GET of `/api/tts`. The wall time is
+the time of that call. The length of the sound comes from the header of the
+WAV file that comes back. The difference of the two is the synthesis.
+
+| Language | Characters | Wall | Sound | Synthesis | Synthesis ÷ sound |
+| --- | --- | --- | --- | --- | --- |
+| English | 13 | 2.53 s | 1.50 s | 1.03 s | 0.69 |
+| English | 50 | 5.09 s | 3.00 s | 2.09 s | 0.70 |
+| English | 109 | 11.60 s | 6.70 s | 4.90 s | 0.73 |
+| English | 258 | 26.49 s | 15.50 s | 10.99 s | 0.71 |
+| Japanese | 10 | 3.40 s | 2.05 s | 1.35 s | 0.66 |
+| Japanese | 46 | 11.89 s | 6.92 s | 4.97 s | 0.72 |
+
+**The ratio is 0.66 to 0.73 at each length and in the two languages.** The
+synthesis is more fast than the sound, thus a queue of one piece does not
+become empty after the first piece. The sound of the appliance is 24000 Hz,
+mono.
+
+The cost of the cut, for the same 258 characters:
+
+| Method | Synthesis | Sound |
+| --- | --- | --- |
+| One call | 11.25 s | 15.50 s |
+| Four calls | 11.94 s | 16.75 s |
+
+The synthesis costs 0.70 s more, which is about 6 %. The sound is 1.25 s
+longer, which is about 0.31 s where two pieces come together. That is the part
+with no sound at the start and at the end of each WAV file, and it adds up.
+
+**IMPORTANT: a measurement of the full operation does not give this.** The
+line of the log gives one number for the synthesis and the sound together, and
+only the synthesis can become more short. A person must hear the sound.
+
 ---
 
 ## 10. The swap of the appliance
