@@ -64,8 +64,18 @@ namespace GemmaTranslator.Services.Audio;
 /// </remarks>
 public sealed partial class SoundFlowAudioCapture : IAudioCapture
 {
+    private const int PresenceUnknown = 0;
+    private const int PresenceThere = 1;
+    private const int PresenceGone = 2;
+
+    // The longest that a person waits to see that the speakerphone went away.
+    // Each read gives the list of the devices of the machine and it opens
+    // nothing, thus the cost is not the 1.22 s of an open.
+    private static readonly TimeSpan PresenceInterval = TimeSpan.FromSeconds(2);
+
     private readonly AudioOptions _options;
     private readonly ILogger<SoundFlowAudioCapture> _logger;
+    private readonly CancellationTokenSource _stop = new();
 
     // This lock is for the life of the device only. The audio thread never
     // takes it. See the remark on the class.
@@ -91,6 +101,14 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
     private volatile int _written;
     private volatile int _peakBits;
 
+    // 0 says that this machine cannot answer, 1 that the device is there, and 2
+    // that it is not. This is an int and not a bool?, because Volatile and
+    // Interlocked read and write a value of this size in one operation and a
+    // nullable of a bool is two fields.
+    private int _presence;
+    private int _presenceStarted;
+    private bool _disposed;
+
     public SoundFlowAudioCapture(
         IOptions<AudioOptions> options,
         ILogger<SoundFlowAudioCapture> logger)
@@ -105,8 +123,22 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         _deviceSampleRate = _options.SampleRate;
     }
 
+    public bool? IsDevicePresent => Volatile.Read(ref _presence) switch
+    {
+        PresenceThere => true,
+        PresenceGone => false,
+        _ => null,
+    };
+
+    public event EventHandler<bool?>? DevicePresenceChanged;
+
     public void Prepare()
     {
+        // The loop starts before the open. A device that is absent at the start
+        // makes OpenDevice throw, and that is the one condition that the
+        // display must show.
+        StartPresenceLoop();
+
         lock (_deviceLock)
         {
             OpenDevice();
@@ -191,11 +223,16 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         FullDuplexDevice? device;
         MiniAudioEngine? engine;
 
+        // The reads of the list stop first. A read that begins after the lines
+        // below would make the engine a second time.
+        _stop.Cancel();
+
         // CAUTION: take the device out of the field inside the lock, and speak
         // to miniaudio outside it. `ma_device_stop` waits for the audio
         // thread, and that thread must not wait for this lock.
         lock (_deviceLock)
         {
+            _disposed = true;
             _sessionOpen = false;
             _accumulating = false;
 
@@ -211,6 +248,110 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
 
         CloseDevice(device);
         engine?.Dispose();
+        _stop.Dispose();
+    }
+
+    private void StartPresenceLoop()
+    {
+        if (Interlocked.Exchange(ref _presenceStarted, 1) == 1)
+        {
+            return;
+        }
+
+        // Read the token here and not in the task. A read of Token after
+        // Dispose throws, and the task can start after Dispose.
+        CancellationToken token = _stop.Token;
+
+        _ = Task.Run(() => PresenceLoopAsync(token), token);
+    }
+
+    private async Task PresenceLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using PeriodicTimer timer = new(PresenceInterval);
+
+            do
+            {
+                PollPresence();
+            }
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false));
+        }
+        catch (OperationCanceledException)
+        {
+            // Dispose stopped the loop. This is the correct end.
+        }
+#pragma warning disable CA1031 // Nothing observes this task. See the comment.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            // CAUTION: nobody waits for this task, thus an error that goes out
+            // of here is lost and the display keeps the last value for the life
+            // of the process. This line is the one signal that the reads
+            // stopped.
+            LogPresenceLoopFailed(_logger, exception);
+        }
+    }
+
+    private void PollPresence()
+    {
+        int found = ReadPresence();
+        int previous = Interlocked.Exchange(ref _presence, found);
+
+        if (found == previous)
+        {
+            return;
+        }
+
+        LogPresenceChanged(_logger, found == PresenceThere, _options.PreferredDeviceName);
+
+        DevicePresenceChanged?.Invoke(this, IsDevicePresent);
+    }
+
+    private int ReadPresence()
+    {
+        string wanted = _options.PreferredDeviceName?.Trim() ?? string.Empty;
+
+        if (wanted.Length == 0)
+        {
+            return PresenceUnknown;
+        }
+
+        // The audio thread never takes this lock, and a read of the list does
+        // not wait for that thread. Thus this is safe here, and a call of Stop
+        // or Dispose in this position is not. See the remark on the class.
+        lock (_deviceLock)
+        {
+            if (_disposed)
+            {
+                return PresenceUnknown;
+            }
+
+            _engine ??= new MiniAudioEngine();
+            _engine.UpdateAudioDevicesInfo();
+
+            // Section 8.19 of deploy/README.md makes the playback interface the
+            // condition of the microphone. Thus a speakerphone that gives one
+            // of the two is not a device that operates.
+            return HasDevice(_engine.CaptureDevices, wanted)
+                && HasDevice(_engine.PlaybackDevices, wanted)
+                    ? PresenceThere
+                    : PresenceGone;
+        }
+    }
+
+    private static bool HasDevice(DeviceInfo[] devices, string wanted)
+    {
+        foreach (DeviceInfo device in devices)
+        {
+            if (device.Name is not null
+                && device.Name.Contains(wanted, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <remarks>
@@ -473,4 +614,14 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         Level = LogLevel.Warning,
         Message = "The microphone did not stop correctly.")]
     private static partial void LogStopFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The speakerphone is present: {present}. The settings look for a device with \"{wanted}\" in its name.")]
+    private static partial void LogPresenceChanged(ILogger logger, bool present, string wanted);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The reads of the list of the devices stopped. The display keeps the last condition of the speakerphone for the life of the process.")]
+    private static partial void LogPresenceLoopFailed(ILogger logger, Exception exception);
 }

@@ -86,6 +86,12 @@
   <SolidColorBrush x:Key="StatusDotBrush" Color="#D97706" />
   <SolidColorBrush x:Key="RecordingDotBrush" Color="#E5484D" />
 
+  <!-- A part of the appliance that a person must connect again. The colour is
+       the colour of the two brushes above it and below it, and the name is
+       different because the meaning is different. -->
+  <SolidColorBrush x:Key="AlertBrush" Color="#E5484D" />
+  <SolidColorBrush x:Key="AlertInkBrush" Color="#FFFFFF" />
+
   <!-- The charge of the cells: 20 % and less, then 10 % and less. The two
        apply on the cells only. A machine on the mains line shows neither. -->
   <SolidColorBrush x:Key="BatteryWarningBrush" Color="#D97706" />

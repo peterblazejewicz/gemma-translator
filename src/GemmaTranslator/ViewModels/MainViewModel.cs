@@ -102,6 +102,11 @@ public sealed partial class MainViewModel : ObservableObject
     private BatteryStatus _battery = BatteryStatus.From(new PowerState(null, null));
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSpeakerPresent))]
+    [NotifyPropertyChangedFor(nameof(IsSpeakerMissing))]
+    private bool? _speakerPresent;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RecordingLabel))]
     private int _recordingLane;
 
@@ -152,6 +157,9 @@ public sealed partial class MainViewModel : ObservableObject
         pushToTalk.Changed += OnButtonChanged;
         power.Changed += OnPowerChanged;
         store.Changed += OnSettingsChanged;
+        capture.DevicePresenceChanged += OnSpeakerPresenceChanged;
+
+        SpeakerPresent = capture.IsDevicePresent;
 
         Battery = BatteryStatus.From(power.Current);
 
@@ -199,6 +207,15 @@ public sealed partial class MainViewModel : ObservableObject
         is AppState.Idle or AppState.Recording or AppState.Working or AppState.Result;
 
     public bool IsCriticalBattery => Battery.IsCritical;
+
+    /// <remarks>
+    /// A machine that cannot answer shows the glyph. A red pill on a
+    /// development host that has no speakerphone says a defect that is not
+    /// there.
+    /// </remarks>
+    public bool IsSpeakerPresent => SpeakerPresent != false;
+
+    public bool IsSpeakerMissing => SpeakerPresent == false;
 
 #pragma warning disable CA1822 // A binding of AXAML needs a member of the instance.
     public string WarmUpText => "The appliance is starting. This takes a few seconds.";
@@ -459,6 +476,23 @@ public sealed partial class MainViewModel : ObservableObject
         else
         {
             Dispatcher.UIThread.Post(() => Safely(() => Battery = BatteryStatus.From(state)));
+        }
+    }
+
+    /// <remarks>
+    /// CAUTION: this event comes on the thread that reads the list of the
+    /// devices. Each write to a property must go to the thread of the user
+    /// interface.
+    /// </remarks>
+    private void OnSpeakerPresenceChanged(object? sender, bool? present)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            Safely(() => SpeakerPresent = present);
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(() => Safely(() => SpeakerPresent = present));
         }
     }
 
@@ -753,6 +787,13 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
+        // A recording that cannot hear is worse than a refusal that says why.
+        if (IsSpeakerMissing)
+        {
+            ShowStatus("Speaker not found. Check the device connections.");
+            return;
+        }
+
         // The ring lights before the microphone accumulates, and it goes dark
         // after the microphone stops. An indicator that comes after the
         // condition that it shows tells the room the truth too late.
@@ -831,6 +872,17 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         LogRecordingStopped(_logger, lane, recording.Duration.TotalSeconds, recording.PeakLevel);
+
+        // Section 8.19 of deploy/README.md: the device can be present, open,
+        // and correct in each format, and give the value 0 for each sample with
+        // no error at all. A count of the samples does not find that condition,
+        // and the level does.
+        if (recording.PeakLevel == 0)
+        {
+            ShowStatus("Speaker not found. Check the device connections.");
+            GoTo(AppState.Idle);
+            return;
+        }
 
         // Nothing awaits this task on purpose. RunPipelineAsync catches each
         // error of its own, and the user interface must not stop while the

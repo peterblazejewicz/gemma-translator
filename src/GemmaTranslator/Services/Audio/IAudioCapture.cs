@@ -46,4 +46,24 @@ public interface IAudioCapture : IDisposable
     /// </remarks>
     /// <returns>The audio, or <c>null</c> if no recording was in operation.</returns>
     Recording? StopRecording();
+
+    /// <summary>
+    /// Gets <c>true</c> while the machine gives the device that
+    /// <see cref="Configuration.AudioOptions.PreferredDeviceName"/> names, or
+    /// <c>null</c> if this machine cannot answer the question.
+    /// </summary>
+    /// <remarks>
+    /// The value is <c>null</c> while the settings give no name. The software
+    /// then takes the default device, and the name of that device says nothing
+    /// about the speakerphone.
+    /// </remarks>
+    bool? IsDevicePresent { get; }
+
+    /// <remarks>
+    /// CAUTION: this event comes on the thread that reads the list of the
+    /// devices, and not on the thread of the user interface. A listener that
+    /// writes a property must go to the correct thread first, or Avalonia
+    /// throws.
+    /// </remarks>
+    event EventHandler<bool?>? DevicePresenceChanged;
 }

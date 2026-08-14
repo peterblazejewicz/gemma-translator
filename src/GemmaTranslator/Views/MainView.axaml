@@ -112,6 +112,29 @@
       <Setter Property="VerticalAlignment" Value="Top" />
       <Setter Property="Margin" Value="0,28,0,0" />
     </Style>
+
+    <!-- The opacity goes to 0.3 and back each 1.6 s, with no end. The design
+         gives this. A shape that does not move is a shape that a person stops
+         seeing, and this one says that the appliance cannot hear.
+
+         CAUTION: this animation makes the panel draw again while the pill
+         shows. It stops when the pill goes, because IsVisible takes the
+         control out. -->
+    <Style Selector="Border.speakerAlert">
+      <Style.Animations>
+        <Animation Duration="0:0:1.6" IterationCount="INFINITE" Easing="SineEaseInOut">
+          <KeyFrame Cue="0%">
+            <Setter Property="Opacity" Value="1.0" />
+          </KeyFrame>
+          <KeyFrame Cue="50%">
+            <Setter Property="Opacity" Value="0.3" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="Opacity" Value="1.0" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
   </UserControl.Styles>
 
   <!--
@@ -227,6 +250,55 @@
                     HorizontalAlignment="Right"
                     VerticalAlignment="Top"
                     Margin="0,10,22,0">
+          <Viewbox Width="30"
+                   Height="30"
+                   Margin="0,0,6,0"
+                   VerticalAlignment="Center"
+                   IsVisible="{Binding IsSpeakerPresent}">
+            <Canvas Width="24" Height="24">
+              <Path Data="M11,5 L6,9 L2,9 L2,15 L6,15 L11,19 Z"
+                    Stroke="{DynamicResource MutedBrush}"
+                    StrokeThickness="2"
+                    StrokeJoin="Round" />
+              <Path Data="M15.54,8.46 A5,5 0 0 1 15.54,15.53"
+                    Stroke="{DynamicResource MutedBrush}"
+                    StrokeThickness="2"
+                    StrokeLineCap="Round" />
+              <Path Data="M19.07,4.93 A10,10 0 0 1 19.07,19.07"
+                    Stroke="{DynamicResource MutedBrush}"
+                    StrokeThickness="2"
+                    StrokeLineCap="Round" />
+            </Canvas>
+          </Viewbox>
+
+          <Border Classes="speakerAlert"
+                  Margin="0,0,8,0"
+                  VerticalAlignment="Center"
+                  IsVisible="{Binding IsSpeakerMissing}"
+                  Background="{DynamicResource AlertBrush}"
+                  CornerRadius="24"
+                  Padding="14,8,18,8">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Viewbox Width="26" Height="26" VerticalAlignment="Center">
+                <Canvas Width="24" Height="24">
+                  <Path Data="M11,5 L6,9 L2,9 L2,15 L6,15 L11,19 Z"
+                        Stroke="{DynamicResource AlertInkBrush}"
+                        StrokeThickness="2"
+                        StrokeJoin="Round" />
+                  <Path Data="M22,9 L16,15 M16,9 L22,15"
+                        Stroke="{DynamicResource AlertInkBrush}"
+                        StrokeThickness="2"
+                        StrokeLineCap="Round" />
+                </Canvas>
+              </Viewbox>
+              <TextBlock Text="Speaker not found"
+                         FontSize="22"
+                         FontWeight="Medium"
+                         Foreground="{DynamicResource AlertInkBrush}"
+                         VerticalAlignment="Center" />
+            </StackPanel>
+          </Border>
+
           <controls:BatteryGlyph Width="42"
                                  Height="22"
                                  VerticalAlignment="Center"
