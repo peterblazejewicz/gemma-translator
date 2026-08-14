@@ -722,8 +722,14 @@ The plan deletes `/api/volume` (`backend/server.py:263-381`), which
 `SettingsOverlay.jsx:42,61` calls. It starts `wpctl`, `pactl`, and `amixer`,
 which are Linux only, and Pi OS Lite has no PipeWire.
 
-Use software gain in the C# software. This is cross-platform, and a test can
-use a fake.
+The software adds no control of the level. The Speak2 40 changes the level in
+the device, and its own buttons do that work. Section 8.20 of
+`deploy/README.md` gives the measurement.
+
+**CAUTION: do not add a gain of the software.** Two controls that a person can
+move, and that do not agree with each other, are worse than one control. The
+display cannot show the level: the device gives the direction of a push and it
+gives no position.
 
 The three text fields of `SettingsOverlay.jsx` become `LiteRtOptions` in the
 `LiteRt` section of `appsettings.json`. See section 3.2. The key is not in that
