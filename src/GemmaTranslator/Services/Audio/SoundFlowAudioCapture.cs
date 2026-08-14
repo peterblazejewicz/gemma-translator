@@ -35,6 +35,25 @@ namespace GemmaTranslator.Services.Audio;
 /// work here.
 /// </para>
 /// <para>
+/// CAUTION: the device is full duplex although the software plays no sound.
+/// The Jabra Speak2 40 gives no microphone data while its playback interface
+/// is stopped. A measurement on the appliance gives this, with each other
+/// condition equal:
+/// </para>
+/// <list type="table">
+/// <item><description>Playback stopped: the read gives EIO, and miniaudio
+/// gives buffers of zeros with no error at all.</description></item>
+/// <item><description>Playback open: the microphone operates, and it
+/// continues to operate.</description></item>
+/// </list>
+/// <para>
+/// The device does echo cancellation in its own hardware, thus the microphone
+/// path is behind a canceller that needs the playback reference. Nothing in
+/// the mixer makes that playback silence. Do not make this a capture device to
+/// remove one object: the microphone then gives 0.000 for each press, and no
+/// error says why.
+/// </para>
+/// <para>
 /// CAUTION: <see cref="OnAudioProcessed"/> operates on the audio thread of
 /// miniaudio, which has a high priority. It must take no lock and it must make
 /// no memory. Thus the buffer has a fixed dimension that the software makes
@@ -57,7 +76,7 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
     private readonly float[] _buffer;
 
     private MiniAudioEngine? _engine;
-    private AudioCaptureDevice? _device;
+    private FullDuplexDevice? _device;
     private long _startTicks;
     private int _deviceSampleRate;
 
@@ -169,7 +188,7 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
 
     public void Dispose()
     {
-        AudioCaptureDevice? device;
+        FullDuplexDevice? device;
         MiniAudioEngine? engine;
 
         // CAUTION: take the device out of the field inside the lock, and speak
@@ -209,7 +228,8 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
             _engine ??= new MiniAudioEngine();
             _engine.UpdateAudioDevicesInfo();
 
-            DeviceInfo info = SelectDevice(_engine.CaptureDevices);
+            DeviceInfo info = SelectDevice(_engine.CaptureDevices, "microphone");
+            DeviceInfo speaker = SelectDevice(_engine.PlaybackDevices, "speaker");
 
             AudioFormat format = new()
             {
@@ -218,33 +238,57 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
                 SampleRate = _options.SampleRate,
             };
 
-            AudioCaptureDevice device =
-                _engine.InitializeCaptureDevice(info, format, new MiniAudioDeviceConfig());
+            FullDuplexDevice device = _engine.InitializeFullDuplexDevice(
+                speaker,
+                info,
+                format,
+                new MiniAudioDeviceConfig());
 
-            device.OnAudioProcessed += OnAudioProcessed;
-            device.Start();
+            // CAUTION: Start starts the capture device and then the playback
+            // device, and it does not go back if the second one fails. Without
+            // this, the microphone of the machine stays open and no field holds
+            // the object that can close it. Each press subsequently says that
+            // the microphone is not open, until the process stops.
+            try
+            {
+                device.CaptureDevice.OnAudioProcessed += OnAudioProcessed;
+                device.Start();
+            }
+            catch
+            {
+                device.CaptureDevice.OnAudioProcessed -= OnAudioProcessed;
+                device.Dispose();
+                throw;
+            }
+
+            AudioFormat given = device.CaptureDevice.Format;
 
             // CAUTION: the format above is a request. This is the format that
             // the machine gave. A log line that shows the request only hides a
             // machine that gives 48 kHz, and then the speech is not what
             // Moonshine needs.
-            _deviceSampleRate = device.Format.SampleRate;
+            _deviceSampleRate = given.SampleRate;
             _device = device;
 
+            // The speaker is in this line because it is the condition that
+            // decides if the microphone gives sound at all. See section 8.19 of
+            // deploy/README.md. A journal that names the microphone only cannot
+            // tell a dead microphone from the incorrect speaker.
             LogMicrophoneStarted(
                 _logger,
                 info.Name ?? "(no name)",
+                speaker.Name ?? "(no name)",
                 _options.SampleRate,
-                device.Format.SampleRate,
-                device.Format.Channels);
+                given.SampleRate,
+                given.Channels);
 
-            if (device.Format.SampleRate != _options.SampleRate || device.Format.Channels != 1)
+            if (given.SampleRate != _options.SampleRate || given.Channels != 1)
             {
                 LogFormatIsDifferent(
                     _logger,
                     _options.SampleRate,
-                    device.Format.SampleRate,
-                    device.Format.Channels);
+                    given.SampleRate,
+                    given.Channels);
             }
         }
         catch (Exception exception) when (exception is not AudioCaptureException)
@@ -257,14 +301,14 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
     /// <remarks>
     /// CAUTION: the caller must not hold <see cref="_deviceLock"/>.
     /// </remarks>
-    private void CloseDevice(AudioCaptureDevice? device)
+    private void CloseDevice(FullDuplexDevice? device)
     {
         if (device is null)
         {
             return;
         }
 
-        device.OnAudioProcessed -= OnAudioProcessed;
+        device.CaptureDevice.OnAudioProcessed -= OnAudioProcessed;
 
         try
         {
@@ -274,15 +318,30 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         {
             LogStopFailed(_logger, exception);
         }
-
-        device.Dispose();
+        finally
+        {
+            // CAUTION: Stop stops the playback device and then the capture
+            // device, with no finally between them, and Dispose calls Stop
+            // again. Thus a playback device that throws leaves the microphone
+            // running and throws the same error a second time here. That error
+            // goes out of the container and stops each Dispose after it, and
+            // one of those holds the speech of a person.
+            try
+            {
+                device.Dispose();
+            }
+            catch (Exception exception) when (exception is not OutOfMemoryException)
+            {
+                LogStopFailed(_logger, exception);
+            }
+        }
     }
 
-    private DeviceInfo SelectDevice(DeviceInfo[] devices)
+    private DeviceInfo SelectDevice(DeviceInfo[] devices, string what)
     {
         if (devices.Length == 0)
         {
-            throw new AudioCaptureException("The machine has no microphone.");
+            throw new AudioCaptureException($"The machine has no {what}.");
         }
 
         string wanted = _options.PreferredDeviceName?.Trim() ?? string.Empty;
@@ -302,7 +361,7 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
                 ", ",
                 devices.Select(static device => device.Name ?? "(no name)"));
 
-            LogPreferredNotFound(_logger, wanted, names);
+            LogPreferredNotFound(_logger, what, wanted, names);
         }
 
         foreach (DeviceInfo device in devices)
@@ -362,10 +421,11 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The microphone is {device}. The software asked for {wanted} Hz and the machine gave {actual} Hz with {channels} channel(s).")]
+        Message = "The microphone is {device} and the speaker is {speaker}. The software asked for {wanted} Hz and the machine gave {actual} Hz with {channels} channel(s).")]
     private static partial void LogMicrophoneStarted(
         ILogger logger,
         string device,
+        string speaker,
         int wanted,
         int actual,
         int channels);
@@ -402,8 +462,12 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "No microphone has \"{wanted}\" in its name. The machine gives: {names}. The software uses the default device, which can record no sound.")]
-    private static partial void LogPreferredNotFound(ILogger logger, string wanted, string names);
+        Message = "No {what} has \"{wanted}\" in its name. The machine gives: {names}. The software uses the default device, which can be the incorrect one.")]
+    private static partial void LogPreferredNotFound(
+        ILogger logger,
+        string what,
+        string wanted,
+        string names);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

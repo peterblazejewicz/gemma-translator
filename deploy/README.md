@@ -76,7 +76,7 @@ active low flag, thus low is a key down.
 | File | Function |
 | --- | --- |
 | `deploy/recorder-keys-overlay.dts` | The device tree overlay that makes the three signals. |
-| `deploy/99-gemma-translator.rules` | The two udev rules that make a stable path for the buttons and for the touchscreen. |
+| `deploy/99-gemma-translator.rules` | The udev rules that make a stable path for the buttons, the touchscreen, the panel, and the speakerphone. |
 | `deploy/gemma-battery-guard.sh` | The low battery guard of section 9 |
 | `deploy/gemma-battery-guard.service` | The unit of the guard, which operates as root |
 
@@ -504,6 +504,53 @@ The microphone is Jabra Speak2 40 UC, USB Audio. The software asked for
 The name is a part of the name of the device, and not the full name. The
 sequence is: the name of the settings, then the default device, then the first
 device. Thus a machine with no such device continues to operate.
+
+### 8.19 The microphone gives no sound, and no error says so
+
+**CAUTION: the Jabra Speak2 40 gives no microphone data while its playback
+interface is stopped. The software holds a playback stream open for this one
+cause. Do not make the audio a capture device only.**
+
+Measured on the appliance from a cold start, with each other condition equal:
+
+| Off hook | Playback stream | `arecord -D hw:0,0` |
+| --- | --- | --- |
+| No | No | `read error: Input/output error` |
+| Yes | No | `read error: Input/output error` |
+| Yes | Yes | 32000 samples, largest value 9061 |
+| No | Yes | 32000 samples, largest value 4561 |
+
+The two values are the sound of the room at different moments. They show that
+sound comes through, and they do not compare one level with the other.
+
+The playback stream is the one condition, and the call state of the device is
+not a condition. The device does echo cancellation in its own hardware. Thus
+the microphone is behind a canceller, and that canceller needs the signal that
+goes to the speaker.
+
+**What the software sees is worse than an error.** miniaudio gives no error
+for this condition. It gives buffers of the correct dimension, at the correct
+rate, and each sample has the value 0:
+
+```
+The recording stopped after 2.75 s with 44032 samples at 16000 Hz. The
+largest level is 0.000.
+```
+
+44032 samples for 2.75 s at 16000 Hz is the correct quantity. Thus a count of
+the samples does not find this condition, and only the level does. With the
+playback stream open, the same button gives 0.600.
+
+**The correction is in the software.** `SoundFlowAudioCapture` makes a
+`FullDuplexDevice` and puts nothing in its mixer. Thus the playback interface
+sends no sound for the life of the process, and the microphone operates.
+
+**CAUTION: a read of the ALSA `default` device is not a correction.** That
+read operates, and the microphone then operates for a short time only. Six
+reads of `hw:0,0` one minute after it each gave the error again.
+
+A correction that decays is worse than none. The appliance then operates one
+time and subsequently records no sound, with no signal to the user.
 
 ---
 

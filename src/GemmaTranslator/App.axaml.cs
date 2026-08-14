@@ -31,11 +31,16 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Runtime.InteropServices;
 
 namespace GemmaTranslator;
 
 public partial class App : Application
 {
+    // The registrations go in a field. A local one becomes garbage, and the
+    // finalizer of that object removes the handler again.
+    private static readonly List<PosixSignalRegistration> Signals = [];
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -95,6 +100,22 @@ public partial class App : Application
         catch (AudioCaptureException exception)
         {
             LogNoMicrophoneAtStart(logger, exception);
+        }
+
+        // SECURITY CONTROL. Do not delete this. The appliance takes the single
+        // view lifetime below, and that lifetime raises no Exit event. Thus
+        // provider.Dispose() ran on Windows only, and on the Raspberry Pi
+        // nothing disposed SoundFlowAudioCapture. Its Dispose is what clears
+        // the audio buffer when the software stops while a person holds a
+        // button. Without these two lines that buffer keeps the speech of that
+        // person in the memory of a machine that then stops.
+        //
+        // Each way that stops this appliance sends SIGTERM: systemctl stop,
+        // the pkill of the notes, and the cleanup trap of start.sh. SIGINT is
+        // for a person who starts the software by hand.
+        foreach (PosixSignal signal in (PosixSignal[])[PosixSignal.SIGTERM, PosixSignal.SIGINT])
+        {
+            Signals.Add(PosixSignalRegistration.Create(signal, _ => provider.Dispose()));
         }
 
         MainViewModel viewModel = provider.GetRequiredService<MainViewModel>();
