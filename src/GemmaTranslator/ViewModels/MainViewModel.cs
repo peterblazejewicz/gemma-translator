@@ -329,7 +329,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // is then not WarmUp when this timer comes to its end.
             if (State == AppState.WarmUp)
             {
-                // The two languages of the lanes, while nobody waits.
                 Warm(Lane1);
                 Warm(Lane2);
 
@@ -487,17 +486,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         int slot = lane.Number - 1;
         Language language = lane.Language;
 
-        // One call for each lane, and the last one wins. A person who touches
-        // the selector six times goes past five languages, and the models of
-        // those five are of no use to anybody.
+        // One call for each lane, and the last one wins. Each touch past the
+        // first makes a model that nobody uses.
         _warmStops[slot]?.Cancel();
 
         CancellationTokenSource stop = new();
         _warmStops[slot] = stop;
 
-        // Nothing awaits this task. A warm call that does not operate changes
-        // nothing that a person sees: the first exchange of that language is
-        // slow, and each other function continues.
+        // Nothing awaits this task. A warm call that fails changes nothing
+        // that a person sees: the first exchange of that language stays slow.
         _ = Task.Run(async () =>
         {
             try
@@ -510,8 +507,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             }
             catch (OperationCanceledException)
             {
-                // A later touch took the place of this call. This is a correct
-                // end and not an error.
+                // Expected: a later touch cancelled this call.
             }
 #pragma warning disable CA1031 // A model that does not come must not stop the appliance.
             catch (Exception exception)

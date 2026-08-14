@@ -24,13 +24,10 @@ namespace GemmaTranslator.Configuration;
 /// </summary>
 public sealed class SpeechOptions
 {
-    /// <summary>
-    /// The name of the section in <c>appsettings.json</c>.
-    /// </summary>
     public const string SectionName = "Speech";
 
     /// <summary>
-    /// The address of <c>backend/server.py</c>, which listens on port 3000.
+    /// The address of <c>backend/server.py</c>.
     /// </summary>
     public const string DefaultBaseAddress = "http://127.0.0.1:3000";
 
@@ -40,9 +37,6 @@ public sealed class SpeechOptions
     /// </remarks>
     public string BaseAddress { get; set; } = DefaultBaseAddress;
 
-    /// <summary>
-    /// The maximum time for one call, in seconds.
-    /// </summary>
     /// <remarks>
     /// A measurement on the appliance gives 0.5 s to 1.6 s for the
     /// speech-to-text part and 1 s to 5.5 s for the text-to-speech part, and
@@ -56,10 +50,6 @@ public sealed class SpeechOptions
     /// </remarks>
     public int TimeoutSeconds { get; set; } = 30;
 
-    /// <summary>
-    /// Gets the address in the form that <see cref="Uri"/> can add a relative
-    /// part to.
-    /// </summary>
     /// <returns>The address, which ends with a slash.</returns>
     /// <exception cref="UriFormatException">The address is not a full address.</exception>
     public Uri GetBaseUri() => new(GetBaseUrl() + "/", UriKind.Absolute);

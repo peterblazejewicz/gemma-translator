@@ -20,9 +20,6 @@ using Microsoft.Extensions.Options;
 
 namespace GemmaTranslator.Configuration;
 
-/// <summary>
-/// Examines the <see cref="SpeechOptions"/> values.
-/// </summary>
 /// <remarks>
 /// The appliance has no keyboard and no settings screen. Thus an incorrect
 /// value in a file must give a clear message at the start, and not a strange

@@ -54,12 +54,10 @@ namespace GemmaTranslator.Services.Audio;
 /// The device does echo cancellation in its own hardware, thus the microphone
 /// path is behind a canceller that needs the playback reference. The playback
 /// interface stays started for the life of this object, and that is the
-/// condition that keeps the microphone alive. The contents of the mixer are
-/// not that condition: the mixer holds one player at the most, that player is
-/// not enabled while the appliance says nothing, and a mixer with no player
-/// gives the same silence. Do not make this a capture device to remove one
-/// object: the microphone then gives 0.000 for each press, and no error says
-/// why.
+/// condition that keeps the microphone alive; the contents of the mixer are
+/// not, since a mixer with no enabled player gives the same silence either
+/// way. Do not make this a capture device to remove one object: the
+/// microphone then gives 0.000 for each press, and no error says why.
 /// </para>
 /// <para>
 /// CAUTION: <see cref="OnAudioProcessed"/> operates on the audio thread of
@@ -331,8 +329,6 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
             }
             else
             {
-                // The player disposes the provider, and the provider disposes
-                // the stream.
                 built.Dispose();
             }
 
