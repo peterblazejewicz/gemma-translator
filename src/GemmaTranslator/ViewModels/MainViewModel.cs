@@ -27,19 +27,15 @@ using GemmaTranslator.Services.Power;
 using GemmaTranslator.Services.PushToTalk;
 using GemmaTranslator.Services.Settings;
 using GemmaTranslator.Services.Speakerphone;
+using GemmaTranslator.Services.Speech;
 using GemmaTranslator.Services.Translation;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace GemmaTranslator.ViewModels;
 
-public sealed partial class MainViewModel : ObservableObject
+public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
-    /// <summary>
-    /// The text that the software translates until the microphone gives words.
-    /// </summary>
-    private const string ExampleText = "Where is the nearest train station?";
-
     private static readonly TimeSpan StatusLife = TimeSpan.FromSeconds(6);
 
     private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(33);
@@ -63,12 +59,30 @@ public sealed partial class MainViewModel : ObservableObject
 
     private static readonly TimeSpan QuietTime = TimeSpan.FromMinutes(3);
 
+    /// <remarks>
+    /// The time that the selector must stop before the software makes the
+    /// models. A touch of the arrow moves one language, thus a person who goes
+    /// from English to Korean goes past three languages that nobody wants.
+    /// </remarks>
+    private static readonly TimeSpan WarmSettleTime = TimeSpan.FromSeconds(1.5);
+
     private readonly ITranslator _translator;
+    private readonly ISpeechService _speech;
     private readonly IAudioCapture _capture;
+    private readonly IAudioPlayback _playback;
     private readonly ICallIndicator _callIndicator;
     private readonly IUserSettingsStore _store;
     private readonly AudioOptions _audioOptions;
     private readonly ILogger<MainViewModel> _logger;
+
+    // One stop for each lane, in the sequence of LaneViewModel.Number. A change
+    // of a language cancels the call that the previous change made.
+    private readonly CancellationTokenSource?[] _warmStops =
+        new CancellationTokenSource?[2];
+
+    // Each call to the server and to the speaker takes this token, thus a stop
+    // of the software does not wait for the timeout of the client. See Dispose.
+    private readonly CancellationTokenSource _shutdown = new();
 
     private long _pressTicks;
 
@@ -121,7 +135,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     public MainViewModel(
         ITranslator translator,
+        ISpeechService speech,
         IAudioCapture capture,
+        IAudioPlayback playback,
         ICallIndicator callIndicator,
         IPushToTalk pushToTalk,
         IPowerMonitor power,
@@ -131,7 +147,9 @@ public sealed partial class MainViewModel : ObservableObject
         ILogger<MainViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(translator);
+        ArgumentNullException.ThrowIfNull(speech);
         ArgumentNullException.ThrowIfNull(capture);
+        ArgumentNullException.ThrowIfNull(playback);
         ArgumentNullException.ThrowIfNull(callIndicator);
         ArgumentNullException.ThrowIfNull(pushToTalk);
         ArgumentNullException.ThrowIfNull(power);
@@ -141,7 +159,9 @@ public sealed partial class MainViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(logger);
 
         _translator = translator;
+        _speech = speech;
         _capture = capture;
+        _playback = playback;
         _callIndicator = callIndicator;
         _store = store;
         Settings = settings;
@@ -309,6 +329,10 @@ public sealed partial class MainViewModel : ObservableObject
             // is then not WarmUp when this timer comes to its end.
             if (State == AppState.WarmUp)
             {
+                // The two languages of the lanes, while nobody waits.
+                Warm(Lane1);
+                Warm(Lane2);
+
                 GoTo(AppState.Idle);
             }
         });
@@ -441,8 +465,69 @@ public sealed partial class MainViewModel : ObservableObject
 
         lane.Language = Languages.All[index];
 
+        Warm(lane);
+
         NoteActivity();
         LogLanguage(_logger, lane.Number, lane.Language.Name);
+    }
+
+    /// <remarks>
+    /// <see cref="ISpeechService.WarmAsync"/> gives the measured cost and the
+    /// lock of the server. The two callers are the end of the warm-up screen
+    /// and a change of a language; the test below refuses each other moment,
+    /// because only those two are moments when nobody waits.
+    /// </remarks>
+    private void Warm(LaneViewModel lane)
+    {
+        if (State is not (AppState.Idle or AppState.WarmUp or AppState.Result))
+        {
+            return;
+        }
+
+        int slot = lane.Number - 1;
+        Language language = lane.Language;
+
+        // One call for each lane, and the last one wins. A person who touches
+        // the selector six times goes past five languages, and the models of
+        // those five are of no use to anybody.
+        _warmStops[slot]?.Cancel();
+
+        CancellationTokenSource stop = new();
+        _warmStops[slot] = stop;
+
+        // Nothing awaits this task. A warm call that does not operate changes
+        // nothing that a person sees: the first exchange of that language is
+        // slow, and each other function continues.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // The selector stops first. Without this each touch makes a
+                // call, and each call holds the lock of the server.
+                await Task.Delay(WarmSettleTime, stop.Token).ConfigureAwait(false);
+
+                await _speech.WarmAsync(language, stop.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // A later touch took the place of this call. This is a correct
+                // end and not an error.
+            }
+#pragma warning disable CA1031 // A model that does not come must not stop the appliance.
+            catch (Exception exception)
+#pragma warning restore CA1031
+            {
+                LogWarmFailed(_logger, language.Code, exception);
+            }
+            finally
+            {
+                // The slot loses this source, and nothing disposes it. A source
+                // with no wait handle and no timer needs no dispose, and a
+                // dispose here would make the Cancel above throw for a call
+                // that came to its end one moment before it.
+                Interlocked.CompareExchange(ref _warmStops[slot], null, stop);
+            }
+        });
     }
 
     private void ShowStatus(string text)
@@ -461,6 +546,18 @@ public sealed partial class MainViewModel : ObservableObject
 
         _statusTimer.Start();
     }
+
+    /// <remarks>
+    /// The conversation goes away with the message. A bubble that holds
+    /// "Listening…" or a dash says that the appliance heard something, and the
+    /// message below it says that it did not.
+    /// </remarks>
+    private void ShowNoResult(string status) => Safely(() =>
+    {
+        Exchange = null;
+        GoTo(AppState.Idle);
+        ShowStatus(status);
+    });
 
     /// <remarks>
     /// CAUTION: this event comes on the thread that reads the files of the
@@ -496,26 +593,77 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    private async Task RunPipelineAsync(LaneViewModel lane)
+    private async Task RunPipelineAsync(LaneViewModel lane, Recording recording)
     {
         LaneViewModel other = lane.Number == 1 ? Lane2 : Lane1;
 
-        GoTo(AppState.Working);
+        // The times of each part go in one line at the end. A person who looks
+        // for the slow part must not add four lines of the journal, and the
+        // total is more than their sum: it holds the work of the display also.
+        long pipelineTicks = Stopwatch.GetTimestamp();
+        double recorded = recording.Duration.TotalSeconds;
+        double transcribeSeconds = 0;
+        double translateSeconds = 0;
+        double speakSeconds = 0;
 
-        Exchange = new Exchange
+        string heard;
+
+        try
         {
-            SourceLanguage = lane.Language,
-            TargetLanguage = other.Language,
-            SourceText = "Listening…",
-            TargetText = "—",
-            SourceIsLane2 = lane.Number == 2,
-            IsSourceMuted = true,
-            IsTargetMuted = true,
-        };
+            // SECURITY CONTROL. This method owns the recording, and this block
+            // wipes the samples as soon as the words come back. StopRecording
+            // cannot do it with a `using` statement: nothing awaits this task,
+            // so the array would already be cleared when the speech service
+            // reads it. Everything that can throw is inside the block, because
+            // an error before it would leave the speech of a person in memory.
+            using (recording)
+            {
+                GoTo(AppState.Working);
 
-        // The speech-to-text part goes here.
-        string heard = ExampleText;
+                Exchange = new Exchange
+                {
+                    SourceLanguage = lane.Language,
+                    TargetLanguage = other.Language,
+                    SourceText = "Listening…",
+                    TargetText = "—",
+                    SourceIsLane2 = lane.Number == 2,
+                    IsSourceMuted = true,
+                    IsTargetMuted = true,
+                };
 
+                long ticks = Stopwatch.GetTimestamp();
+
+                heard = await _speech
+                    .TranscribeAsync(recording.Samples, lane.Language, _shutdown.Token)
+                    .ConfigureAwait(true);
+
+                transcribeSeconds = Stopwatch.GetElapsedTime(ticks).TotalSeconds;
+
+                LogTranscribed(_logger, transcribeSeconds, heard.Length);
+            }
+        }
+        catch (SpeechException exception)
+        {
+            LogTranscriptionFailed(_logger, exception);
+            ShowNoResult("Speech service isn't responding.");
+            return;
+        }
+#pragma warning disable CA1031 // The appliance must not stop. See the remark.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            // CAUTION: this catch is the last one on purpose. See the same
+            // catch on the translation below.
+            LogTranscriptionFailed(_logger, exception);
+            ShowNoResult("Speech service isn't responding.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(heard))
+        {
+            ShowNoResult("No speech detected. Hold the button and try again.");
+            return;
+        }
 
         Exchange = Exchange with
         {
@@ -525,10 +673,12 @@ public sealed partial class MainViewModel : ObservableObject
             IsTargetMuted = true,
         };
 
+        string? translated = null;
+
         try
         {
             TranslationResult result = await _translator
-                .TranslateAsync(heard, lane.Language, other.Language)
+                .TranslateAsync(heard, lane.Language, other.Language, _shutdown.Token)
                 .ConfigureAwait(true);
 
             Exchange = Exchange with
@@ -537,7 +687,11 @@ public sealed partial class MainViewModel : ObservableObject
                 IsTargetMuted = false,
             };
 
-            LogTranslated(_logger, result.Duration.TotalSeconds, result.TotalTokens);
+            translated = result.Translation;
+
+            translateSeconds = result.Duration.TotalSeconds;
+
+            LogTranslated(_logger, translateSeconds, result.TotalTokens);
         }
         catch (TranslationException exception)
         {
@@ -559,6 +713,28 @@ public sealed partial class MainViewModel : ObservableObject
             ShowStatus("Translation service isn't responding.");
         }
 
+        // The state stays at Working while the appliance speaks. Thus the
+        // button of the other person does nothing until the sound is complete.
+        // The microphone also does not hear the speaker.
+        if (translated is not null && _store.Current.SpeakTranslations)
+        {
+            long speakTicks = Stopwatch.GetTimestamp();
+
+            await SpeakAsync(translated, other.Language).ConfigureAwait(true);
+
+            speakSeconds = Stopwatch.GetElapsedTime(speakTicks).TotalSeconds;
+        }
+
+        double totalSeconds = Stopwatch.GetElapsedTime(pipelineTicks).TotalSeconds;
+
+        LogExchange(
+            _logger,
+            recorded,
+            transcribeSeconds,
+            translateSeconds,
+            speakSeconds,
+            totalSeconds);
+
         // CAUTION: this line is inside the guard on purpose. GoTo raises
         // PropertyChanged, Avalonia then applies a style, and that can throw.
         // Nothing awaits this task, thus the error goes away in silence and the
@@ -566,6 +742,47 @@ public sealed partial class MainViewModel : ObservableObject
         // state, and the appliance then hears nobody again and says nothing.
         Safely(() => GoTo(AppState.Result));
     }
+
+    /// <remarks>
+    /// CAUTION: an error here must not remove the translation from the display.
+    /// A person can read the words, and the sound does not come. Thus this
+    /// method catches each error and it shows no message.
+    /// </remarks>
+    private async Task SpeakAsync(string text, Language language)
+    {
+        // The cue comes on before the call to the server and not after it. That
+        // call takes 1 s to 3 s, and for all of that time the state is Working:
+        // the two buttons do nothing and nothing on the display says that the
+        // appliance still works.
+        SetSpeaking(true);
+
+        try
+        {
+            SpokenAudio audio = await _speech
+                .SynthesizeAsync(text, language, _shutdown.Token)
+                .ConfigureAwait(true);
+
+            await _playback.PlayAsync(audio, _shutdown.Token).ConfigureAwait(true);
+        }
+#pragma warning disable CA1031 // The appliance must not stop. See the remark.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            LogSpeechFailed(_logger, exception);
+        }
+        finally
+        {
+            SetSpeaking(false);
+        }
+    }
+
+    private void SetSpeaking(bool speaking) => Safely(() =>
+    {
+        if (Exchange is not null)
+        {
+            Exchange = Exchange with { IsSpeaking = speaking };
+        }
+    });
 
     /// <remarks>
     /// CAUTION: this is the one protection against a release that does not
@@ -852,42 +1069,74 @@ public sealed partial class MainViewModel : ObservableObject
         Lane1.CanTurn = true;
         Lane2.CanTurn = true;
 
-        using Recording? recording = _capture.StopRecording();
+        Recording? recording = _capture.StopRecording();
+        bool handedOver = false;
 
-        _callIndicator.EndCall();
-
-        if (held.TotalMilliseconds < _audioOptions.MinimumPressMilliseconds)
+        try
         {
-            // A physical button in a public location gets an accidental touch.
-            LogPressTooShort(_logger, lane, held.TotalMilliseconds);
-            GoTo(AppState.Idle);
-            ShowStatus("Press and hold the button while you speak.");
-            return;
-        }
+            _callIndicator.EndCall();
 
-        if (recording is null)
+            if (held.TotalMilliseconds < _audioOptions.MinimumPressMilliseconds)
+            {
+                // A physical button in a public location gets an accidental touch.
+                LogPressTooShort(_logger, lane, held.TotalMilliseconds);
+                GoTo(AppState.Idle);
+                ShowStatus("Press and hold the button while you speak.");
+                return;
+            }
+
+            if (recording is null)
+            {
+                GoTo(AppState.Idle);
+                return;
+            }
+
+            LogRecordingStopped(_logger, lane, recording.Duration.TotalSeconds, recording.PeakLevel);
+
+            // Section 8.19 of deploy/README.md: the device can be present, open,
+            // and correct in each format, and give the value 0 for each sample with
+            // no error at all. A count of the samples does not find that condition,
+            // and the level does.
+            if (recording.PeakLevel == 0)
+            {
+                ShowStatus("Speaker not found. Check the device connections.");
+                GoTo(AppState.Idle);
+                return;
+            }
+
+            // Nothing awaits this task on purpose. RunPipelineAsync catches each
+            // error of its own, and the user interface must not stop while the
+            // model works.
+            _ = RunPipelineAsync(speaking, recording);
+            handedOver = true;
+        }
+        finally
         {
-            GoTo(AppState.Idle);
-            return;
+            // SECURITY CONTROL. RunPipelineAsync owns the recording once it
+            // starts, and it wipes the samples itself. Every other path out of
+            // this method must wipe them here, or the speech of a person stays
+            // in the heap. Do not remove this.
+            if (!handedOver)
+            {
+                recording?.Dispose();
+            }
         }
+    }
 
-        LogRecordingStopped(_logger, lane, recording.Duration.TotalSeconds, recording.PeakLevel);
+    /// <remarks>
+    /// The container calls this when the software stops. It cancels only: a
+    /// source that this method disposes can be inside a call of HttpClient at
+    /// that moment, and the call then gives an error of a different type. The
+    /// process ends immediately after this.
+    /// </remarks>
+    public void Dispose()
+    {
+        _shutdown.Cancel();
 
-        // Section 8.19 of deploy/README.md: the device can be present, open,
-        // and correct in each format, and give the value 0 for each sample with
-        // no error at all. A count of the samples does not find that condition,
-        // and the level does.
-        if (recording.PeakLevel == 0)
+        foreach (CancellationTokenSource? stop in _warmStops)
         {
-            ShowStatus("Speaker not found. Check the device connections.");
-            GoTo(AppState.Idle);
-            return;
+            stop?.Cancel();
         }
-
-        // Nothing awaits this task on purpose. RunPipelineAsync catches each
-        // error of its own, and the user interface must not stop while the
-        // model works.
-        _ = RunPipelineAsync(speaking);
     }
 
     [LoggerMessage(
@@ -923,6 +1172,20 @@ public sealed partial class MainViewModel : ObservableObject
         Message = "Lane {lane} is now {language}.")]
     private static partial void LogLanguage(ILogger logger, int lane, string language);
 
+    /// <remarks>
+    /// The count of the characters, and not the text. The words of a person are
+    /// personal data and they must not go in the journal.
+    /// </remarks>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The speech-to-text took {seconds:F2} s and gave {characters} characters.")]
+    private static partial void LogTranscribed(ILogger logger, double seconds, int characters);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The speech-to-text did not occur.")]
+    private static partial void LogTranscriptionFailed(ILogger logger, Exception exception);
+
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The translation took {seconds:F2} s and used {tokens} tokens.")]
@@ -932,6 +1195,32 @@ public sealed partial class MainViewModel : ObservableObject
         Level = LogLevel.Warning,
         Message = "The translation did not occur.")]
     private static partial void LogTranslationFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The models of {language} are not ready. The first exchange in that language is slow.")]
+    private static partial void LogWarmFailed(ILogger logger, string language, Exception exception);
+
+    /// <remarks>
+    /// One line for each exchange, for a measurement of the speed. A value of 0
+    /// for the speech says that the settings do not speak the translations, and
+    /// not that the sound was immediate.
+    /// </remarks>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The exchange is complete. Recorded {recorded:F2} s, speech-to-text {transcribe:F2} s, translation {translate:F2} s, speech {speak:F2} s, total {total:F2} s.")]
+    private static partial void LogExchange(
+        ILogger logger,
+        double recorded,
+        double transcribe,
+        double translate,
+        double speak,
+        double total);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The appliance did not speak the translation. The words stay on the display.")]
+    private static partial void LogSpeechFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(
         Level = LogLevel.Information,
