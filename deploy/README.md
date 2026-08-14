@@ -596,6 +596,56 @@ Without the rule the software writes one line and each other function
 continues. The software writes the on-hook report at the start and at SIGTERM,
 thus a ring that stays green shows a stop that gave no signal.
 
+### 8.20 The speakerphone controls the level of its own sound
+
+**The Jabra Speak2 40 changes the level in the device. The software of the
+host needs no control of the level.** This closes the open item of section 4.3
+of CLAUDE.md.
+
+Measured on the appliance with a tone of 440 Hz that operated for 75 s:
+
+| Item | Result |
+| --- | --- |
+| A push on the buttons of the device | The level changes, and a person hears it |
+| `PCM Playback Volume`, numid=4 | 8 of 15 at the start, and 8 of 15 at the end |
+| A read of that control each 5 s for 65 s | 8, at each read |
+| `/dev/input/event2` | 198 key events, `KEY_VOLUMEUP` and `KEY_VOLUMEDOWN` |
+
+The range of `PCM Playback Volume` is 0 to 15, and −45.00 dB to 0.00 dB.
+
+There are two controls, and they are not the same control:
+
+- `PCM Playback Volume` is a control of the host on the card. Nothing on the
+  appliance moves it.
+- The device has a control of its own, and its buttons move that one. The host
+  cannot read it.
+
+The device sends `KEY_VOLUMEUP` and `KEY_VOLUMEDOWN` to the host also. Those
+are a message and not a request. The level changes although no software of the
+host reads them.
+
+**CAUTION: the display cannot show the level.** The Consumer page of the
+device declares these controls, and no other:
+
+```
+Volume Increment · Volume Decrement · Mute · Play/Pause · Play · Pause · Stop
+```
+
+Each one gives a direction and it does not give a position. Thus the host
+learns which button a person pushed. It does not learn where the control is,
+what its limits are, or the dimension of one step.
+
+A bar or a percent on the display is a value that the software computes from a
+start that it does not know. It becomes incorrect at the first push that a
+person makes while the software is stopped.
+
+The software can show the direction of a push. It cannot show a level.
+
+**CAUTION: do not put a gain of the software in front of this.** Two controls
+that a person can move, and that do not agree with each other, are worse than
+one control. Section 9 of CLAUDE.md gives a gain of the software, and that
+decision comes from a time before this measurement.
+
 ---
 
 ## 10. The swap of the appliance
