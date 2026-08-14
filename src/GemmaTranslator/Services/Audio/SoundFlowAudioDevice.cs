@@ -14,16 +14,20 @@
 // limitations under the License.
 //
 // This file is part of a fork of google-gemma/gemma-translator and has
-// been modified. It replaces frontend/src/hooks/useAudioRecorder.js.
+// been modified. It replaces frontend/src/hooks/useAudioRecorder.js and
+// playTTS of frontend/src/TranslatorApp.jsx.
 
 using System.Diagnostics;
 using GemmaTranslator.Configuration;
+using GemmaTranslator.Services.Speech;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SoundFlow.Abstracts.Devices;
 using SoundFlow.Backends.MiniAudio;
 using SoundFlow.Backends.MiniAudio.Devices;
+using SoundFlow.Components;
 using SoundFlow.Enums;
+using SoundFlow.Providers;
 using SoundFlow.Structs;
 
 namespace GemmaTranslator.Services.Audio;
@@ -48,10 +52,14 @@ namespace GemmaTranslator.Services.Audio;
 /// </list>
 /// <para>
 /// The device does echo cancellation in its own hardware, thus the microphone
-/// path is behind a canceller that needs the playback reference. Nothing in
-/// the mixer makes that playback silence. Do not make this a capture device to
-/// remove one object: the microphone then gives 0.000 for each press, and no
-/// error says why.
+/// path is behind a canceller that needs the playback reference. The playback
+/// interface stays started for the life of this object, and that is the
+/// condition that keeps the microphone alive. The contents of the mixer are
+/// not that condition: the mixer holds one player at the most, that player is
+/// not enabled while the appliance says nothing, and a mixer with no player
+/// gives the same silence. Do not make this a capture device to remove one
+/// object: the microphone then gives 0.000 for each press, and no error says
+/// why.
 /// </para>
 /// <para>
 /// CAUTION: <see cref="OnAudioProcessed"/> operates on the audio thread of
@@ -62,7 +70,7 @@ namespace GemmaTranslator.Services.Audio;
 /// thread waited for the lock that the caller of <c>Dispose</c> held.
 /// </para>
 /// </remarks>
-public sealed partial class SoundFlowAudioCapture : IAudioCapture
+public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
 {
     private const int PresenceUnknown = 0;
     private const int PresenceThere = 1;
@@ -73,8 +81,27 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
     // nothing, thus the cost is not the 1.22 s of an open.
     private static readonly TimeSpan PresenceInterval = TimeSpan.FromSeconds(2);
 
+    // CAUTION: this margin is the one protection against an end that does not
+    // come. PlaybackEnded comes from the audio thread, and that thread stops if
+    // a person disconnects the speakerphone. The state then stays at Working
+    // for ever, and each button does nothing.
+    private static readonly TimeSpan PlaybackMargin = TimeSpan.FromSeconds(5);
+
+    // CAUTION: SoundPlayerBase gives exactly 0 when the provider cannot give a
+    // length, and that is a value of the library and not an error. The budget
+    // is then the margin alone, and a sentence of more than 5 s stops in its
+    // middle with no signal. A measurement gives 2.35 s for a short phrase,
+    // thus a full sentence goes past that limit.
+    private const double DefaultPlaybackSeconds = 60;
+
+    // The client of the speech server refuses a body of more than 16 MB, which
+    // is about 5.5 minutes of the 24 kHz 16-bit audio that a measurement gives.
+    // Thus no correct answer needs more than this, and a header that asks for
+    // more makes the appliance wait for hours with each button dead.
+    private const double MaximumPlaybackSeconds = 360;
+
     private readonly AudioOptions _options;
-    private readonly ILogger<SoundFlowAudioCapture> _logger;
+    private readonly ILogger<SoundFlowAudioDevice> _logger;
     private readonly CancellationTokenSource _stop = new();
 
     // This lock is for the life of the device only. The audio thread never
@@ -87,6 +114,11 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
 
     private MiniAudioEngine? _engine;
     private FullDuplexDevice? _device;
+
+    // The player that speaks now. PlayAsync clears this field when the sound
+    // is complete, thus it holds null while the appliance says nothing.
+    private SoundPlayer? _player;
+
     private long _startTicks;
     private int _deviceSampleRate;
 
@@ -109,9 +141,9 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
     private int _presenceStarted;
     private bool _disposed;
 
-    public SoundFlowAudioCapture(
+    public SoundFlowAudioDevice(
         IOptions<AudioOptions> options,
-        ILogger<SoundFlowAudioCapture> logger)
+        ILogger<SoundFlowAudioDevice> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
@@ -161,6 +193,17 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
             {
                 throw new AudioCaptureException("The microphone is not open.");
             }
+
+            // SECURITY CONTROL. Do not delete this to save a memset.
+            // StopRecording clears the buffer, but an audio callback that is
+            // already past its test of the flag can write into it after that
+            // clear, and nothing else ever removes those samples: the next
+            // StopRecording sees no open session and gives null back. About one
+            // period of the speech of the last person, some 10 ms of it, stays
+            // in the heap. Here the audio thread has been quiet since the last
+            // release of this lock. The cost is a memset of 7.68 MB, far less
+            // than a millisecond, and the device is already 1.22 s warm.
+            Array.Clear(_buffer);
 
             _written = 0;
             _peakBits = 0;
@@ -218,20 +261,210 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         return new Recording(samples, duration, peak, _deviceSampleRate, _reachedLimit);
     }
 
+    /// <remarks>
+    /// <para>
+    /// CAUTION: the provider gets the format of the DEVICE and not the format
+    /// of the WAV. Nothing in SoundFlow changes the rate; this value makes the
+    /// decoder of miniaudio change it in native code. The server sends 24000 Hz
+    /// and this device operates at 16000 Hz. Thus the other constructor, which
+    /// reads the rate from the file, speaks at two thirds of the speed.
+    /// </para>
+    /// <para>
+    /// CAUTION: <c>PlaybackEnded</c> comes on the audio thread, from
+    /// <c>GenerateAudio</c>. Thus its handler obeys the same rules as
+    /// <see cref="OnAudioProcessed"/> and it only makes a signal.
+    /// <c>RemoveComponent</c> takes a lock and it makes an array, thus the
+    /// <c>finally</c> below does that work. That code comes after the await of
+    /// a source that continues asynchronously, thus it operates on a thread of
+    /// the pool and never on the audio thread.
+    /// </para>
+    /// </remarks>
+    public async Task PlayAsync(
+        SpokenAudio speech,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(speech);
+
+        SoundPlayer? previous;
+        MiniAudioEngine engine;
+        Mixer mixer;
+        AudioFormat format;
+
+        lock (_deviceLock)
+        {
+            if (_disposed || _device is null || _engine is null)
+            {
+                throw new AudioPlaybackException("The speaker is not open.");
+            }
+
+            previous = _player;
+            _player = null;
+
+            engine = _engine;
+            mixer = _device.MasterMixer;
+            format = _device.PlaybackDevice.Format;
+        }
+
+        Retire(previous);
+
+        MemoryStream wav = new(speech.WavBytes, writable: false);
+        StreamDataProvider? provider = null;
+        SoundPlayer? built = null;
+        TimeSpan budget;
+
+        try
+        {
+            provider = new StreamDataProvider(engine, format, wav);
+            built = new SoundPlayer(engine, format, provider);
+
+            // The read of the length is inside this block, because a header
+            // that is not correct throws. Outside the block that error leaves a
+            // decoder of native code with no owner.
+            budget = MakeBudget(built.Duration);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            if (built is null)
+            {
+                provider?.Dispose();
+                wav.Dispose();
+            }
+            else
+            {
+                // The player disposes the provider, and the provider disposes
+                // the stream.
+                built.Dispose();
+            }
+
+            // SECURITY CONTROL. See the finally at the end of this method.
+            Array.Clear(speech.WavBytes);
+
+            LogPlaybackFailed(_logger, speech.WavBytes.Length, exception);
+
+            throw new AudioPlaybackException(
+                "The audio of the translation did not open.",
+                exception);
+        }
+
+        SoundPlayer player = built;
+
+        // RunContinuationsAsynchronously keeps the work after the await off the
+        // audio thread. Without it that thread does the work of the caller.
+        TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        player.PlaybackEnded += (_, _) => ended.TrySetResult();
+
+        long ticks = Stopwatch.GetTimestamp();
+
+        bool added = false;
+
+        lock (_deviceLock)
+        {
+            if (!_disposed)
+            {
+                mixer.AddComponent(player);
+                _player = player;
+                added = true;
+            }
+        }
+
+        if (!added)
+        {
+            Retire(player);
+
+            // SECURITY CONTROL. See the finally at the end of this method.
+            Array.Clear(speech.WavBytes);
+
+            throw new AudioPlaybackException("The speaker is not open.");
+        }
+
+        try
+        {
+            player.Play();
+
+            await ended.Task.WaitAsync(budget, cancellationToken).ConfigureAwait(false);
+
+            double seconds = Stopwatch.GetElapsedTime(ticks).TotalSeconds;
+
+            LogPlayed(_logger, seconds, speech.WavBytes.Length, format.SampleRate);
+        }
+        catch (TimeoutException)
+        {
+            LogPlaybackDidNotEnd(_logger, player.Duration, budget.TotalSeconds);
+        }
+        finally
+        {
+            // A component that is not enabled gives the buffer back with no
+            // change. The library does this at the usual end; this line is for
+            // the limit above and for a stop that the caller asked for.
+            player.Enabled = false;
+
+            bool mine;
+
+            lock (_deviceLock)
+            {
+                mine = ReferenceEquals(_player, player);
+
+                if (mine)
+                {
+                    _player = null;
+                }
+            }
+
+            // Dispose takes the player out of the field itself and retires it.
+            // Two calls of Retire on one player would dispose it two times.
+            if (mine)
+            {
+                Retire(player);
+            }
+
+            // SECURITY CONTROL. Do not delete this line. These bytes are the
+            // spoken sentence of a person, as audio. Without the wipe they stay
+            // readable in a memory dump of the process for as long as the
+            // appliance is idle, which can be days. The player is disposed
+            // above, so nothing reads them after this line. The input path does
+            // the same in Recording.Dispose.
+            Array.Clear(speech.WavBytes);
+        }
+    }
+
+    /// <remarks>
+    /// CAUTION: the value comes from the header of the WAV, which the speech
+    /// server writes. A measurement on .NET 10 gives an ArgumentException for a
+    /// value that is not a number, an OverflowException for 1e18, and an
+    /// ArgumentOutOfRangeException for 1e9, because the longest timer is about
+    /// 49.7 days.
+    /// </remarks>
+    private static TimeSpan MakeBudget(double declared)
+    {
+        double seconds = double.IsFinite(declared) && declared > 0
+            ? Math.Min(declared, MaximumPlaybackSeconds)
+            : DefaultPlaybackSeconds;
+
+        return TimeSpan.FromSeconds(seconds) + PlaybackMargin;
+    }
+
     public void Dispose()
     {
         FullDuplexDevice? device;
         MiniAudioEngine? engine;
-
-        // The reads of the list stop first. A read that begins after the lines
-        // below would make the engine a second time.
-        _stop.Cancel();
+        SoundPlayer? player;
 
         // CAUTION: take the device out of the field inside the lock, and speak
         // to miniaudio outside it. `ma_device_stop` waits for the audio
         // thread, and that thread must not wait for this lock.
         lock (_deviceLock)
         {
+            // CAUTION: the container gives this one object to three
+            // registrations. It collects the same instance one time for each of
+            // them, thus it disposes this object three times. Without this test
+            // the second call throws at `_stop.Cancel()`, on a source that the
+            // first call disposed.
+            if (_disposed)
+            {
+                return;
+            }
+
             _disposed = true;
             _sessionOpen = false;
             _accumulating = false;
@@ -242,13 +475,45 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
 
             device = _device;
             engine = _engine;
+            player = _player;
             _device = null;
             _engine = null;
+            _player = null;
         }
 
+        // The reads of the list stop here. A read that starts after this line
+        // sees the flag above and makes no engine.
+        _stop.Cancel();
+
+        // The device goes first. Then no audio thread is in the player when the
+        // line below closes it.
         CloseDevice(device);
+        Retire(player);
+
         engine?.Dispose();
         _stop.Dispose();
+    }
+
+    /// <remarks>
+    /// CAUTION: <c>Dispose</c> does not remove the player from the mixer,
+    /// although a component with a parent usually leaves it there.
+    /// <c>SoundPlayerBase</c> does not call the method of
+    /// <c>SoundComponent</c> that does this work. Without the line below, the
+    /// mixer keeps a player with a closed decoder. It then asks that player for
+    /// samples for the life of the process.
+    /// </remarks>
+    private static void Retire(SoundPlayer? player)
+    {
+        if (player is null)
+        {
+            return;
+        }
+
+        player.Parent?.RemoveComponent(player);
+
+        // This also disposes the provider, which disposes the stream that holds
+        // the WAV.
+        player.Dispose();
     }
 
     private void StartPresenceLoop()
@@ -614,6 +879,28 @@ public sealed partial class SoundFlowAudioCapture : IAudioCapture
         Level = LogLevel.Warning,
         Message = "The microphone did not stop correctly.")]
     private static partial void LogStopFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The speaker played {bytes} bytes in {seconds:F2} s at {sampleRate} Hz.")]
+    private static partial void LogPlayed(
+        ILogger logger,
+        double seconds,
+        int bytes,
+        int sampleRate);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The audio of {audioSeconds:F1} s did not come to its end in {budgetSeconds:F1} s. The software stops it. A value of 0.0 for the audio says that the decoder gave no length, and that the budget is the value of the software.")]
+    private static partial void LogPlaybackDidNotEnd(
+        ILogger logger,
+        double audioSeconds,
+        double budgetSeconds);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The decoder refused {bytes} bytes of audio from the speech server.")]
+    private static partial void LogPlaybackFailed(ILogger logger, int bytes, Exception exception);
 
     [LoggerMessage(
         Level = LogLevel.Information,

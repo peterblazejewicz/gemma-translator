@@ -541,9 +541,14 @@ largest level is 0.000.
 the samples does not find this condition, and only the level does. With the
 playback stream open, the same button gives 0.600.
 
-**The correction is in the software.** `SoundFlowAudioCapture` makes a
-`FullDuplexDevice` and puts nothing in its mixer. Thus the playback interface
-sends no sound for the life of the process, and the microphone operates.
+**The correction is in the software.** `SoundFlowAudioDevice` makes a
+`FullDuplexDevice` and keeps the playback interface started for the life of the
+process. Thus the appliance sends no sound between two translations, and the
+microphone operates.
+
+The contents of the mixer are not the condition. The callback of the playback
+device operates although the mixer holds no component. `AddComponent` and
+`RemoveComponent` do not start the device and do not stop it.
 
 **CAUTION: a read of the ALSA `default` device is not a correction.** That
 read operates, and the microphone then operates for a short time only. Six

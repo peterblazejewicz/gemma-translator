@@ -23,19 +23,7 @@ namespace GemmaTranslator;
 /// part and the translation part use this code.
 /// </param>
 /// <param name="Name">The name that the display shows.</param>
-/// <param name="TtsLanguage">
-/// The Moonshine language code for the text-to-speech part, for example
-/// <c>ja-jp</c>. It is not the same as <paramref name="Code"/>.
-/// </param>
-/// <param name="TtsVoice">
-/// The Moonshine voice, or <c>null</c> to use the default voice of the
-/// language.
-/// </param>
-public sealed record Language(
-    string Code,
-    string Name,
-    string TtsLanguage,
-    string? TtsVoice = null);
+public sealed record Language(string Code, string Name);
 
 public static class Languages
 {
@@ -44,15 +32,12 @@ public static class Languages
     /// </summary>
     public static IReadOnlyList<Language> All { get; } =
     [
-        new Language("ar", "Arabic", "ar-msa"),
-        new Language("en", "English", "en-us"),
-        new Language("es", "Spanish", "es-es"),
-        new Language("ja", "Japanese", "ja-jp"),
-
-        // Upstream gives Chinese a voice that is not the default one.
-        new Language("zh", "Chinese", "zh-hans", "kokoro_zf_xiaoxiao"),
-
-        new Language("ko", "Korean", "ko-kr"),
+        new Language("ar", "Arabic"),
+        new Language("en", "English"),
+        new Language("es", "Spanish"),
+        new Language("ja", "Japanese"),
+        new Language("zh", "Chinese"),
+        new Language("ko", "Korean"),
     ];
 
     public static Language Default { get; } = All.Single(x => x.Code == "en");

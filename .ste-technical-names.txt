@@ -398,6 +398,13 @@ entry
 hook
 call
 
+# --- names of the text-to-speech work ---
+#
+# working      - AppState.Working, the state while the model and the speech
+#                server do their work. It is the same class as idle and
+#                screensaver above. The checker sees an "-ing" form.
+working
+
 # user - the person who operates the software. It is the word of this domain:
 #        software has users, and "user interface" is the name of the part that
 #        this fork replaces. ASD-STE100 does not hold the word, thus it is a

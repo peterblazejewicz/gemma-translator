@@ -22,6 +22,7 @@ using GemmaTranslator.Services.Power;
 using GemmaTranslator.Services.PushToTalk;
 using GemmaTranslator.Services.Settings;
 using GemmaTranslator.Services.Speakerphone;
+using GemmaTranslator.Services.Speech;
 using GemmaTranslator.Services.Translation;
 using GemmaTranslator.Theming;
 using GemmaTranslator.ViewModels;
@@ -88,8 +89,8 @@ public static class ServiceRegistration
             client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
 
             // SendAsync holds the full answer in memory before it gives the
-            // response. 2 GB is the default, and the Raspberry Pi has 8 GB
-            // with Gemma already in it.
+            // response. 2 GB is the default, and a measurement gives 4 GB on
+            // the appliance with Gemma already in it.
             client.MaxResponseContentBufferSize = 1024 * 1024;
         })
             .SetHandlerLifetime(Timeout.InfiniteTimeSpan)
@@ -100,6 +101,55 @@ public static class ServiceRegistration
                 // that the operator did not select. .NET removes the
                 // Authorization header on a redirect, and it sends the body.
                 AllowAutoRedirect = false,
+
+                // SECURITY CONTROL. Do not delete this line. Without it the
+                // loopback check in LiteRtOptionsValidator can be bypassed by
+                // an environment variable. On Linux, .NET builds its default
+                // proxy from HTTP_PROXY / HTTPS_PROXY / ALL_PROXY, and it
+                // applies that proxy to 127.0.0.1 as well — there is no
+                // automatic exception for loopback, only the NO_PROXY list.
+                // So with ALL_PROXY set, a request the validator has approved
+                // as "local" is still sent to whatever host that variable
+                // names, carrying the words the person spoke. Setting the
+                // address to a loopback address is not on its own enough to
+                // keep the speech on this machine; this line is the other half.
+                UseProxy = false,
+            });
+
+        services.AddOptions<SpeechOptions>()
+            .Bind(configuration.GetSection(SpeechOptions.SectionName));
+
+        services.AddSingleton<IValidateOptions<SpeechOptions>, SpeechOptionsValidator>();
+
+        // The lifetime and the redirect: the same as the client above, and the
+        // redirect matters more here. A redirect sends the recorded voice of a
+        // person to a machine that the operator did not select, and the
+        // loopback check of SpeechOptionsValidator cannot see that machine.
+        services.AddHttpClient<ISpeechService, MoonshineSpeechService>((provider, client) =>
+        {
+            SpeechOptions options = provider
+                .GetRequiredService<IOptions<SpeechOptions>>().Value;
+
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+
+            // The limit is on the answer, which is the WAV of the
+            // text-to-speech part. 16 MB is 5.5 minutes of the 24 kHz 16-bit
+            // audio that a measurement gives. The length of that audio follows
+            // the text of the translation, and not the recording.
+            client.MaxResponseContentBufferSize = 16 * 1024 * 1024;
+        })
+            .SetHandlerLifetime(Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+
+                // SECURITY CONTROL. Do not delete this line and do not make it
+                // a setting. Without it, one environment variable in the
+                // systemd unit sends every recording of a voice to a machine of
+                // somebody's choice, and the loopback check of
+                // SpeechOptionsValidator does not see it. The full explanation
+                // is on the client above.
+                UseProxy = false,
             });
 
         services.AddOptions<AudioOptions>()
@@ -107,7 +157,15 @@ public static class ServiceRegistration
 
         services.AddSingleton<IValidateOptions<AudioOptions>, AudioOptionsValidator>();
 
-        services.AddSingleton<IAudioCapture, SoundFlowAudioCapture>();
+        // One object opens the speakerphone, and the two interfaces are the two
+        // directions of it. Two objects open the same USB device two times, and
+        // the microphone needs the playback interface of that same device. See
+        // Services/Audio/SoundFlowAudioDevice.cs.
+        services.AddSingleton<SoundFlowAudioDevice>();
+        services.AddSingleton<IAudioCapture>(
+            static provider => provider.GetRequiredService<SoundFlowAudioDevice>());
+        services.AddSingleton<IAudioPlayback>(
+            static provider => provider.GetRequiredService<SoundFlowAudioDevice>());
 
         // The store reads the file in its constructor, thus it is a singleton
         // and the disk gets one read.

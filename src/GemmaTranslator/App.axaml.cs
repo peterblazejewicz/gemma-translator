@@ -73,13 +73,16 @@ public partial class App : Application
         // sent to whatever endpoint the settings named.
         LiteRtOptions liteRt = provider.GetRequiredService<IOptions<LiteRtOptions>>().Value;
 
+        // SECURITY CONTROL. The same reason, and a stronger one: this endpoint
+        // gets the recorded voice of a person, not text. This line runs the
+        // loopback check in SpeechOptionsValidator before the microphone
+        // opens.
+        _ = provider.GetRequiredService<IOptions<SpeechOptions>>().Value;
+
         // The same reason: a rate of 0 or a minimum press of 99999 ms gives an
         // appliance that does nothing and shows no cause.
         _ = provider.GetRequiredService<IOptions<AudioOptions>>().Value;
 
-        // The values go in a local first. CA1873 does not permit a call in the
-        // argument list of a log method, because the call operates also if the
-        // level is off.
         ILogger<App> logger = provider.GetRequiredService<ILogger<App>>();
 
         bool hasApiKey = liteRt.ApiKey.Length != 0;
@@ -106,7 +109,7 @@ public partial class App : Application
         // SECURITY CONTROL. Do not delete this. The appliance takes the single
         // view lifetime below, and that lifetime raises no Exit event. Thus
         // provider.Dispose() ran on Windows only, and on the Raspberry Pi
-        // nothing disposed SoundFlowAudioCapture. Its Dispose is what clears
+        // nothing disposed SoundFlowAudioDevice. Its Dispose is what clears
         // the audio buffer when the software stops while a person holds a
         // button. Without these two lines that buffer keeps the speech of that
         // person in the memory of a machine that then stops.
