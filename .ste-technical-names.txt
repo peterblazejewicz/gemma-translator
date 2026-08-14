@@ -385,6 +385,19 @@ process
 #               C# specification and of the .NET documents.
 entry
 
+# --- names of USB HID telephony call control ---
+#
+# hook - part of "off hook", "on hook", and "Hook Switch". It is the term of
+#        the telephony domain and the name of usage 0x20 of the Telephony
+#        page of the HID Usage Tables. The dictionary approves PUT (v), which
+#        has a different meaning.
+# call - a call (n), the state that the host writes to the device with the
+#        Off-Hook LED. "Call control" is the name of the standard contract in
+#        the HID Usage Tables. The dictionary approves the verb only, which is
+#        the same class of false result as file, log, and request above.
+hook
+call
+
 # user - the person who operates the software. It is the word of this domain:
 #        software has users, and "user interface" is the name of the part that
 #        this fork replaces. ASD-STE100 does not hold the word, thus it is a

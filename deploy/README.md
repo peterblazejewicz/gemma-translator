@@ -552,6 +552,50 @@ reads of `hw:0,0` one minute after it each gave the error again.
 A correction that decays is worse than none. The appliance then operates one
 time and subsequently records no sound, with no signal to the user.
 
+#### The ring of the speakerphone
+
+The software puts the device off hook while a person holds a button, and on
+hook at the release. The green ring then shows each person in the room when
+the microphone is live. It does not change the capture.
+
+The device acknowledges on two channels:
+
+```
+04 02 00   the vendor mirror, at about 24 ms
+02 03 00   the telephony page: Hook Switch, and the latched call-active bit
+02 00 00   on hook
+```
+
+One report holds each indicator together, and it gives the full state. Thus
+`02 01 00` is "off hook, and not muted" in one write, and a device that a
+person muted becomes not muted when a person holds a button again.
+
+The nodes are for root only. The rule in `deploy/99-gemma-translator.rules`
+gives one node to the account of the service by owner, and it makes the name
+`/dev/appliance-speakerphone`. The software opens that one name.
+
+**CAUTION: do not give the account group `plugdev`, and do not let the software
+look for the device.** Section 8.10 keeps this account out of group `input` for
+the same class of cause.
+
+A USB device supplies its own descriptor. Thus a device that a person connects
+at the rear wall can say that it is the speakerphone. The rule holds the full
+cause in plain English.
+
+Put the rules in again after a change:
+
+```bash
+sed "s|{{USER}}|$USER|g" deploy/99-gemma-translator.rules \
+  | sudo tee /etc/udev/rules.d/99-gemma-translator.rules > /dev/null
+sudo udevadm control --reload
+sudo udevadm trigger --subsystem-match=hidraw
+ls -l /dev/appliance-speakerphone
+```
+
+Without the rule the software writes one line and each other function
+continues. The software writes the on-hook report at the start and at SIGTERM,
+thus a ring that stays green shows a stop that gave no signal.
+
 ---
 
 ## 10. The swap of the appliance

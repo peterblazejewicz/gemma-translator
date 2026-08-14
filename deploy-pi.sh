@@ -143,6 +143,9 @@ if [ -f "$UDEV_TEMPLATE" ]; then
     sudo chmod 644 "$UDEV_FILE"
     sudo udevadm control --reload
     sudo udevadm trigger --subsystem-match=input
+    # The speakerphone is a hidraw node, thus a trigger of "input" alone does
+    # not apply its rule and /dev/appliance-speakerphone is not made.
+    sudo udevadm trigger --subsystem-match=hidraw
     echo "[INFO] udev rule: ${UDEV_FILE}"
 
     # The two rules above give this account the buttons and the touchscreen by

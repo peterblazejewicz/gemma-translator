@@ -21,6 +21,7 @@ using GemmaTranslator.Services.Audio;
 using GemmaTranslator.Services.Power;
 using GemmaTranslator.Services.PushToTalk;
 using GemmaTranslator.Services.Settings;
+using GemmaTranslator.Services.Speakerphone;
 using GemmaTranslator.Services.Translation;
 using GemmaTranslator.Theming;
 using GemmaTranslator.ViewModels;
@@ -120,15 +121,19 @@ public static class ServiceRegistration
         //
         // The electrical supply: the appliance has an X1201 UPS and the
         // development host has none.
+        // The ring of the speakerphone: Linux writes the report to
+        // /dev/hidraw, and Windows gives that device to its own driver stack.
         if (OperatingSystem.IsLinux())
         {
             services.AddSingleton<IPushToTalk, EvdevPushToTalk>();
             services.AddSingleton<IPowerMonitor, SysfsPowerMonitor>();
+            services.AddSingleton<ICallIndicator, HidRawCallIndicator>();
         }
         else
         {
             services.AddSingleton<IPushToTalk, KeyboardPushToTalk>();
             services.AddSingleton<IPowerMonitor, NoPowerMonitor>();
+            services.AddSingleton<ICallIndicator, NoCallIndicator>();
         }
 
         // The settings screen is a singleton because the selections of a

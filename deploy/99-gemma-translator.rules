@@ -55,6 +55,37 @@
 
 SUBSYSTEM=="input", KERNEL=="event*", SUBSYSTEMS=="platform", DRIVERS=="gpio-keys", KERNELS=="recorder_keys", SYMLINK+="input/recorder-buttons", OWNER="{{USER}}", GROUP="root", MODE="0400", ENV{LIBINPUT_IGNORE_DEVICE}="1"
 
+# The HID interface of the speakerphone. HidRawCallIndicator writes the
+# off-hook state to it, which lights the green ring while a person speaks.
+#
+# This rule exists so the code can open ONE named path. Without it the software
+# would have to walk /dev/hidraw and pick a node by reading report descriptors
+# — and the device supplies its descriptor, so that is attacker-controlled data
+# choosing which device the appliance trusts. Section 4.5 of CLAUDE.md puts a
+# USB socket on the exposed rear wall of the case. A gadget that declares an
+# LED-page Off-Hook output would take the ring, so the real speakerphone stops
+# signalling while the microphone keeps recording, and the gadget learns the
+# exact moment every person starts and stops speaking.
+#
+# CAUTION: this match is weaker than the gpio-keys rule above and you should
+# know why. The buttons are a platform device, and nothing on a USB port can
+# claim to be one. The speakerphone IS a USB device, so idVendor is a string it
+# supplies about itself and a gadget can copy it. Three things limit what that
+# buys an attacker: OWNER gives the node to one account instead of a group,
+# MODE is write-only, and the software writes two bytes and reads nothing back.
+#
+# To close it completely, add KERNELS=="3-1.1" (or whatever port the finished
+# enclosure wires the captive cable to) so the rule also pins the physical USB
+# port. That is deliberately not here yet: section 4.5 has the cable leaving
+# through a slot to a socket a person chooses, so the port is not decided.
+#
+# The match is on idVendor and NOT on idProduct on purpose. The Speak2 40
+# reports 0xAE6B in Microsoft-Teams firmware mode and 0xAE77 in UC mode, and a
+# person can change that mode. A rule pinned to the product id goes dead when
+# they do, and the ring stops with no error.
+
+SUBSYSTEM=="hidraw", SUBSYSTEMS=="usb", ATTRS{idVendor}=="0b0e", SYMLINK+="appliance-speakerphone", OWNER="{{USER}}", GROUP="root", MODE="0200"
+
 # The touchscreen of the display module. Avalonia reads it through libinput,
 # which needs the account to be able to open the device node.
 #

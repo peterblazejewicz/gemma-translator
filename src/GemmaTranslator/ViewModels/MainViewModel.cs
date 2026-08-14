@@ -26,6 +26,7 @@ using GemmaTranslator.Services.Audio;
 using GemmaTranslator.Services.Power;
 using GemmaTranslator.Services.PushToTalk;
 using GemmaTranslator.Services.Settings;
+using GemmaTranslator.Services.Speakerphone;
 using GemmaTranslator.Services.Translation;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -64,6 +65,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private readonly ITranslator _translator;
     private readonly IAudioCapture _capture;
+    private readonly ICallIndicator _callIndicator;
     private readonly IUserSettingsStore _store;
     private readonly AudioOptions _audioOptions;
     private readonly ILogger<MainViewModel> _logger;
@@ -115,6 +117,7 @@ public sealed partial class MainViewModel : ObservableObject
     public MainViewModel(
         ITranslator translator,
         IAudioCapture capture,
+        ICallIndicator callIndicator,
         IPushToTalk pushToTalk,
         IPowerMonitor power,
         IUserSettingsStore store,
@@ -124,6 +127,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(translator);
         ArgumentNullException.ThrowIfNull(capture);
+        ArgumentNullException.ThrowIfNull(callIndicator);
         ArgumentNullException.ThrowIfNull(pushToTalk);
         ArgumentNullException.ThrowIfNull(power);
         ArgumentNullException.ThrowIfNull(store);
@@ -133,6 +137,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         _translator = translator;
         _capture = capture;
+        _callIndicator = callIndicator;
         _store = store;
         Settings = settings;
         _audioOptions = audioOptions.Value;
@@ -669,6 +674,13 @@ public sealed partial class MainViewModel : ObservableObject
         {
             LogDiscardFailed(_logger, exception);
         }
+        finally
+        {
+            // This is the last path that ends a recording, thus the ring goes
+            // dark here although the microphone threw. A ring that stays green
+            // says that the appliance records, and it does not.
+            _callIndicator.EndCall();
+        }
 
         // CAUTION: each of these raises PropertyChanged, and Avalonia then
         // applies a style on this thread. Thus each one can throw, and this
@@ -741,12 +753,18 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
+        // The ring lights before the microphone accumulates, and it goes dark
+        // after the microphone stops. An indicator that comes after the
+        // condition that it shows tells the room the truth too late.
+        _callIndicator.StartCall();
+
         try
         {
             _capture.StartRecording();
         }
         catch (AudioCaptureException exception)
         {
+            _callIndicator.EndCall();
             LogCaptureFailed(_logger, lane, exception);
             ShowStatus("Microphone not found. Check the device connections.");
             return;
@@ -794,6 +812,8 @@ public sealed partial class MainViewModel : ObservableObject
         Lane2.CanTurn = true;
 
         using Recording? recording = _capture.StopRecording();
+
+        _callIndicator.EndCall();
 
         if (held.TotalMilliseconds < _audioOptions.MinimumPressMilliseconds)
         {

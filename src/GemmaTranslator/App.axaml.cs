@@ -24,6 +24,7 @@ using GemmaTranslator.Services.Audio;
 using GemmaTranslator.Services.Power;
 using GemmaTranslator.Services.PushToTalk;
 using GemmaTranslator.Services.Settings;
+using GemmaTranslator.Services.Speakerphone;
 using GemmaTranslator.Theming;
 using GemmaTranslator.ViewModels;
 using GemmaTranslator.Views;
@@ -147,6 +148,10 @@ public partial class App : Application
         }
 
         provider.GetRequiredService<IPowerMonitor>().Start();
+
+        // The ring opens its device here and not at the first push, for the
+        // same cause as the microphone above.
+        provider.GetRequiredService<ICallIndicator>().Start();
 
         base.OnFrameworkInitializationCompleted();
     }
