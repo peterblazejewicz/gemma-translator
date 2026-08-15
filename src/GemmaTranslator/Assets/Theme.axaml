@@ -26,6 +26,26 @@
     writes it into three keys of the resources instead.
   -->
 
+  <!--
+    The one alpha of the glass, and each Glass brush below carries it. Thus a
+    control gets the glass on its Background and its content stays as bright
+    as it was.
+
+    THIS BACKEND HAS NO BLUR OF THE GROUND AND IT CANNOT HAVE ONE.
+    ExperimentalAcrylicBorder asks the compositor of the system to blur what is
+    behind the WINDOW, and DRM has no compositor and no window. BlurEffect
+    blurs the subtree of an element.
+
+    The Avalonia documents also record that a blur of Skia can decrease the
+    frame rate from 60 to 30 or less. This panel pays for an offscreen buffer
+    and a shader at each frame, because the software turns it 90 degrees.
+
+    Thus translucency and a scrim, and no blur. The 0.5 of the design assumes
+    that blur, and with sharp text below sharp text it makes the lanes hard to
+    read.
+  -->
+  <x:Double x:Key="GlassAlpha">0.88</x:Double>
+
   <ResourceDictionary.ThemeDictionaries>
 
     <!--
@@ -47,6 +67,13 @@
       <SolidColorBrush x:Key="HairBrush" Color="#FAF9F5" Opacity="0.24" />
       <SolidColorBrush x:Key="InverseBrush" Color="#F0EDE4" />
       <SolidColorBrush x:Key="InverseInkBrush" Color="#1A1A18" />
+
+      <SolidColorBrush x:Key="GlassBrush" Color="#141412" Opacity="{StaticResource GlassAlpha}" />
+      <SolidColorBrush x:Key="GlassEdgeBrush" Color="#FAF9F5" Opacity="0.18" />
+      <LinearGradientBrush x:Key="ScrimBrush" StartPoint="0%,0%" EndPoint="0%,100%" Opacity="{StaticResource GlassAlpha}">
+        <GradientStop Offset="0" Color="#00141412" />
+        <GradientStop Offset="1" Color="#FF141412" />
+      </LinearGradientBrush>
     </ResourceDictionary>
 
     <ResourceDictionary x:Key="Light">
@@ -62,6 +89,13 @@
 
       <SolidColorBrush x:Key="InverseBrush" Color="#1A1A18" />
       <SolidColorBrush x:Key="InverseInkBrush" Color="#FAF9F5" />
+
+      <SolidColorBrush x:Key="GlassBrush" Color="#FAF9F5" Opacity="{StaticResource GlassAlpha}" />
+      <SolidColorBrush x:Key="GlassEdgeBrush" Color="#1A1A18" Opacity="0.14" />
+      <LinearGradientBrush x:Key="ScrimBrush" StartPoint="0%,0%" EndPoint="0%,100%" Opacity="{StaticResource GlassAlpha}">
+        <GradientStop Offset="0" Color="#00FAF9F5" />
+        <GradientStop Offset="1" Color="#FFFAF9F5" />
+      </LinearGradientBrush>
     </ResourceDictionary>
 
     <ResourceDictionary x:Key="Dark">
@@ -73,6 +107,13 @@
       <SolidColorBrush x:Key="HairBrush" Color="#FAF9F5" Opacity="0.24" />
       <SolidColorBrush x:Key="InverseBrush" Color="#F0EDE4" />
       <SolidColorBrush x:Key="InverseInkBrush" Color="#1A1A18" />
+
+      <SolidColorBrush x:Key="GlassBrush" Color="#141412" Opacity="{StaticResource GlassAlpha}" />
+      <SolidColorBrush x:Key="GlassEdgeBrush" Color="#FAF9F5" Opacity="0.18" />
+      <LinearGradientBrush x:Key="ScrimBrush" StartPoint="0%,0%" EndPoint="0%,100%" Opacity="{StaticResource GlassAlpha}">
+        <GradientStop Offset="0" Color="#00141412" />
+        <GradientStop Offset="1" Color="#FF141412" />
+      </LinearGradientBrush>
     </ResourceDictionary>
 
   </ResourceDictionary.ThemeDictionaries>

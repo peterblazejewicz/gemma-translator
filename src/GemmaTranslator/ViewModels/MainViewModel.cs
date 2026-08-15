@@ -42,6 +42,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(33);
 
+    // The reduced-motion setting makes the bars slow and it does not stop
+    // them: a strip that does not move says that the appliance cannot hear.
+    private static readonly TimeSpan CalmFrameInterval = TimeSpan.FromMilliseconds(200);
+
     /// <remarks>
     /// CAUTION: this is a time and it does NOT say how much of the model came
     /// in the memory. A different process puts the model there, and systemd starts
@@ -245,6 +249,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<Exchange> Turns { get; } = [];
 
     public int BarCount => _store.Current.VisualizerBars;
+
+    public bool IsLiquidGlass => _store.Current.LiquidGlass;
+
+    public bool IsReducedMotion => _store.Current.ReducedMotion;
 
     public bool IsIdlePrompt => State == AppState.Idle && Turns.Count == 0;
 
@@ -517,6 +525,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void OnSettingsChanged(object? sender, UserSettings settings)
     {
         OnPropertyChanged(nameof(BarCount));
+        OnPropertyChanged(nameof(IsLiquidGlass));
+        OnPropertyChanged(nameof(IsReducedMotion));
         ResetLevels();
         NoteActivity();
     }
@@ -1040,7 +1050,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         long start = Stopwatch.GetTimestamp();
 
-        _frameTimer = new DispatcherTimer { Interval = FrameInterval };
+        _frameTimer = new DispatcherTimer
+        {
+            Interval = _store.Current.ReducedMotion ? CalmFrameInterval : FrameInterval,
+        };
 
         _frameTimer.Tick += (_, _) => Safely(() =>
         {

@@ -30,6 +30,11 @@ public static class ConversationScroll
             typeof(ConversationScroll),
             defaultValue: true);
 
+    public static readonly AttachedProperty<bool> IsImmersiveProperty =
+        AvaloniaProperty.RegisterAttached<ScrollViewer, bool>(
+            "IsImmersive",
+            typeof(ConversationScroll));
+
     public static readonly AttachedProperty<int> PinRequestProperty =
         AvaloniaProperty.RegisterAttached<ScrollViewer, int>(
             "PinRequest",
@@ -60,6 +65,11 @@ public static class ConversationScroll
 
     public static void SetIsPinned(ScrollViewer view, bool value)
         => view.SetValue(IsPinnedProperty, value);
+
+    public static bool GetIsImmersive(ScrollViewer view) => view.GetValue(IsImmersiveProperty);
+
+    public static void SetIsImmersive(ScrollViewer view, bool value)
+        => view.SetValue(IsImmersiveProperty, value);
 
     /// <summary>
     /// A count, and not a value. Each increase takes the thread to its newest
@@ -109,10 +119,17 @@ public static class ConversationScroll
 
         private static readonly TimeSpan GlideFrame = TimeSpan.FromMilliseconds(16);
 
+        // CAUTION: the count starts at ScrollGestureEnded and NOT at the last
+        // movement of the content. That event comes after the content stops,
+        // thus a count from the last movement comes to its end while the thread
+        // continues to move, and the chrome then comes back below the finger.
+        private static readonly TimeSpan RestoreDelay = TimeSpan.FromMilliseconds(800);
+
         private readonly ScrollViewer _view;
         private readonly IDisposable _extent;
         private bool _dragging;
         private DispatcherTimer? _glide;
+        private DispatcherTimer? _restore;
 
         public Follower(ScrollViewer view)
         {
@@ -158,6 +175,7 @@ public static class ConversationScroll
         public void Detach()
         {
             StopGlide();
+            StopRestore();
 
             _extent.Dispose();
 
@@ -169,6 +187,7 @@ public static class ConversationScroll
         public void Pin()
         {
             _dragging = false;
+            Show();
             SetIsPinned(_view, true);
             Glide();
         }
@@ -187,6 +206,7 @@ public static class ConversationScroll
         {
             _dragging = true;
             StopGlide();
+            Hide();
             Weigh();
         }
 
@@ -194,14 +214,78 @@ public static class ConversationScroll
         {
             _dragging = false;
             Weigh();
+            StartRestore();
         }
 
-        private void OnWheel(object? sender, PointerWheelEventArgs e) => Weigh();
+        // A wheel gives no end of a gesture, thus the count starts at the
+        // movement. A wheel also makes no movement after the last notch.
+        private void OnWheel(object? sender, PointerWheelEventArgs e)
+        {
+            Hide();
+            Weigh();
+            StartRestore();
+        }
 
         // ScrollContentPresenter is a child of this control and it moved the
         // content before this runs. Thus the offset here is the one that a
         // person sees.
-        private void Weigh() => SetIsPinned(_view, End() - _view.Offset.Y <= Slack);
+        private void Weigh()
+        {
+            bool pinned = End() - _view.Offset.Y <= Slack;
+
+            SetIsPinned(_view, pinned);
+
+            if (pinned)
+            {
+                Show();
+            }
+        }
+
+        private void Hide()
+        {
+            StopRestore();
+            SetIsImmersive(_view, true);
+        }
+
+        private void Show()
+        {
+            StopRestore();
+            SetIsImmersive(_view, false);
+        }
+
+        private void StartRestore()
+        {
+            StopRestore();
+
+            if (!GetIsImmersive(_view))
+            {
+                return;
+            }
+
+            _restore = new DispatcherTimer { Interval = RestoreDelay };
+
+            _restore.Tick += (_, _) =>
+            {
+                try
+                {
+                    Show();
+                }
+#pragma warning disable CA1031 // An error out of a Tick has no catch and the process stops.
+                catch (Exception)
+#pragma warning restore CA1031
+                {
+                    StopRestore();
+                }
+            };
+
+            _restore.Start();
+        }
+
+        private void StopRestore()
+        {
+            _restore?.Stop();
+            _restore = null;
+        }
 
         private double End() => Math.Max(0, _view.Extent.Height - _view.Viewport.Height);
 

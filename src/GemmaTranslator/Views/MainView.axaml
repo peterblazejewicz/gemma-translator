@@ -24,6 +24,7 @@
              xmlns:controls="using:GemmaTranslator.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:t="using:GemmaTranslator.Theming"
              xmlns:v="using:GemmaTranslator.Views"
              xmlns:vm="using:GemmaTranslator.ViewModels"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -37,17 +38,24 @@
     The surface of the appliance, 1280 x 720 in landscape. The panel is
     720 x 1280 in native portrait and the DRM start turns it. See Program.cs.
 
-    Three bands, and the dimensions come from the design:
+    The conversation is three layers, and not three bands. The thread fills all
+    of the 720 pixels; the dock covers the last 224 of them, 56 of visualizer
+    and 168 of lanes; and the chrome floats above the two at the top.
 
-      The conversation: the remainder, 496 pixels
-      The visualizer:    56 pixels
-      The two lanes:    168 pixels
+    Upstream has three bands at 480 x 320 (style.css line 68, which says
+    "hardcoded 480x320 landscape"). Its numbers do not move here: this canvas
+    is 2.67 times as wide and the panel gives 11.6 pixels for one millimetre,
+    thus a finger needs 105 pixels and upstream assumed 20.
 
-    Upstream has the same three bands at 480 x 320 (style.css line 68, which
-    says "hardcoded 480x320 landscape"). Its numbers do not move here: this
-    canvas is 2.67 times as wide and the panel gives 11.6 pixels for one
-    millimetre, thus a finger needs 105 pixels and upstream assumed 20.
+    CAUTION: no container ABOVE the chrome may clip. A Border with a
+    CornerRadius, or a control with ClipToBounds true, cuts the chrome in the
+    middle of the move that takes it off the panel.
   -->
+
+  <UserControl.Resources>
+    <!-- The curve of the design: cubic-bezier(0.25, 0.1, 0.25, 1). -->
+    <SplineEasing x:Key="ChromeEase" X1="0.25" Y1="0.1" X2="0.25" Y2="1.0" />
+  </UserControl.Resources>
 
   <UserControl.Styles>
     <Style Selector="controls|BatteryGlyph">
@@ -156,6 +164,124 @@
         </Animation>
       </Style.Animations>
     </Style>
+
+    <Style Selector="Border.dockFill">
+      <Setter Property="Background" Value="{DynamicResource PageBrush}" />
+    </Style>
+    <Style Selector="Border.dockFill.glass">
+      <Setter Property="Background" Value="{DynamicResource GlassBrush}" />
+    </Style>
+
+    <Style Selector="Border.dockEdge">
+      <Setter Property="Height" Value="2" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Background" Value="{DynamicResource HairBrush}" />
+    </Style>
+    <Style Selector="Border.dockEdge.glass">
+      <Setter Property="Height" Value="1" />
+      <Setter Property="Background" Value="{DynamicResource GlassEdgeBrush}" />
+    </Style>
+
+    <Style Selector="Border.scrim">
+      <Setter Property="Height" Value="32" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Margin" Value="0,-32,0,0" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+      <Setter Property="Background" Value="{DynamicResource ScrimBrush}" />
+    </Style>
+
+    <!--
+      The chrome goes off the panel while a person reads the thread.
+      ChromeMotion.cs holds each position.
+
+      CAUTION: each Transitions element below is in a style and NOT on its
+      control. A Transitions that the markup puts on a control cannot be taken
+      away by a class; in a style it goes with its selector, and Panel.calm at
+      the end of this list is then the one location that stops all the movement.
+    -->
+
+    <!-- The cluster carries its own surface. The thread goes below it, and
+         with no surface the two make their image on the same pixels. -->
+    <Style Selector="Border.topCluster">
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Margin" Value="0,10,22,0" />
+      <Setter Property="CornerRadius" Value="56" />
+      <Setter Property="Padding" Value="24,0,4,0" />
+      <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource HairBrush}" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="RenderTransform" Value="{x:Static t:ChromeMotion.Rest}" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <TransformOperationsTransition Property="RenderTransform"
+                                         Duration="0:0:0.35"
+                                         Easing="{StaticResource ChromeEase}" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Border.topCluster.glass">
+      <Setter Property="Background" Value="{DynamicResource GlassBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource GlassEdgeBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.topCluster.hidden">
+      <Setter Property="RenderTransform" Value="{x:Static t:ChromeMotion.TopCluster}" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <Style Selector="Border.statusPill">
+      <Setter Property="RenderTransform" Value="{x:Static t:ChromeMotion.Rest}" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <TransformOperationsTransition Property="RenderTransform"
+                                         Duration="0:0:0.35"
+                                         Easing="{StaticResource ChromeEase}" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Border.statusPill.hidden">
+      <Setter Property="RenderTransform" Value="{x:Static t:ChromeMotion.StatusPill}" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- A touch goes to the control at the position that RenderTransform
+         gives it, thus the dock can get one at each moment of the 0.35 s. -->
+    <Style Selector="Panel.dock">
+      <Setter Property="RenderTransform" Value="{x:Static t:ChromeMotion.Rest}" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <TransformOperationsTransition Property="RenderTransform"
+                                         Duration="0:0:0.35"
+                                         Easing="{StaticResource ChromeEase}" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Panel.dock.hidden">
+      <Setter Property="RenderTransform" Value="{x:Static t:ChromeMotion.Dock}" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <Style Selector="Button.jump">
+      <Setter Property="Transitions">
+        <Transitions>
+          <DoubleTransition Property="Opacity"
+                            Duration="0:0:0.35"
+                            Easing="{StaticResource ChromeEase}" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Button.jump.hidden">
+      <Setter Property="Opacity" Value="0" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <Style Selector="Panel.calm Border.topCluster,
+                     Panel.calm Border.statusPill,
+                     Panel.calm Panel.dock,
+                     Panel.calm Button.jump">
+      <Setter Property="Transitions" Value="{x:Null}" />
+    </Style>
   </UserControl.Styles>
 
   <!--
@@ -169,126 +295,188 @@
     the conversation.
   -->
   <Panel Background="{DynamicResource PageBrush}">
-    <Grid RowDefinitions="*,56,168" IsVisible="{Binding IsConversation}">
+    <Panel IsVisible="{Binding IsConversation}" Classes.calm="{Binding IsReducedMotion}">
 
-      <Panel Grid.Row="0">
+      <StackPanel IsVisible="{Binding IsIdlePrompt}"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Margin="0,0,0,224">
+        <TextBlock Classes="headline"
+                   Text="Hold a button to talk"
+                   Foreground="{DynamicResource InkBrush}"
+                   HorizontalAlignment="Center" />
+        <Border Width="64"
+                Height="4"
+                CornerRadius="2"
+                Margin="0,22,0,0"
+                Background="{DynamicResource AccentBrush}"
+                HorizontalAlignment="Center" />
+        <TextBlock Classes="sub-headline"
+                   Text="Speak while holding · Release to translate"
+                   Margin="0,26,0,0"
+                   HorizontalAlignment="Center" />
+      </StackPanel>
 
-        <StackPanel IsVisible="{Binding IsIdlePrompt}"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-          <TextBlock Classes="headline"
-                     Text="Hold a button to talk"
-                     Foreground="{DynamicResource InkBrush}"
-                     HorizontalAlignment="Center" />
-          <Border Width="64"
-                  Height="4"
-                  CornerRadius="2"
-                  Margin="0,22,0,0"
-                  Background="{DynamicResource AccentBrush}"
-                  HorizontalAlignment="Center" />
-          <TextBlock Classes="sub-headline"
-                     Text="Speak while holding · Release to translate"
-                     Margin="0,26,0,0"
-                     HorizontalAlignment="Center" />
-        </StackPanel>
+      <!--
+        The thread of the conversation. Each turn gives two bubbles, and the
+        bubble of the speaker goes above the lane of that speaker.
 
-        <!--
-          The thread of the conversation. Each turn gives two bubbles, and the
-          bubble of the speaker goes above the lane of that speaker.
+        CAUTION: the padding at the bottom is the 224 of the dock and no less.
+        With less, the newest line stops below the lanes and no finger can
+        move it into view. The 130 at the top clears the cluster: 105 and 10.
 
-          CAUTION: the two texts need a different type from the shell, and a
-          DataTemplate is the one way to change it. x:DataType applies to the
-          element that carries it, thus a DataContext binding on that same
-          element would look for its own path in the new type and not in the
-          shell.
+        CAUTION: the two texts need a different type from the shell, and a
+        DataTemplate is the one way to change it. x:DataType applies to the
+        element that carries it, thus a DataContext binding on that same
+        element would look for its own path in the new type and not in the
+        shell.
 
-          An ItemsControl and not a ListBox: a touch on a bubble must select
-          nothing. The panel of the items keeps each of the 12 containers, thus
-          the arithmetic of the scroll uses a measurement and not an estimate.
+        An ItemsControl and not a ListBox: a touch on a bubble must select
+        nothing. The panel of the items keeps each of the 12 containers, thus
+        the arithmetic of the scroll uses a measurement and not an estimate.
 
-          CAUTION: a Background of null takes no touch. The pan of a finger
-          starts on the control below the finger, and with no brush the item
-          panel is not that control. Transparent is not the same as null here.
-        -->
-        <ScrollViewer x:Name="Thread"
-                      HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Hidden"
-                      b:ConversationScroll.IsEnabled="True"
-                      b:ConversationScroll.PinRequest="{Binding PinRequest}">
-          <ItemsControl ItemsSource="{Binding Turns}"
-                        Background="Transparent"
-                        VerticalAlignment="Bottom"
-                        Padding="44,106,44,36">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <StackPanel Spacing="32" />
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
+        CAUTION: a Background of null takes no touch. The pan of a finger
+        starts on the control below the finger, and with no brush the item
+        panel is not that control. Transparent is not the same as null here.
+      -->
+      <ScrollViewer x:Name="Thread"
+                    HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Hidden"
+                    b:ConversationScroll.IsEnabled="True"
+                    b:ConversationScroll.PinRequest="{Binding PinRequest}">
+        <ItemsControl ItemsSource="{Binding Turns}"
+                      Background="Transparent"
+                      VerticalAlignment="Bottom"
+                      Padding="44,130,44,260">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Spacing="32" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
 
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:Exchange">
-        <StackPanel Spacing="26" Opacity="{Binding Opacity}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:Exchange">
+              <StackPanel Spacing="26" Opacity="{Binding Opacity}">
 
-          <Border Classes="bubble" HorizontalAlignment="{Binding SourceSide}">
-            <StackPanel>
-              <TextBlock Classes="label" Text="{Binding SourceLabel}" />
-              <TextBlock Classes="conversation"
-                         Classes.muted="{Binding IsSourceMuted}"
-                         Text="{Binding SourceText}"
-                         FontFamily="{Binding SourceFont}"
-                         FontSize="{Binding SourceFontSize}"
-                         LineHeight="{Binding SourceLineHeight}"
-                         FlowDirection="{Binding SourceFlow}"
-                         TextAlignment="Start"
-                         Margin="0,10,0,0" />
-            </StackPanel>
-          </Border>
+                <Border Classes="bubble" HorizontalAlignment="{Binding SourceSide}">
+                  <StackPanel>
+                    <TextBlock Classes="label" Text="{Binding SourceLabel}" />
+                    <TextBlock Classes="conversation"
+                               Classes.muted="{Binding IsSourceMuted}"
+                               Text="{Binding SourceText}"
+                               FontFamily="{Binding SourceFont}"
+                               FontSize="{Binding SourceFontSize}"
+                               LineHeight="{Binding SourceLineHeight}"
+                               FlowDirection="{Binding SourceFlow}"
+                               TextAlignment="Start"
+                               Margin="0,10,0,0" />
+                  </StackPanel>
+                </Border>
 
-          <Border Classes="bubble" HorizontalAlignment="{Binding TargetSide}">
-            <StackPanel>
-              <StackPanel Orientation="Horizontal" Spacing="12">
-                <TextBlock Classes="label" Text="{Binding TargetLabel}" />
+                <Border Classes="bubble" HorizontalAlignment="{Binding TargetSide}">
+                  <StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                      <TextBlock Classes="label" Text="{Binding TargetLabel}" />
 
-                <Viewbox Width="22" Height="22" IsVisible="{Binding IsSpeaking}">
-                  <Canvas Width="24" Height="24">
-                    <Path Data="M11,5 L6,9 L2,9 L2,15 L6,15 L11,19 Z"
-                          Stroke="{DynamicResource AccentDeepBrush}"
-                          StrokeThickness="2"
-                          StrokeJoin="Round" />
-                    <Path Data="M15.54,8.46 A5,5 0 0 1 15.54,15.53"
-                          Stroke="{DynamicResource AccentDeepBrush}"
-                          StrokeThickness="2"
-                          StrokeLineCap="Round" />
-                    <Path Data="M19.07,4.93 A10,10 0 0 1 19.07,19.07"
-                          Stroke="{DynamicResource AccentDeepBrush}"
-                          StrokeThickness="2"
-                          StrokeLineCap="Round" />
-                  </Canvas>
-                </Viewbox>
+                      <Viewbox Width="22" Height="22" IsVisible="{Binding IsSpeaking}">
+                        <Canvas Width="24" Height="24">
+                          <Path Data="M11,5 L6,9 L2,9 L2,15 L6,15 L11,19 Z"
+                                Stroke="{DynamicResource AccentDeepBrush}"
+                                StrokeThickness="2"
+                                StrokeJoin="Round" />
+                          <Path Data="M15.54,8.46 A5,5 0 0 1 15.54,15.53"
+                                Stroke="{DynamicResource AccentDeepBrush}"
+                                StrokeThickness="2"
+                                StrokeLineCap="Round" />
+                          <Path Data="M19.07,4.93 A10,10 0 0 1 19.07,19.07"
+                                Stroke="{DynamicResource AccentDeepBrush}"
+                                StrokeThickness="2"
+                                StrokeLineCap="Round" />
+                        </Canvas>
+                      </Viewbox>
+                    </StackPanel>
+
+                    <TextBlock Classes="conversation"
+                               Classes.muted="{Binding IsTargetMuted}"
+                               Text="{Binding TargetText}"
+                               FontFamily="{Binding TargetFont}"
+                               FontSize="{Binding TargetFontSize}"
+                               LineHeight="{Binding TargetLineHeight}"
+                               FlowDirection="{Binding TargetFlow}"
+                               TextAlignment="Start"
+                               Margin="0,10,0,0" />
+                  </StackPanel>
+                </Border>
               </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
 
-              <TextBlock Classes="conversation"
-                         Classes.muted="{Binding IsTargetMuted}"
-                         Text="{Binding TargetText}"
-                         FontFamily="{Binding TargetFont}"
-                         FontSize="{Binding TargetFontSize}"
-                         LineHeight="{Binding TargetLineHeight}"
-                         FlowDirection="{Binding TargetFlow}"
-                         TextAlignment="Start"
-                         Margin="0,10,0,0" />
-            </StackPanel>
-          </Border>
-        </StackPanel>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
+      <Panel Classes="dock"
+             Classes.hidden="{Binding #Thread.(b:ConversationScroll.IsImmersive)}"
+             Height="224"
+             VerticalAlignment="Bottom">
 
-        <StackPanel Orientation="Horizontal"
-                    Spacing="10"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Top"
-                    Margin="0,10,22,0">
+        <Border Classes="scrim" IsVisible="{Binding IsLiquidGlass}" />
+
+        <Border Classes="dockFill" Classes.glass="{Binding IsLiquidGlass}" />
+
+        <Grid RowDefinitions="56,168">
+          <Grid Grid.Row="0" ColumnDefinitions="*,2,*">
+            <controls:AudioVisualizer Grid.Column="0"
+                                      Levels="{Binding Lane1.Levels}"
+                                      IsActive="{Binding Lane1.IsRecording}"
+                                      ActiveBrush="{DynamicResource AccentBrush}"
+                                      IdleBrush="{DynamicResource MutedBrush}" />
+
+            <Border Grid.Column="1" Background="{DynamicResource HairBrush}" />
+
+            <controls:AudioVisualizer Grid.Column="2"
+                                      Levels="{Binding Lane2.Levels}"
+                                      IsActive="{Binding Lane2.IsRecording}"
+                                      ActiveBrush="{DynamicResource AccentBrush}"
+                                      IdleBrush="{DynamicResource MutedBrush}" />
+          </Grid>
+
+          <Grid Grid.Row="1" ColumnDefinitions="*,2,*">
+            <Border Grid.ColumnSpan="3"
+                    BorderThickness="0,2,0,0"
+                    BorderBrush="{DynamicResource HairBrush}" />
+
+            <v:LaneView Grid.Column="0" DataContext="{Binding Lane1}" />
+
+            <Border Grid.Column="1" Background="{DynamicResource HairBrush}" />
+
+            <v:LaneView Grid.Column="2" DataContext="{Binding Lane2}" />
+          </Grid>
+        </Grid>
+
+        <Border Classes="dockEdge" Classes.glass="{Binding IsLiquidGlass}" />
+      </Panel>
+
+      <Button Classes="jump"
+              Classes.hidden="{Binding #Thread.(b:ConversationScroll.IsImmersive)}"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Bottom"
+              Margin="0,0,0,242"
+              IsVisible="{Binding !#Thread.(b:ConversationScroll.IsPinned)}"
+              Command="{Binding #Thread.(b:ConversationScroll.JumpToEndCommand)}">
+        <Viewbox Width="44" Height="44">
+          <Canvas Width="24" Height="24">
+            <Path Data="M12,5 V18 M6,12 L12,18 L18,12"
+                  Stroke="{DynamicResource InkBrush}"
+                  StrokeThickness="2"
+                  StrokeLineCap="Round"
+                  StrokeJoin="Round" />
+          </Canvas>
+        </Viewbox>
+      </Button>
+
+      <Border Classes="topCluster"
+              Classes.glass="{Binding IsLiquidGlass}"
+              Classes.hidden="{Binding #Thread.(b:ConversationScroll.IsImmersive)}">
+        <StackPanel Orientation="Horizontal" Spacing="10">
           <Viewbox Width="30"
                    Height="30"
                    Margin="0,0,6,0"
@@ -335,139 +523,91 @@
                          FontWeight="Medium"
                          Foreground="{DynamicResource AlertInkBrush}"
                          VerticalAlignment="Center" />
-            </StackPanel>
-          </Border>
-
-          <controls:BatteryGlyph Width="42"
-                                 Height="22"
-                                 VerticalAlignment="Center"
-                                 Percent="{Binding Battery.Percent}"
-                                 IsCharging="{Binding Battery.IsCharging}"
-                                 GroundBrush="{DynamicResource PageBrush}"
-                                 Classes.warn="{Binding Battery.IsWarning}"
-                                 Classes.danger="{Binding Battery.IsDanger}" />
-          <TextBlock Classes="numeric batteryText"
-                     Classes.warn="{Binding Battery.IsWarning}"
-                     Classes.danger="{Binding Battery.IsDanger}"
-                     Text="{Binding Battery.Text}"
-                     FontSize="26"
-                     VerticalAlignment="Center" />
-
-          <Button Classes="chrome"
-                  Margin="8,0,0,0"
-                  IsVisible="{Binding !IsRecording}"
-                  Command="{Binding OpenSettingsCommand}">
-            <Viewbox Width="34" Height="34">
-              <Canvas Width="24" Height="24">
-                <Path Data="M21,6 H14 M10,6 H3 M21,12 H12 M8,12 H3 M21,18 H16 M12,18 H3"
-                      Stroke="{DynamicResource MutedBrush}"
-                      StrokeThickness="2"
-                      StrokeLineCap="Round" />
-                <Path Data="M14,4 V8 M8,10 V14 M16,16 V20"
-                      Stroke="{DynamicResource MutedBrush}"
-                      StrokeThickness="2"
-                      StrokeLineCap="Round" />
-              </Canvas>
-            </Viewbox>
-          </Button>
         </StackPanel>
-
-        <Border Classes="pill"
-                IsVisible="{Binding IsStatusVisible}"
-                MaxWidth="760"
-                Background="{DynamicResource PanelBrush}"
-                BorderBrush="{DynamicResource HairBrush}"
-                BorderThickness="2">
-          <StackPanel Orientation="Horizontal" Spacing="14">
-            <Border Width="12"
-                    Height="12"
-                    CornerRadius="6"
-                    VerticalAlignment="Center"
-                    Background="{DynamicResource StatusDotBrush}" />
-            <TextBlock Classes="status"
-                       Text="{Binding StatusText}"
-                       TextWrapping="Wrap"
-                       MaxLines="2"
-                       VerticalAlignment="Center" />
-          </StackPanel>
         </Border>
 
-        <Border Classes="pill"
-                IsVisible="{Binding IsRecording}"
-                Background="{DynamicResource InverseBrush}">
-          <StackPanel Orientation="Horizontal" Spacing="14">
-            <Border Width="14"
-                    Height="14"
-                    CornerRadius="7"
-                    VerticalAlignment="Center"
-                    Background="{DynamicResource RecordingDotBrush}" />
-            <TextBlock Text="{Binding RecordingLabel}"
-                       FontSize="24"
-                       FontWeight="Medium"
-                       LetterSpacing="2"
-                       Foreground="{DynamicResource InverseInkBrush}"
-                       VerticalAlignment="Center" />
-            <TextBlock Classes="numeric"
-                       Text="{Binding RecordingTime}"
-                       FontSize="22"
-                       Foreground="{DynamicResource InverseInkBrush}"
-                       VerticalAlignment="Center" />
-          </StackPanel>
-        </Border>
+        <controls:BatteryGlyph Width="42"
+                               Height="22"
+                               VerticalAlignment="Center"
+                               Percent="{Binding Battery.Percent}"
+                               IsCharging="{Binding Battery.IsCharging}"
+                               GroundBrush="{DynamicResource PageBrush}"
+                               Classes.warn="{Binding Battery.IsWarning}"
+                               Classes.danger="{Binding Battery.IsDanger}" />
+        <TextBlock Classes="numeric batteryText"
+                   Classes.warn="{Binding Battery.IsWarning}"
+                   Classes.danger="{Binding Battery.IsDanger}"
+                   Text="{Binding Battery.Text}"
+                   FontSize="26"
+                   VerticalAlignment="Center" />
 
-        <Button Classes="jump"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Bottom"
-                Margin="0,0,0,18"
-                IsVisible="{Binding !#Thread.(b:ConversationScroll.IsPinned)}"
-                Command="{Binding #Thread.(b:ConversationScroll.JumpToEndCommand)}">
-          <Viewbox Width="44" Height="44">
+        <Button Classes="chrome"
+                Margin="8,0,0,0"
+                IsVisible="{Binding !IsRecording}"
+                Command="{Binding OpenSettingsCommand}">
+          <Viewbox Width="34" Height="34">
             <Canvas Width="24" Height="24">
-              <Path Data="M12,5 V18 M6,12 L12,18 L18,12"
-                    Stroke="{DynamicResource InkBrush}"
+              <Path Data="M21,6 H14 M10,6 H3 M21,12 H12 M8,12 H3 M21,18 H16 M12,18 H3"
+                    Stroke="{DynamicResource MutedBrush}"
                     StrokeThickness="2"
-                    StrokeLineCap="Round"
-                    StrokeJoin="Round" />
+                    StrokeLineCap="Round" />
+              <Path Data="M14,4 V8 M8,10 V14 M16,16 V20"
+                    Stroke="{DynamicResource MutedBrush}"
+                    StrokeThickness="2"
+                    StrokeLineCap="Round" />
             </Canvas>
           </Viewbox>
         </Button>
-      </Panel>
+        </StackPanel>
+      </Border>
 
-      <Grid Grid.Row="1"
-            ColumnDefinitions="*,2,*"
-            Background="{DynamicResource PageBrush}">
-        <Border Grid.ColumnSpan="3"
-                BorderThickness="0,2,0,0"
-                BorderBrush="{DynamicResource HairBrush}" />
+      <Border Classes="pill statusPill"
+              Classes.hidden="{Binding #Thread.(b:ConversationScroll.IsImmersive)}"
+              IsVisible="{Binding IsStatusVisible}"
+              MaxWidth="760"
+              Background="{DynamicResource PanelBrush}"
+              BorderBrush="{DynamicResource HairBrush}"
+              BorderThickness="2">
+        <StackPanel Orientation="Horizontal" Spacing="14">
+          <Border Width="12"
+                  Height="12"
+                  CornerRadius="6"
+                  VerticalAlignment="Center"
+                  Background="{DynamicResource StatusDotBrush}" />
+          <TextBlock Classes="status"
+                     Text="{Binding StatusText}"
+                     TextWrapping="Wrap"
+                     MaxLines="2"
+                     VerticalAlignment="Center" />
+        </StackPanel>
+      </Border>
 
-        <controls:AudioVisualizer Grid.Column="0"
-                                  Levels="{Binding Lane1.Levels}"
-                                  IsActive="{Binding Lane1.IsRecording}"
-                                  ActiveBrush="{DynamicResource AccentBrush}"
-                                  IdleBrush="{DynamicResource MutedBrush}" />
+      <!-- This pill has no hidden class. The microphone is open and nothing
+           that a finger does on the thread can remove that signal. -->
+      <Border Classes="pill"
+              IsVisible="{Binding IsRecording}"
+              Background="{DynamicResource InverseBrush}">
+        <StackPanel Orientation="Horizontal" Spacing="14">
+          <Border Width="14"
+                  Height="14"
+                  CornerRadius="7"
+                  VerticalAlignment="Center"
+                  Background="{DynamicResource RecordingDotBrush}" />
+          <TextBlock Text="{Binding RecordingLabel}"
+                     FontSize="24"
+                     FontWeight="Medium"
+                     LetterSpacing="2"
+                     Foreground="{DynamicResource InverseInkBrush}"
+                     VerticalAlignment="Center" />
+          <TextBlock Classes="numeric"
+                     Text="{Binding RecordingTime}"
+                     FontSize="22"
+                     Foreground="{DynamicResource InverseInkBrush}"
+                     VerticalAlignment="Center" />
+        </StackPanel>
+      </Border>
 
-        <Border Grid.Column="1" Background="{DynamicResource HairBrush}" />
-
-        <controls:AudioVisualizer Grid.Column="2"
-                                  Levels="{Binding Lane2.Levels}"
-                                  IsActive="{Binding Lane2.IsRecording}"
-                                  ActiveBrush="{DynamicResource AccentBrush}"
-                                  IdleBrush="{DynamicResource MutedBrush}" />
-      </Grid>
-
-      <Grid Grid.Row="2" ColumnDefinitions="*,2,*">
-        <Border Grid.ColumnSpan="3"
-                BorderThickness="0,2,0,0"
-                BorderBrush="{DynamicResource HairBrush}" />
-
-        <v:LaneView Grid.Column="0" DataContext="{Binding Lane1}" />
-
-        <Border Grid.Column="1" Background="{DynamicResource HairBrush}" />
-
-        <v:LaneView Grid.Column="2" DataContext="{Binding Lane2}" />
-      </Grid>
-
-    </Grid>
+    </Panel>
 
     <v:WarmUpView IsVisible="{Binding IsWarmUp}" />
 
