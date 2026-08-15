@@ -43,11 +43,21 @@ from collections import OrderedDict
 # buttons for the volume.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUPPORTED_STT_LANGS = {"en", "ar", "es", "ja", "zh", "ko"}
-MAX_MODELS = 2
-# Two lanes fill this cache with no free space left. A third language
-# evicts the first one, and its next use starts a new copy of the model.
-# Measured on the appliance: a request for Spanish evicted Japanese, and
-# the next Japanese request then evicted English.
+# GEMMA_MAX_MODELS gives the count of models that each cache holds. The value
+# with no variable set is 2, which is what this server had before the variable
+# existed.
+#
+# Two lanes fill a cache of 2 with no free space left. A third language evicts
+# the first one, and its next use starts a new copy of the model. Measured on
+# the appliance: a request for Spanish evicted Japanese, and the next Japanese
+# request then evicted English, and each load costs 2.7 s to 8.1 s.
+#
+# A machine with memory to spare can hold each of the six languages of
+# SUPPORTED_STT_LANGS and no language change then waits for a load.
+try:
+    MAX_MODELS = max(1, int(os.environ.get('GEMMA_MAX_MODELS', '2')))
+except ValueError:
+    MAX_MODELS = 2
 _stt_recognizers = OrderedDict()  # language -> recognizer
 # RLock (reentrant): handle_stt holds the lock across get_stt_recognizer() + inference,
 # and get_stt_recognizer() re-acquires it on the same thread. A plain Lock() self-deadlocks.
