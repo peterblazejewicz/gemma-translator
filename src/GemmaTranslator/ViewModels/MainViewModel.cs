@@ -906,6 +906,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         bool failure = false;
         int hold = SpeechChunks.HoldToStart(pieces);
         List<SpokenAudio> held = [];
+        bool started = false;
 
         try
         {
@@ -922,12 +923,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     // the synthesis up and a person hears a space with no sound
                     // at each join, 2.3 s to 3.9 s on a measurement of the
                     // appliance. See SpeechChunks.HoldToStart.
-                    if (held.Count + 1 < hold)
+                    // CAUTION: the test is on `started` and not on the count
+                    // of the pieces in hand. The list is empty again after the
+                    // first play, thus a test of the count alone holds each
+                    // piece after that one for ever and the answer stops in its
+                    // middle with no error.
+                    if (!started && held.Count + 1 < hold)
                     {
                         held.Add(audio);
                         continue;
                     }
 
+                    started = true;
                     held.Add(audio);
 
                     foreach (SpokenAudio piece in held)
