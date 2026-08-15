@@ -871,7 +871,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // 11.25 s of synthesis for 258 characters in one call, and 11.94 s for
         // the same text in four. But the person hears the first sentence after
         // the first piece, thus the appliance answers more quickly.
-        IReadOnlyList<string> pieces = SpeechChunks.Split(text);
+        IReadOnlyList<string> pieces = SpeechChunks.Plan(text);
 
         if (pieces.Count == 0)
         {

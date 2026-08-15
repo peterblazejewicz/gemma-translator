@@ -38,6 +38,24 @@ public static class SpeechChunks
     /// </remarks>
     public const int DefaultLimit = 180;
 
+    // A cut costs 0.9 s of EXTRA AUDIO, measured: the same Japanese sentence
+    // gives 4.10 s of sound whole and 5.00 s in two pieces, because each piece
+    // carries its own lead-in and tail. At 1.7 times realtime that is 1.5 s of
+    // synthesis for nothing. Thus a short answer must stay whole: below this
+    // length the cut costs more than it saves.
+    //
+    // Japanese gives about 0.15 s of sound for one character and English about
+    // 0.115 s, thus 40 characters is about 6 s of sound and 4.6 s to make.
+    public const int MinimumSplitLength = 40;
+
+    // The target for a text that is long enough to cut. A piece of 40 gives
+    // about 4.6 s to the first word, against 14.6 s for a whole answer of 51
+    // characters. CAUTION: the space with no sound at each join is 0.7 of the
+    // time that the piece before it plays, because the synthesis is 1.7 times
+    // realtime and it cannot keep in front of the speaker. A smaller value here
+    // gives the first word sooner and makes that space more frequent.
+    public const int PieceLength = 40;
+
     // CAUTION: a port of the upstream rule gives nothing for one half of the
     // languages here. Upstream cuts on white space, and Chinese, Japanese, and
     // Korean put no space between the words. Its loop then gives one piece that
@@ -53,6 +71,28 @@ public static class SpeechChunks
     // as that sample and a cut where the sound decayed is quiet. The fullwidth
     // marks are here because CJK gives no white space to cut at.
     private static readonly SearchValues<char> SoftMarks = SearchValues.Create("、，,");
+
+    /// <summary>
+    /// The pieces that the appliance speaks, at the length that the
+    /// measurements of the appliance give.
+    /// </summary>
+    /// <remarks>
+    /// A short answer goes whole, because a cut costs more sound than it saves.
+    /// A long answer goes in pieces of the same length: a greedy fill gives one
+    /// full piece and a short remainder, and that remainder pays the same
+    /// lead-in and tail as a full one for almost no words.
+    /// </remarks>
+    public static IReadOnlyList<string> Plan(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text) || text.Length < MinimumSplitLength)
+        {
+            return Split(text);
+        }
+
+        int count = (text.Length + PieceLength - 1) / PieceLength;
+
+        return Split(text, (text.Length + count - 1) / count);
+    }
 
     /// <returns>The pieces, in sequence. White space only gives none.</returns>
     public static IReadOnlyList<string> Split(string? text, int limit = DefaultLimit)
