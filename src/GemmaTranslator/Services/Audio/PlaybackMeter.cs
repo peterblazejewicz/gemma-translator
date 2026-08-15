@@ -33,12 +33,13 @@ internal sealed class PlaybackMeter(AudioFormat format) : AudioAnalyzer(format)
     private const double AttackMilliseconds = 40;
     private const double ReleaseMilliseconds = 220;
 
-    // CAUTION: COMPUTED and not measured. A sine at full scale gives -3 dBFS,
-    // thus the ceiling is about 0.18 of full scale and the floor about 0.001.
-    // No measurement of the speaker of the appliance exists, and the value of
-    // LogPlayed is what corrects these two.
+    // MEASURED on the appliance. The journal gives -8.3 dBFS for the largest
+    // sound of one sentence of the speech server, thus a ceiling of -6 puts
+    // that sentence at 0.96 and keeps a little room for a louder one. The first
+    // value here was -15, and each sentence then stood at 1.00: the bars filled
+    // the strip and followed nothing. The floor gives 0.37 at -40 dBFS.
     private const double FloorDecibels = -60;
-    private const double CeilingDecibels = -15;
+    private const double CeilingDecibels = -6;
 
     private volatile int _levelBits;
     private volatile int _frames;
