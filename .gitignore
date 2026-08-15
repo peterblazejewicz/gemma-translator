@@ -74,7 +74,9 @@ ARM64/
 *.userprefs
 project.lock.json
 artifacts/
-publish/
+# deploy-pi.sh writes publish/ on the appliance, and a publish for one runtime
+# identifier goes beside it, for example publish-arm64/ for the Raspberry Pi.
+publish*/
 *.nupkg
 *.snupkg
 BenchmarkDotNet.Artifacts/
