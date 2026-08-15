@@ -405,6 +405,36 @@ call
 #                screensaver above. The checker sees an "-ing" form.
 working
 
+# --- names of the thread of the conversation ---
+#
+# exchange - an Exchange (n): one turn of the conversation, which is the words
+#            of a person and the translation of them. It is the name of the
+#            type, and the name in the log message "The exchange is complete".
+#            The dictionary approves INTERCHANGE (v) and REPLACE (v), which
+#            have a different meaning.
+# extent   - ScrollViewer.Extent, the Avalonia property that gives the size of
+#            the content that a person can scroll. The pin of the thread reads
+#            this property. The dictionary approves DEPTH, LENGTH, and WIDTH,
+#            which are the dimensions of a part and not this property.
+exchange
+extent
+
+# --- names of the settings ---
+#
+# setting  - the name of this concept in the software: UserSettings,
+# settings   IUserSettingsStore, appsettings.json, SettingsViewModel, and the
+#            settings screen that a person opens with the gear. The dictionary
+#            approves ADJUSTMENT (n) and POSITION (n), and neither one is the
+#            name of the type. Section 3.2 of CLAUDE.md uses the word for the
+#            same concept.
+# true     - the two literals of a bool in C#. A commit message that gives the
+# false      value of a bool must give the literal that the code holds, and
+#            CORRECT and INCORRECT are a different statement.
+setting
+settings
+true
+false
+
 # user - the person who operates the software. It is the word of this domain:
 #        software has users, and "user interface" is the name of the part that
 #        this fork replaces. ASD-STE100 does not hold the word, thus it is a
