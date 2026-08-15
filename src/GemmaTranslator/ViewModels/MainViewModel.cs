@@ -124,6 +124,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private DispatcherTimer? _frameTimer;
 
+    private DispatcherTimer? _speechTimer;
+
     private DispatcherTimer? _statusTimer;
 
     private DispatcherTimer? _warmUpTimer;
@@ -163,6 +165,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string _recordingTime = "0:00";
+
+    // A snapshot. CanTurn stays true through Working, thus a finger can move
+    // the drum of the person who listens, and a computed label would then name
+    // a language that the appliance is not speaking.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSpeaking))]
+    [NotifyPropertyChangedFor(nameof(IsStatusVisible))]
+    private string? _speakingLabel;
 
     [ObservableProperty]
     private bool _isSettingsOpen;
@@ -259,11 +269,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public bool IsRecording => State == AppState.Recording;
 
+    public bool IsSpeaking => SpeakingLabel is not null;
+
     /// <remarks>
-    /// A message and the pill of the recording go in the same position. The
-    /// recording wins: a person must see that the microphone is open.
+    /// A message and the two pills go in the same position, and a pill wins: a
+    /// person must see that the microphone is open, or that the appliance
+    /// speaks.
     /// </remarks>
-    public bool IsStatusVisible => StatusText is not null && !IsRecording;
+    public bool IsStatusVisible => StatusText is not null && !IsRecording && !IsSpeaking;
 
     public bool IsWarmUp => State == AppState.WarmUp;
 
@@ -812,7 +825,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             long speakTicks = Stopwatch.GetTimestamp();
 
-            await SpeakAsync(translated, other.Language, _shutdown.Token).ConfigureAwait(true);
+            await SpeakAsync(translated, other, _shutdown.Token).ConfigureAwait(true);
 
             speakSeconds = Stopwatch.GetElapsedTime(speakTicks).TotalSeconds;
         }
@@ -851,7 +864,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </remarks>
     private async Task SpeakAsync(
         string text,
-        Language language,
+        LaneViewModel destination,
         CancellationToken cancellationToken)
     {
         // The pieces cost the server about 6 % more. A measurement gives
@@ -869,14 +882,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // call takes 1 s to 3 s, and for all of that time the state is Working:
         // the two buttons do nothing and nothing on the display says that the
         // appliance still works.
-        SetSpeaking(true);
+        SetSpeaking(destination, true);
 
-        // A queue of one piece. A measurement on the appliance gives synthesis
-        // at 0.7 times the length of the audio that it makes, at each length
-        // and for English and Japanese, thus each piece is complete before the
-        // piece in front of it stops. Three are live at the peak: the one that
-        // plays, the one in the queue, and the one that the producer holds
-        // while it waits to write.
+        // A queue of one piece. CAUTION: it becomes EMPTY at each connection.
+        // Synthesis is 1.74 times the sound it makes (deploy/README.md 8.21,
+        // which corrects an earlier 0.7), thus piece N+1 is not complete when
+        // piece N stops. The cut keeps its value: a person hears the first
+        // sentence after the synthesis of that sentence only.
         Channel<SpokenAudio> line = Channel.CreateBounded<SpokenAudio>(1);
 
         using CancellationTokenSource stop =
@@ -884,9 +896,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         stop.CancelAfter(SpeechBudget);
 
-        Task producer = SynthesizeIntoAsync(line.Writer, pieces, language, stop.Token);
+        Task producer = SynthesizeIntoAsync(
+            line.Writer,
+            pieces,
+            destination.Language,
+            stop.Token);
 
         int spoken = 0;
+        bool failure = false;
 
         try
         {
@@ -923,10 +940,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             LogSpeechFailed(_logger, spoken, pieces.Count, exception);
 
-            if (spoken > 0)
-            {
-                Safely(() => ShowStatus("The appliance did not speak all of the answer."));
-            }
+            // The message waits for the pill to go, or it spends its 6 s
+            // behind the pill and a person sees none of it.
+            failure = spoken > 0;
         }
         finally
         {
@@ -945,7 +961,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 Array.Clear(left.WavBytes);
             }
 
-            SetSpeaking(false);
+            SetSpeaking(destination, false);
+
+            if (failure)
+            {
+                Safely(() => ShowStatus("The appliance did not speak all of the answer."));
+            }
         }
     }
 
@@ -1008,7 +1029,40 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         writer.Complete(failure);
     }
 
-    private void SetSpeaking(bool speaking) => Safely(() => _turn?.IsSpeaking = speaking);
+    /// <remarks>
+    /// CAUTION: the one definition of "the appliance speaks". Four things
+    /// carry that fact: the glyph in the bubble, the pill, the bars of the lane
+    /// that listens, and the timer that moves them. A path that writes one of
+    /// them somewhere else makes a display that disagrees with itself.
+    /// </remarks>
+    private void SetSpeaking(LaneViewModel destination, bool speaking) => Safely(() =>
+    {
+        // CAUTION: the exit clears the lane and the bubble BEFORE the label.
+        // A property write applies a style and can throw, and Safely swallows
+        // it; with the label first, a throw would leave the lane bright for the
+        // session, because nothing else writes it. The next exchange always
+        // writes the label again.
+        if (!speaking)
+        {
+            StopSpeechTimer();
+
+            destination.IsSpokenTo = false;
+            destination.Levels = new double[BarCount];
+            _turn?.IsSpeaking = false;
+            SpeakingLabel = null;
+
+            return;
+        }
+
+        SpeakingLabel = string.Create(
+            CultureInfo.InvariantCulture,
+            $"SPEAKING · {destination.Language.Name.ToUpperInvariant()}");
+
+        destination.IsSpokenTo = true;
+        _turn?.IsSpeaking = true;
+
+        StartSpeechTimer(destination);
+    });
 
     /// <remarks>
     /// CAUTION: this is the one protection against a release that does not
@@ -1080,6 +1134,53 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _frameTimer = null;
 
         ResetLevels();
+    }
+
+    /// <remarks>
+    /// A second timer, because the two tick bodies have nothing in common: one
+    /// reads the microphone and counts the seconds of the press, and this one
+    /// makes a wave from a start and a level.
+    /// </remarks>
+    private void StartSpeechTimer(LaneViewModel lane)
+    {
+        StopSpeechTimer();
+
+        long start = Stopwatch.GetTimestamp();
+
+        _speechTimer = new DispatcherTimer
+        {
+            Interval = _store.Current.ReducedMotion ? CalmFrameInterval : FrameInterval,
+        };
+
+        _speechTimer.Tick += (_, _) => Safely(() => Frame(lane, start));
+
+        // The first frame goes now. The lane is already live, thus without
+        // this the strip shows 2-pixel stubs for one interval, 200 ms in the
+        // reduced-motion setting.
+        Frame(lane, start);
+
+        _speechTimer.Start();
+    }
+
+    // A new array for each frame. Levels has AffectsRender, thus an array that
+    // this code fills again is reference-equal and the strip does not draw.
+    private void Frame(LaneViewModel lane, long start)
+    {
+        double[] levels = new double[BarCount];
+
+        SpeechWave.Fill(
+            levels,
+            Stopwatch.GetElapsedTime(start).TotalSeconds,
+            _playback.PlaybackLevel);
+
+        lane.Levels = levels;
+    }
+
+    // It stops the timer and touches no lane. SetSpeaking gives the strip back.
+    private void StopSpeechTimer()
+    {
+        _speechTimer?.Stop();
+        _speechTimer = null;
     }
 
     /// <remarks>

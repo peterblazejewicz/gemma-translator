@@ -41,7 +41,14 @@ public sealed partial class LaneViewModel : ObservableObject
     private Language _language;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAudioLive))]
     private bool _isRecording;
+
+    // Not IsSpeaking. On a class where IsRecording means that this person
+    // speaks into the microphone, IsSpeaking says the opposite of the fact.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAudioLive))]
+    private bool _isSpokenTo;
 
     [ObservableProperty]
     private IReadOnlyList<double> _levels = [];
@@ -65,6 +72,12 @@ public sealed partial class LaneViewModel : ObservableObject
     public int Number { get; }
 
     public bool IsMirrored => Number == 2;
+
+    /// <summary>
+    /// The strip of this lane shows a level: this person speaks into the
+    /// microphone, or the appliance speaks to this person.
+    /// </summary>
+    public bool IsAudioLive => IsRecording || IsSpokenTo;
 
     public int BadgeColumn => IsMirrored ? 4 : 0;
 

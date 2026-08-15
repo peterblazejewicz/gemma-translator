@@ -165,6 +165,22 @@
       </Style.Animations>
     </Style>
 
+    <Style Selector="Viewbox.speakingPulse">
+      <Style.Animations>
+        <Animation Duration="0:0:1.2" IterationCount="INFINITE" Easing="SineEaseInOut">
+          <KeyFrame Cue="0%">
+            <Setter Property="Opacity" Value="1.0" />
+          </KeyFrame>
+          <KeyFrame Cue="50%">
+            <Setter Property="Opacity" Value="0.3" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="Opacity" Value="1.0" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+
     <Style Selector="Border.dockFill">
       <Setter Property="Background" Value="{DynamicResource PageBrush}" />
     </Style>
@@ -426,7 +442,7 @@
           <Grid Grid.Row="0" ColumnDefinitions="*,2,*">
             <controls:AudioVisualizer Grid.Column="0"
                                       Levels="{Binding Lane1.Levels}"
-                                      IsActive="{Binding Lane1.IsRecording}"
+                                      IsActive="{Binding Lane1.IsAudioLive}"
                                       ActiveBrush="{DynamicResource AccentBrush}"
                                       IdleBrush="{DynamicResource MutedBrush}" />
 
@@ -434,7 +450,7 @@
 
             <controls:AudioVisualizer Grid.Column="2"
                                       Levels="{Binding Lane2.Levels}"
-                                      IsActive="{Binding Lane2.IsRecording}"
+                                      IsActive="{Binding Lane2.IsAudioLive}"
                                       ActiveBrush="{DynamicResource AccentBrush}"
                                       IdleBrush="{DynamicResource MutedBrush}" />
           </Grid>
@@ -582,8 +598,10 @@
         </StackPanel>
       </Border>
 
-      <!-- This pill has no hidden class. The microphone is open and nothing
-           that a finger does on the thread can remove that signal. -->
+      <!-- These two pills have no hidden class. The microphone is open, or the
+           appliance speaks, and nothing that a finger does on the thread can
+           remove that signal. The two are never on together: the first is
+           AppState.Recording and the second is inside AppState.Working. -->
       <Border Classes="pill"
               IsVisible="{Binding IsRecording}"
               Background="{DynamicResource InverseBrush}">
@@ -602,6 +620,45 @@
           <TextBlock Classes="numeric"
                      Text="{Binding RecordingTime}"
                      FontSize="22"
+                     Foreground="{DynamicResource InverseInkBrush}"
+                     VerticalAlignment="Center" />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="pill"
+              IsVisible="{Binding IsSpeaking}"
+              Background="{DynamicResource InverseBrush}">
+        <StackPanel Orientation="Horizontal" Spacing="14">
+          <!-- CAUTION: the class is bound, and it is NOT IsVisible. IsVisible
+               false does not stop an animation, it pauses it, and the clock
+               keeps its place in the global clock. The render loop then never
+               becomes idle for the life of the process, which this appliance
+               pays for from a battery. Only a selector that stops matching
+               disposes the instance and releases that clock. -->
+          <Viewbox Classes.speakingPulse="{Binding IsSpeaking}"
+                   Width="26"
+                   Height="26"
+                   VerticalAlignment="Center">
+            <Canvas Width="24" Height="24">
+              <Path Data="M11,5 L6,9 L2,9 L2,15 L6,15 L11,19 Z"
+                    Stroke="{DynamicResource AccentOnInverseBrush}"
+                    StrokeThickness="2"
+                    StrokeJoin="Round" />
+              <Path Data="M15.54,8.46 A5,5 0 0 1 15.54,15.53"
+                    Stroke="{DynamicResource AccentOnInverseBrush}"
+                    StrokeThickness="2"
+                    StrokeLineCap="Round" />
+              <Path Data="M19.07,4.93 A10,10 0 0 1 19.07,19.07"
+                    Stroke="{DynamicResource AccentOnInverseBrush}"
+                    StrokeThickness="2"
+                    StrokeLineCap="Round" />
+            </Canvas>
+          </Viewbox>
+
+          <TextBlock Text="{Binding SpeakingLabel}"
+                     FontSize="24"
+                     FontWeight="Medium"
+                     LetterSpacing="2"
                      Foreground="{DynamicResource InverseInkBrush}"
                      VerticalAlignment="Center" />
         </StackPanel>
