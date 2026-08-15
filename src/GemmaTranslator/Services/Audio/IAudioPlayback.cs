@@ -32,4 +32,14 @@ public interface IAudioPlayback
     /// The speaker is not open, or the decoder refuses the audio.
     /// </exception>
     Task PlayAsync(SpokenAudio speech, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The loudness of the sound that the speaker plays now, from 0.0 to 1.0.
+    /// It rises in 40 ms and falls in 220 ms, as the strip of the microphone
+    /// does. CAUTION: it FALLS to 0.0 with that same 220 ms and never steps to
+    /// it; an implementation that steps makes the strip stand still. A read
+    /// takes nothing away from another caller, unlike
+    /// <see cref="IAudioCapture.ReadSpectrum"/>.
+    /// </summary>
+    double PlaybackLevel { get; }
 }

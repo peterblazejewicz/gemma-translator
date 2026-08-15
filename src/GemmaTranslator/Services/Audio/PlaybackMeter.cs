@@ -1,0 +1,162 @@
+// Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+// SPDX-License-Identifier: Apache-2.0
+
+using System.Diagnostics;
+using SoundFlow.Abstracts;
+using SoundFlow.Structs;
+
+namespace GemmaTranslator.Services.Audio;
+
+/// <remarks>
+/// <para>
+/// This class keeps four numbers and no audio: no ring, no window, and no
+/// transform, thus it needs none of the wipes of the microphone path.
+/// </para>
+/// <para>
+/// CAUTION: <see cref="Analyze"/> operates on the playback thread of miniaudio.
+/// It takes no lock and it makes no memory, as the remark on
+/// <see cref="SoundFlowAudioDevice"/> makes necessary. SoundFlow calls it at
+/// each period, also while the mixer holds no player: the buffer is then all
+/// zeros, thus the level falls by itself at the end of a sentence.
+/// </para>
+/// <para>
+/// CAUTION: the smoothing is in <see cref="Analyze"/> and not in
+/// <see cref="Read"/>, which is the opposite of <see cref="Spectrum"/>. That
+/// class has a ring to look back at and this one has none, thus a reader at the
+/// 200 ms tick would see one callback of twenty and lose each other one.
+/// </para>
+/// </remarks>
+internal sealed class PlaybackMeter(AudioFormat format) : AudioAnalyzer(format)
+{
+    // The two values of Spectrum. The two strips must fall at the same speed,
+    // or the display shows two meters that do not agree.
+    private const double AttackMilliseconds = 40;
+    private const double ReleaseMilliseconds = 220;
+
+    // CAUTION: COMPUTED and not measured. A sine at full scale gives -3 dBFS,
+    // thus the ceiling is about 0.18 of full scale and the floor about 0.001.
+    // No measurement of the speaker of the appliance exists, and the value of
+    // LogPlayed is what corrects these two.
+    private const double FloorDecibels = -60;
+    private const double CeilingDecibels = -15;
+
+    private volatile int _levelBits;
+    private volatile int _frames;
+
+    private static readonly int QuietBits =
+        BitConverter.SingleToInt32Bits((float)FloorDecibels);
+
+    private int _loudestBits = QuietBits;
+
+    private long _ticks;
+
+    /// <summary>The samples of one channel that the last callback gave.</summary>
+    public int Frames => _frames;
+
+    /// <summary>
+    /// The level now, from 0.0 to 1.0. It continues the release curve from the
+    /// last callback, thus a speakerphone that a person disconnects makes the
+    /// strip fall and not hold its height.
+    /// </summary>
+    public double Read()
+    {
+        long ticks = Volatile.Read(ref _ticks);
+
+        if (ticks == 0)
+        {
+            return 0;
+        }
+
+        double level = BitConverter.Int32BitsToSingle(_levelBits);
+        double milliseconds = Stopwatch.GetElapsedTime(ticks).TotalMilliseconds;
+
+        return level * Math.Exp(-milliseconds / ReleaseMilliseconds);
+    }
+
+    /// <summary>
+    /// The largest DECIBELS since the call before this one, which it puts back
+    /// to the floor.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: the value that goes back is the FLOOR and not 0. Speech gives a
+    /// negative value of decibels, thus a reset to 0 would make each test of
+    /// the raise below false and the peak would never move again.
+    /// </remarks>
+    public double TakeLoudest() =>
+        BitConverter.Int32BitsToSingle(Interlocked.Exchange(ref _loudestBits, QuietBits));
+
+    /// <remarks>CAUTION: the caller must stop the device first.</remarks>
+    public void Reset()
+    {
+        Volatile.Write(ref _ticks, 0);
+        _levelBits = 0;
+        _frames = 0;
+        Volatile.Write(ref _loudestBits, QuietBits);
+    }
+
+    protected override void Analyze(ReadOnlySpan<float> buffer, int channels)
+    {
+        if (buffer.IsEmpty)
+        {
+            return;
+        }
+
+        double square = 0;
+
+        foreach (float sample in buffer)
+        {
+            square += (double)sample * sample;
+        }
+
+        int frames = buffer.Length / Math.Max(channels, 1);
+        double level = BitConverter.Int32BitsToSingle(_levelBits);
+        double decibels = DecibelsOf(square / buffer.Length);
+        double target = LevelOf(decibels);
+        double tau = target > level ? AttackMilliseconds : ReleaseMilliseconds;
+
+        // The sample clock gives the interval, thus this needs no Stopwatch.
+        double milliseconds = 1000.0 * frames / Format.SampleRate;
+
+        level += (target - level) * (1 - Math.Exp(-milliseconds / tau));
+
+        int bits = BitConverter.SingleToInt32Bits((float)level);
+
+        _levelBits = bits;
+        _frames = frames;
+
+        // In DECIBELS and not in the level, because the level stops at 1.00
+        // and a value that stops says only that the ceiling is too low. The
+        // journal of the appliance sites CeilingDecibels from this number.
+        //
+        // This raise and the Exchange of TakeLoudest can cross and lose the
+        // reset. Do NOT make a CAS loop of it: a retry with no limit is the one
+        // thing this thread must not do. The caller takes the value when the
+        // piece is complete and the level is falling, thus the test is false.
+        if (decibels > BitConverter.Int32BitsToSingle(Volatile.Read(ref _loudestBits)))
+        {
+            Volatile.Write(ref _loudestBits, BitConverter.SingleToInt32Bits((float)decibels));
+        }
+
+        // The timestamp goes last. A reader that sees it then sees the level
+        // that goes with it.
+        Volatile.Write(ref _ticks, Stopwatch.GetTimestamp());
+    }
+
+    private static double DecibelsOf(double square)
+    {
+        // A device that gives F32 natively can pass a NaN through. NaN fails
+        // each comparison, thus Math.Clamp gives it back and AudioVisualizer
+        // then makes a Rect with a NaN in it.
+        if (!double.IsFinite(square))
+        {
+            return FloorDecibels;
+        }
+
+        return 10 * Math.Log10(square + 1e-12);
+    }
+
+    private static double LevelOf(double decibels) => Math.Clamp(
+        (decibels - FloorDecibels) / (CeilingDecibels - FloorDecibels),
+        0,
+        1);
+}

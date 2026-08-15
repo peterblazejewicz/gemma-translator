@@ -117,6 +117,9 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
     private readonly float[] _spectrumRing = new float[SpectrumRingLength];
     private readonly Spectrum _spectrum;
 
+    private readonly AudioFormat _format;
+    private readonly PlaybackMeter _meter;
+
     private MiniAudioEngine? _engine;
     private FullDuplexDevice? _device;
 
@@ -160,6 +163,15 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
         _buffer = new float[_options.SampleRate * _options.MaximumRecordingSeconds];
         _deviceSampleRate = _options.SampleRate;
         _spectrum = new Spectrum();
+
+        _format = new AudioFormat
+        {
+            Format = SampleFormat.F32,
+            Channels = 1,
+            SampleRate = _options.SampleRate,
+        };
+
+        _meter = new PlaybackMeter(_format);
     }
 
     public bool? IsDevicePresent => Volatile.Read(ref _presence) switch
@@ -433,11 +445,29 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
 
             double seconds = Stopwatch.GetElapsedTime(ticks).TotalSeconds;
 
-            LogPlayed(_logger, seconds, speech.WavBytes.Length, format.SampleRate);
+            // TakeLoudest puts the value back to 0, thus it must operate one
+            // time for each piece and not one time for each piece that the log
+            // writes. Inside the argument list a reader can make the log
+            // conditional and stop the reset.
+            double loudest = _meter.TakeLoudest();
+
+            LogPlayed(
+                _logger,
+                seconds,
+                speech.WavBytes.Length,
+                format.SampleRate,
+                loudest,
+                _meter.Frames);
         }
         catch (TimeoutException)
         {
-            LogPlaybackDidNotEnd(_logger, player.Duration, budget.TotalSeconds);
+            // This path must take the value too, or the largest level of a
+            // piece that stopped goes in the line of the piece after it.
+            LogPlaybackDidNotEnd(
+                _logger,
+                player.Duration,
+                budget.TotalSeconds,
+                _meter.TakeLoudest());
         }
         finally
         {
@@ -535,6 +565,11 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
         // line below closes it.
         CloseDevice(device);
         Retire(player);
+
+        // CloseDevice only ASKED the audio thread to stop and it swallows an
+        // error from Stop, thus a callback can still write after this line.
+        // That is of no consequence: the object holds numbers and no samples.
+        _meter.Reset();
 
         engine?.Dispose();
         _stop.Dispose();
@@ -683,18 +718,19 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
             DeviceInfo info = SelectDevice(_engine.CaptureDevices, "microphone");
             DeviceInfo speaker = SelectDevice(_engine.PlaybackDevices, "speaker");
 
-            AudioFormat format = new()
-            {
-                Format = SampleFormat.F32,
-                Channels = 1,
-                SampleRate = _options.SampleRate,
-            };
-
+            // The field, because the meter needs the value before this method
+            // operates. CAUTION: AudioFormat is a struct, thus each holds a
+            // COPY and the field makes no single source of truth.
             FullDuplexDevice device = _engine.InitializeFullDuplexDevice(
                 speaker,
                 info,
-                format,
+                _format,
                 new MiniAudioDeviceConfig());
+
+            // The master mixer is the one path to the speaker, and SoundFlow
+            // asks the analyzer at each period, also with no player in it. The
+            // mixer belongs to the device, thus the catch below removes nothing.
+            device.MasterMixer.AddAnalyzer(_meter);
 
             // CAUTION: Start starts the capture device and then the playback
             // device, and it does not go back if the second one fails. Without
@@ -902,6 +938,9 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
     public void ReadSpectrum(Span<double> bars) =>
         _spectrum.Fill(_spectrumRing, _ringWritten, bars);
 
+    /// <inheritdoc />
+    public double PlaybackLevel => _meter.Read();
+
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The microphone is {device} and the speaker is {speaker}. The software asked for {wanted} Hz and the machine gave {actual} Hz with {channels} channel(s).")]
@@ -960,20 +999,23 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The speaker played {bytes} bytes in {seconds:F2} s at {sampleRate} Hz.")]
+        Message = "The speaker played {bytes} bytes in {seconds:F2} s at {sampleRate} Hz. The largest sound is {loudest:F1} dBFS, and the last callback of the speaker gave {frames} samples.")]
     private static partial void LogPlayed(
         ILogger logger,
         double seconds,
         int bytes,
-        int sampleRate);
+        int sampleRate,
+        double loudest,
+        int frames);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The audio of {audioSeconds:F1} s did not come to its end in {budgetSeconds:F1} s. The software stops it. A value of 0.0 for the audio says that the decoder gave no length, and that the budget is the value of the software.")]
+        Message = "The audio of {audioSeconds:F1} s did not come to its end in {budgetSeconds:F1} s. The software stops it. The largest sound before it stopped is {loudest:F1} dBFS. A value of 0.0 for the audio says that the decoder gave no length, and that the budget is the value of the software.")]
     private static partial void LogPlaybackDidNotEnd(
         ILogger logger,
         double audioSeconds,
-        double budgetSeconds);
+        double budgetSeconds,
+        double loudest);
 
     [LoggerMessage(
         Level = LogLevel.Error,
