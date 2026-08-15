@@ -72,7 +72,7 @@ public sealed partial class LiteRtTranslator : ITranslator
         ChatCompletionRequest body = new(
             _options.ModelName,
             [
-                new ChatMessage("system", JsonEnvelopePrompt.Make(source, target)),
+                new ChatMessage("system", TranslationPrompt.Make(source, target)),
                 new ChatMessage("user", text),
             ]);
 
@@ -202,11 +202,7 @@ public sealed partial class LiteRtTranslator : ITranslator
                     "The translation server gave an answer with no text.");
             }
 
-            if (!JsonEnvelopePrompt.TryRead(modelText, out string translation))
-            {
-                LogModelDidNotObey(_logger, modelText.Length);
-                translation = modelText;
-            }
+            string translation = TranslationPrompt.Read(modelText);
 
             int tokens = completion?.Usage?.TotalTokens ?? 0;
 
@@ -255,9 +251,4 @@ public sealed partial class LiteRtTranslator : ITranslator
         Level = LogLevel.Error,
         Message = "The translation server gave an answer with no text.")]
     private static partial void LogNoAnswer(ILogger logger);
-
-    [LoggerMessage(
-        Level = LogLevel.Warning,
-        Message = "The model did not send a JSON object. The display shows the full text of {length} characters.")]
-    private static partial void LogModelDidNotObey(ILogger logger, int length);
 }

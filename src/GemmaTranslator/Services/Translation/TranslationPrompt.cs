@@ -27,65 +27,64 @@ namespace GemmaTranslator.Services.Translation;
 /// the reader accepts what the model sends. A change to one without the other
 /// gives an empty display.
 /// </remarks>
-internal static class JsonEnvelopePrompt
+internal static class TranslationPrompt
 {
-    // Two dollar signs make the interpolation {{ }}, thus a single brace is a
-    // literal brace. The message shows JSON to the model.
+    /// <remarks>
+    /// CAUTION: this message asks for the bare translation, and upstream asks
+    /// for a JSON object at TranslatorApp.jsx:225. The envelope costs 10 tokens
+    /// of punctuation on EACH answer, and the appliance decodes at 5.18 tokens
+    /// each second. A measurement gives 4.96 s with the envelope and 3.03 s
+    /// without it, for the same sentence.
+    /// </remarks>
     public static string Make(Language source, Language target)
         => string.Create(
             CultureInfo.InvariantCulture,
-            $$"""
-              You are a high-performance translator. Your task is to translate text from {{source.Name}} into {{target.Name}}.
-              You MUST format your response as a valid JSON object matching this structure:
-              {
-                "translation": "High-quality, natural translation into {{target.Name}}"
-              }
-              Do NOT return anything else except this JSON object. No Markdown block wraps (no ```json), no introductory text, no conversational text. Start directly with "{" and end directly with "}".
-              """);
+            $"Translate the text from {source.Name} into {target.Name}. Answer with only the translation.");
 
+    /// <summary>
+    /// The words of the answer, with an envelope taken off it if the model sent
+    /// one.
+    /// </summary>
     /// <remarks>
-    /// The method takes the text between the first brace and the last brace.
-    /// Thus a Markdown fence, an introduction, and a text after the object all
-    /// go away with one rule.
+    /// A model that wraps the answer is not an error, thus this method has no
+    /// value for "did not obey". It gives the bare text back, and that is what
+    /// the message above asks for.
     /// </remarks>
-    /// <returns>
-    /// True if the model obeyed the format. False if the caller must show
-    /// <paramref name="modelText"/> and write a line in the log.
-    /// </returns>
-    public static bool TryRead(string modelText, out string translation)
+    public static string Read(string modelText)
     {
-        translation = string.Empty;
-
         if (string.IsNullOrWhiteSpace(modelText))
         {
-            return false;
+            return string.Empty;
         }
 
-        int start = modelText.IndexOf('{', StringComparison.Ordinal);
-        int end = modelText.LastIndexOf('}');
+        string text = modelText.Trim();
+
+        // A model that still sends the envelope of upstream, or that puts the
+        // object in a block of Markdown. The span from the first brace to the
+        // last one covers both.
+        int start = text.IndexOf('{', StringComparison.Ordinal);
+        int end = text.LastIndexOf('}');
 
         if (start < 0 || end <= start)
         {
-            return false;
+            return text;
         }
 
         try
         {
             TranslationEnvelope? envelope = JsonSerializer.Deserialize(
-                modelText[start..(end + 1)],
+                text[start..(end + 1)],
                 OpenAiJsonContext.Default.TranslationEnvelope);
 
-            if (string.IsNullOrWhiteSpace(envelope?.Translation))
-            {
-                return false;
-            }
-
-            translation = envelope.Translation;
-            return true;
+            return string.IsNullOrWhiteSpace(envelope?.Translation)
+                ? text
+                : envelope.Translation;
         }
         catch (JsonException)
         {
-            return false;
+            // The answer holds a brace and is not an envelope. A sentence can
+            // hold one, thus this is not an error and the text goes through.
+            return text;
         }
     }
 }
