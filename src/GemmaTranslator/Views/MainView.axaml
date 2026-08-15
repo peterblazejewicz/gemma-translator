@@ -146,9 +146,11 @@
          gives this. A shape that does not move is a shape that a person stops
          seeing, and this one says that the appliance cannot hear.
 
-         CAUTION: this animation makes the panel draw again while the pill
-         shows. It stops when the pill goes, because IsVisible takes the
-         control out. -->
+         CAUTION: the class is bound and it is NOT IsVisible. IsVisible false
+         does not stop an animation, it pauses it, and the clock keeps its
+         place in the global clock; the render loop then never becomes idle for
+         the life of the process, which this appliance pays for from a battery.
+         Only a selector that stops matching disposes the instance. -->
     <Style Selector="Border.speakerAlert">
       <Style.Animations>
         <Animation Duration="0:0:1.6" IterationCount="INFINITE" Easing="SineEaseInOut">
@@ -514,7 +516,7 @@
             </Canvas>
           </Viewbox>
 
-          <Border Classes="speakerAlert"
+          <Border Classes.speakerAlert="{Binding IsSpeakerMissing}"
                   Margin="0,0,8,0"
                   VerticalAlignment="Center"
                   IsVisible="{Binding IsSpeakerMissing}"
