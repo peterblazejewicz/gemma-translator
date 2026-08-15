@@ -259,6 +259,32 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
         return new Recording(samples, duration, peak, _deviceSampleRate, _reachedLimit);
     }
 
+    public async Task PlayAsync(
+        SpokenAudio speech,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(speech);
+
+        try
+        {
+            await PlayCoreAsync(speech, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            // SECURITY CONTROL. Do not delete this. These bytes are the spoken
+            // sentence of a person, as audio. This wipe covers every exit: the
+            // first test inside PlayCoreAsync throws before any wipe of its
+            // own, and by then the caller has taken that piece out of its
+            // queue, so nothing else would ever clear it.
+            //
+            // The wipe covers the array of this code only. HttpClient buffered
+            // the whole WAV inside the response, and miniaudio decodes a second
+            // copy into native memory; neither is wiped, thus a memory dump is
+            // not clean. Recording.Dispose does the same work for the input.
+            Array.Clear(speech.WavBytes);
+        }
+    }
+
     /// <remarks>
     /// <para>
     /// CAUTION: the provider gets the format of the DEVICE and not the format
@@ -277,12 +303,10 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
     /// the pool and never on the audio thread.
     /// </para>
     /// </remarks>
-    public async Task PlayAsync(
+    private async Task PlayCoreAsync(
         SpokenAudio speech,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(speech);
-
         SoundPlayer? previous;
         MiniAudioEngine engine;
         Mixer mixer;
@@ -332,7 +356,7 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
                 built.Dispose();
             }
 
-            // SECURITY CONTROL. See the finally at the end of this method.
+            // SECURITY CONTROL. See the finally of PlayAsync.
             Array.Clear(speech.WavBytes);
 
             LogPlaybackFailed(_logger, speech.WavBytes.Length, exception);
@@ -368,7 +392,7 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
         {
             Retire(player);
 
-            // SECURITY CONTROL. See the finally at the end of this method.
+            // SECURITY CONTROL. See the finally of PlayAsync.
             Array.Clear(speech.WavBytes);
 
             throw new AudioPlaybackException("The speaker is not open.");
@@ -414,12 +438,8 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
                 Retire(player);
             }
 
-            // SECURITY CONTROL. Do not delete this line. These bytes are the
-            // spoken sentence of a person, as audio. Without the wipe they stay
-            // readable in a memory dump of the process for as long as the
-            // appliance is idle, which can be days. The player is disposed
-            // above, so nothing reads them after this line. The input path does
-            // the same in Recording.Dispose.
+            // SECURITY CONTROL. The player is disposed above, thus nothing
+            // reads these bytes after this line. See the finally of PlayAsync.
             Array.Clear(speech.WavBytes);
         }
     }

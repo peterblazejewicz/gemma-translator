@@ -45,8 +45,6 @@ public sealed partial class MoonshineSpeechService : ISpeechService
     // a margin, thus the writer of WriteTranscribeBody does not grow.
     private const int JsonOverheadBytes = 64;
 
-    private const int MaximumQueryLength = 65_000;
-
     private readonly HttpClient _httpClient;
     private readonly SpeechOptions _options;
     private readonly ILogger<MoonshineSpeechService> _logger;
@@ -179,7 +177,9 @@ public sealed partial class MoonshineSpeechService : ISpeechService
         // `lang` is Language.Code. TTS_LANG_MAP in backend/server.py makes the
         // change to the code of Moonshine, and TTS_VOICE_MAP selects the voice
         // of Chinese.
-        Uri url = MakeSynthesizeUrl(text, language);
+        Uri url = new(
+            _options.GetBaseUri(),
+            $"{SynthesizePath}?text={Uri.EscapeDataString(text)}&lang={Uri.EscapeDataString(language.Code)}");
 
         long startTicks = Stopwatch.GetTimestamp();
 
@@ -221,38 +221,6 @@ public sealed partial class MoonshineSpeechService : ISpeechService
         LogSpoke(_logger, language.Code, text.Length, duration.TotalSeconds, wav.Length);
 
         return new SpokenAudio(wav);
-    }
-
-    /// <remarks>
-    /// CAUTION: this makes one call for all the text. Upstream cut the text
-    /// into pieces of about 180 characters and chained the calls, thus the
-    /// browser started the audio of the first piece while the server made the
-    /// second one. A long text gives no sound for a longer time before the
-    /// first word.
-    /// </remarks>
-    private Uri MakeSynthesizeUrl(string text, Language language)
-    {
-        string query =
-            $"{SynthesizePath}?text={Uri.EscapeDataString(text)}&lang={Uri.EscapeDataString(language.Code)}";
-
-        // backend/server.py reads the request line with readline(65537) and
-        // answers 414 above 65536 bytes. That line is "GET /", the query, and
-        // " HTTP/1.1", thus 65000 keeps a margin. EscapeDataString gives ASCII,
-        // thus one character of the query is one byte and one Japanese
-        // character is 9 of them.
-        //
-        // CAUTION: Uri makes no limit of its own. A measurement on .NET 10
-        // built an address of 200043 characters with no error, thus a test of
-        // UriFormatException here catches nothing.
-        if (query.Length > MaximumQueryLength)
-        {
-            LogTextTooLong(_logger, text.Length);
-
-            throw new SpeechException(
-                "The text to speak is too long for one call to the speech server.");
-        }
-
-        return new Uri(_options.GetBaseUri(), query);
     }
 
     /// <remarks>
@@ -439,9 +407,4 @@ public sealed partial class MoonshineSpeechService : ISpeechService
         Level = LogLevel.Error,
         Message = "The speech server told of {declared} bytes of audio and sent {received}. A value of -1 says that the server gave no length.")]
     private static partial void LogBadLength(ILogger logger, long declared, int received);
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "The text of {characters} characters makes an address that is too long for one call.")]
-    private static partial void LogTextTooLong(ILogger logger, int characters);
 }

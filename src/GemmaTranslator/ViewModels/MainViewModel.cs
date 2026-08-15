@@ -18,6 +18,7 @@
 
 using System.Diagnostics;
 using System.Globalization;
+using System.Threading.Channels;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -66,6 +67,22 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </remarks>
     private static readonly TimeSpan WarmSettleTime = TimeSpan.FromSeconds(1.5);
 
+    // The wait for ONE piece is SpeechOptions.TimeoutSeconds and this margin.
+    // ServiceRegistration gives that timeout to the HttpClient, thus one call
+    // is already bounded and this margin covers the moment between two calls.
+    // It starts again at each piece, thus it finds a server that stopped and
+    // not an answer that is long. SpeechBudget does that work.
+    private static readonly TimeSpan PieceMargin = TimeSpan.FromSeconds(10);
+
+    // The longest that the appliance speaks one answer, and the one limit on
+    // the count of the pieces. The longest recording is 120 s
+    // (AudioOptions.MaximumRecordingSeconds), and a measurement gives 258
+    // characters for 16 s of sound; thus the answer to that recording is about
+    // 2000 characters, 12 pieces, and 130 s of sound. With no limit an answer
+    // of 1,000,000 characters gives 5,556 pieces, which is 46 minutes in
+    // AppState.Working with each button dead.
+    private static readonly TimeSpan SpeechBudget = TimeSpan.FromMinutes(5);
+
     private readonly ITranslator _translator;
     private readonly ISpeechService _speech;
     private readonly IAudioCapture _capture;
@@ -73,6 +90,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly ICallIndicator _callIndicator;
     private readonly IUserSettingsStore _store;
     private readonly AudioOptions _audioOptions;
+    private readonly TimeSpan _pieceWait;
     private readonly ILogger<MainViewModel> _logger;
 
     // One stop for each lane, in the sequence of LaneViewModel.Number. A change
@@ -144,6 +162,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IUserSettingsStore store,
         SettingsViewModel settings,
         IOptions<AudioOptions> audioOptions,
+        IOptions<SpeechOptions> speechOptions,
         ILogger<MainViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(translator);
@@ -156,6 +175,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(audioOptions);
+        ArgumentNullException.ThrowIfNull(speechOptions);
         ArgumentNullException.ThrowIfNull(logger);
 
         _translator = translator;
@@ -166,6 +186,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _store = store;
         Settings = settings;
         _audioOptions = audioOptions.Value;
+        _pieceWait = TimeSpan.FromSeconds(speechOptions.Value.TimeoutSeconds) + PieceMargin;
         _logger = logger;
 
         Lane1 = new LaneViewModel(1, Languages.FromCode("ja"), Turn);
@@ -716,7 +737,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             long speakTicks = Stopwatch.GetTimestamp();
 
-            await SpeakAsync(translated, other.Language).ConfigureAwait(true);
+            await SpeakAsync(translated, other.Language, _shutdown.Token).ConfigureAwait(true);
 
             speakSeconds = Stopwatch.GetElapsedTime(speakTicks).TotalSeconds;
         }
@@ -741,35 +762,170 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <remarks>
     /// CAUTION: an error here must not remove the translation from the display.
-    /// A person can read the words, and the sound does not come. Thus this
-    /// method catches each error and it shows no message.
+    /// A person can read the words, and the sound does not come.
+    /// <para>
+    /// A speech that gave nothing shows no message: the words are on the
+    /// display. A speech that stopped in its middle shows one, because silence
+    /// after two sentences of five is the sound of the end of the answer.
+    /// </para>
     /// </remarks>
-    private async Task SpeakAsync(string text, Language language)
+    private async Task SpeakAsync(
+        string text,
+        Language language,
+        CancellationToken cancellationToken)
     {
+        // The pieces cost the server about 6 % more. A measurement gives
+        // 11.25 s of synthesis for 258 characters in one call, and 11.94 s for
+        // the same text in four. But the person hears the first sentence after
+        // the first piece, thus the appliance answers more quickly.
+        IReadOnlyList<string> pieces = SpeechChunks.Split(text);
+
+        if (pieces.Count == 0)
+        {
+            return;
+        }
+
         // The cue comes on before the call to the server and not after it. That
         // call takes 1 s to 3 s, and for all of that time the state is Working:
         // the two buttons do nothing and nothing on the display says that the
         // appliance still works.
         SetSpeaking(true);
 
+        // A queue of one piece. A measurement on the appliance gives synthesis
+        // at 0.7 times the length of the audio that it makes, at each length
+        // and for English and Japanese, thus each piece is complete before the
+        // piece in front of it stops. Three are live at the peak: the one that
+        // plays, the one in the queue, and the one that the producer holds
+        // while it waits to write.
+        Channel<SpokenAudio> line = Channel.CreateBounded<SpokenAudio>(1);
+
+        using CancellationTokenSource stop =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        stop.CancelAfter(SpeechBudget);
+
+        Task producer = SynthesizeIntoAsync(line.Writer, pieces, language, stop.Token);
+
+        int spoken = 0;
+
         try
         {
-            SpokenAudio audio = await _speech
-                .SynthesizeAsync(text, language, _shutdown.Token)
-                .ConfigureAwait(true);
+            // WaitToReadAsync and TryRead, and not ReadAsync. An error of the
+            // producer comes out of WaitToReadAsync as the error that the
+            // producer gave; ReadAsync puts it inside a ChannelClosedException,
+            // and the journal would then name the queue and not the cause.
+            while (await WaitForPieceAsync(line.Reader, stop.Token).ConfigureAwait(true))
+            {
+                while (line.Reader.TryRead(out SpokenAudio? audio))
+                {
+                    try
+                    {
+                        // CAUTION: one reader, and one play at a time. PlayAsync
+                        // retires the player of the call before it, thus two
+                        // calls together cut the first piece in its middle.
+                        await _playback.PlayAsync(audio, stop.Token).ConfigureAwait(true);
 
-            await _playback.PlayAsync(audio, _shutdown.Token).ConfigureAwait(true);
+                        spoken++;
+                    }
+                    finally
+                    {
+                        // SECURITY CONTROL. PlayAsync wipes these bytes at each
+                        // exit of its own. This line does not depend on that: a
+                        // caller must not give that work to the code it calls.
+                        Array.Clear(audio.WavBytes);
+                    }
+                }
+            }
         }
 #pragma warning disable CA1031 // The appliance must not stop. See the remark.
         catch (Exception exception)
 #pragma warning restore CA1031
         {
-            LogSpeechFailed(_logger, exception);
+            LogSpeechFailed(_logger, spoken, pieces.Count, exception);
+
+            if (spoken > 0)
+            {
+                Safely(() => ShowStatus("The appliance did not speak all of the answer."));
+            }
         }
         finally
         {
+            await stop.CancelAsync().ConfigureAwait(true);
+            await producer.ConfigureAwait(true);
+
+            // SECURITY CONTROL. Do not delete this loop. PlayAsync wipes the
+            // bytes that it played, but a piece that waits in the queue never
+            // reaches PlayAsync when the software stops or a later piece fails.
+            // Those bytes are the spoken sentence of a person, and the producer
+            // ended above, so nothing can add a piece after this line. The wipe
+            // covers the array of this code only: HttpClient holds a copy of
+            // the same WAV that nothing wipes, thus a memory dump is not clean.
+            while (line.Reader.TryRead(out SpokenAudio? left))
+            {
+                Array.Clear(left.WavBytes);
+            }
+
             SetSpeaking(false);
         }
+    }
+
+    private async Task<bool> WaitForPieceAsync(
+        ChannelReader<SpokenAudio> reader,
+        CancellationToken cancellationToken)
+        => await reader
+            .WaitToReadAsync(cancellationToken)
+            .AsTask()
+            .WaitAsync(_pieceWait, cancellationToken)
+            .ConfigureAwait(true);
+
+    // One worker, and the pieces in their sequence. backend/server.py holds
+    // _tts_lock while it makes the audio. Thus two calls together give no
+    // speed on a machine that has 4 GB and a model in its memory.
+    //
+    // ConfigureAwait(false) below, and true at each other await of this class.
+    // This method makes the next piece while the appliance speaks, thus a
+    // continuation on the thread of the user interface would put the copy of
+    // some megabytes of WAV on the thread that draws.
+    private async Task SynthesizeIntoAsync(
+        ChannelWriter<SpokenAudio> writer,
+        IReadOnlyList<string> pieces,
+        Language language,
+        CancellationToken cancellationToken)
+    {
+        Exception? failure = null;
+
+        try
+        {
+            foreach (string piece in pieces)
+            {
+                SpokenAudio audio = await _speech
+                    .SynthesizeAsync(piece, language, cancellationToken)
+                    .ConfigureAwait(false);
+
+                try
+                {
+                    await writer.WriteAsync(audio, cancellationToken).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // SECURITY CONTROL. Do not delete this line. The reader
+                    // stopped, so this piece never reaches PlayAsync, the code
+                    // that usually wipes it. It is the spoken sentence of a
+                    // person. As above, this clears the array of this code
+                    // only, and HttpClient keeps a copy that nothing wipes.
+                    Array.Clear(audio.WavBytes);
+                    throw;
+                }
+            }
+        }
+#pragma warning disable CA1031 // The reader gets each error through the queue.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            failure = exception;
+        }
+
+        writer.Complete(failure);
     }
 
     private void SetSpeaking(bool speaking) => Safely(() =>
@@ -1215,8 +1371,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The appliance did not speak the translation. The words stay on the display.")]
-    private static partial void LogSpeechFailed(ILogger logger, Exception exception);
+        Message = "The appliance spoke {spoken} of the {pieces} pieces of the translation. The words stay on the display.")]
+    private static partial void LogSpeechFailed(
+        ILogger logger,
+        int spoken,
+        int pieces,
+        Exception exception);
 
     [LoggerMessage(
         Level = LogLevel.Information,
