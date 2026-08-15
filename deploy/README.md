@@ -714,6 +714,69 @@ line of the log for the exchange gives one number for the synthesis and the
 sound together, and only the synthesis can become more short. A person must
 hear the sound.
 
+### 8.22 The fuel gauge goes away, and the pin-1 end of the header is the cause
+
+A change of the Raspberry Pi board gave a charge of "unknown" on the display.
+The kernel names the failure:
+
+```text
+max17040 1-0036: probe with driver max17040 failed with error -121
+```
+
+-121 is EREMOTEIO. The chip did not answer. `i2cdetect -y 1` gives an empty
+bus, and not one address.
+
+**The Raspberry Pi is not the cause, and each test of it passes.** The overlay
+of section 8.8 is in `config.txt`, the module `max17040_battery` is in the
+memory, the overlay makes the device `1-0036`, and `pinctrl get 2,3` gives:
+
+```text
+ 2: a3    pu | hi // GPIO2 = SDA1
+ 3: a3    pu | hi // GPIO3 = SCL1
+```
+
+Each line is in its alternate function, each has its pull, and each is high,
+which is a bus that is idle and not one that is held. `i2cdetect -F 1` gives
+each function of the controller.
+
+**The X1201 is not the cause either, and it operates.** It supplies the Pi
+through the pogo pins, and GPIO6 follows the charge inlet: a person who
+disconnects that inlet makes `/sys/class/power_supply/mains/online` go from 1 to
+0. CAUTION: GPIO6 has a PULL-DOWN, thus a pin with no connection reads 0. A
+value of 1 is proof that the X1201 drives it.
+
+The cause is the seat of the 40-pin header, and the signals give the position:
+
+| Signal | Pin | Condition |
+| --- | --- | --- |
+| SDA1, GPIO2 | 3 | no answer |
+| SCL1, GPIO3 | 5 | no answer |
+| The button, GPIO17 | 11 | operates |
+| The button, GPIO27 | 13 | operates |
+| The mains line, GPIO6 | 31 | operates |
+
+**Each signal that fails is at the end of the header that holds pin 1, and each
+signal that operates is further along it.** A connector that lifts at that one
+corner keeps the pins of the middle and gives up pins 1, 3 and 5. The pogo pins
+are on springs and they keep the supply through the same error, thus the
+appliance starts and looks correct.
+
+A person pushed that corner of the connector home. `0x36` then gives `UU`,
+`/sys/class/power_supply/battery` comes back, and the values are those of
+section 8.8: 4196250 microvolts and a capacity of 101.
+
+Section 4.4 of CLAUDE.md says that the height of the Pi above the X1201 is not
+measured, and that the name "M2.5x5+3" gives 5 mm of body and 3 mm of stud and
+not 8 mm of height. A spacer of the incorrect height leaves one end of a rigid
+connector short while the pogo pins still touch, which is this failure.
+
+**The guard of the cells does not stop the appliance in this condition, and it
+does not protect it either.** `read_microvolts` of `gemma-battery-guard.sh`
+gives a failure for a file that it cannot read, and the caller then HOLDS its
+counters. Thus a fuel gauge that goes away makes no poweroff of an appliance
+that is in good health. It also makes no poweroff of one that is empty. Keep the
+charge inlet connected while the gauge is silent.
+
 ---
 
 ## 10. The swap of the appliance
