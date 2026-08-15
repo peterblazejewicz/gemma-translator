@@ -198,6 +198,24 @@
 
             Put the card back with the text-to-speech slice.
           -->
+
+          <Border Classes="card">
+            <StackPanel>
+              <TextBlock Classes="section-label" Text="EFFECTS" />
+              <Grid ColumnDefinitions="*,14,*" Margin="0,18,0,0">
+                <Button Grid.Column="0"
+                        Classes="variant"
+                        Classes.chosen="{Binding LiquidGlass}"
+                        Content="Liquid glass"
+                        Command="{Binding ToggleLiquidGlassCommand}" />
+                <Button Grid.Column="2"
+                        Classes="variant"
+                        Classes.chosen="{Binding ReducedMotion}"
+                        Content="Reduced motion"
+                        Command="{Binding ToggleReducedMotionCommand}" />
+              </Grid>
+            </StackPanel>
+          </Border>
         </StackPanel>
 
         <StackPanel Grid.Row="2" Grid.Column="2" Spacing="16">

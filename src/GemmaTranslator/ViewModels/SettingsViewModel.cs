@@ -81,6 +81,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool SpeakTranslations => _store.Current.SpeakTranslations;
 
+    public bool LiquidGlass => _store.Current.LiquidGlass;
+
+    public bool ReducedMotion => _store.Current.ReducedMotion;
+
     public int VisualizerBars => _store.Current.VisualizerBars;
 
     public bool CanAddBars => VisualizerBars < UserSettings.MaximumBars;
@@ -95,6 +99,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(Swatches));
         OnPropertyChanged(nameof(IsDark));
         OnPropertyChanged(nameof(SpeakTranslations));
+        OnPropertyChanged(nameof(LiquidGlass));
+        OnPropertyChanged(nameof(ReducedMotion));
         OnPropertyChanged(nameof(VisualizerBars));
         OnPropertyChanged(nameof(CanAddBars));
         OnPropertyChanged(nameof(CanRemoveBars));
@@ -118,6 +124,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void ToggleSpeech()
         => Apply(_store.Current with { SpeakTranslations = !_store.Current.SpeakTranslations });
+
+    [RelayCommand]
+    private void ToggleLiquidGlass()
+        => Apply(_store.Current with { LiquidGlass = !_store.Current.LiquidGlass });
+
+    [RelayCommand]
+    private void ToggleReducedMotion()
+        => Apply(_store.Current with { ReducedMotion = !_store.Current.ReducedMotion });
 
     [RelayCommand(CanExecute = nameof(CanAddBars))]
     private void AddBars()

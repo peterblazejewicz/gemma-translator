@@ -107,6 +107,21 @@ public sealed record UserSettings
 
     public bool SpeakTranslations { get; init; } = true;
 
+    /// <summary>
+    /// <c>true</c> gives a glass surface on the dock and the status cluster.
+    /// <c>false</c> gives a flat, solid surface.
+    /// </summary>
+    public bool LiquidGlass { get; init; } = true;
+
+    /// <summary>
+    /// Stops decorative movement of the user interface.
+    /// </summary>
+    /// <remarks>
+    /// This is the reduced-motion setting of the appliance. No Avalonia
+    /// backend gives a signal for this. The setting comes from the person.
+    /// </remarks>
+    public bool ReducedMotion { get; init; }
+
     /// <summary>The count of the bars, from 8 to 64 in steps of 8.</summary>
     public int VisualizerBars { get; init; } = 16;
 

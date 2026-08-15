@@ -23,6 +23,10 @@ internal sealed record UserSettingsFile
 
     public bool? SpeakTranslations { get; init; }
 
+    public bool? LiquidGlass { get; init; }
+
+    public bool? ReducedMotion { get; init; }
+
     public int? VisualizerBars { get; init; }
 
     public static UserSettingsFile From(UserSettings settings)
@@ -34,6 +38,8 @@ internal sealed record UserSettingsFile
             AccentColor = settings.AccentColor,
             IsDark = settings.IsDark,
             SpeakTranslations = settings.SpeakTranslations,
+            LiquidGlass = settings.LiquidGlass,
+            ReducedMotion = settings.ReducedMotion,
             VisualizerBars = settings.VisualizerBars,
         };
     }
@@ -43,6 +49,8 @@ internal sealed record UserSettingsFile
         AccentColor = AccentColor ?? UserSettings.Default.AccentColor,
         IsDark = IsDark ?? UserSettings.Default.IsDark,
         SpeakTranslations = SpeakTranslations ?? UserSettings.Default.SpeakTranslations,
+        LiquidGlass = LiquidGlass ?? UserSettings.Default.LiquidGlass,
+        ReducedMotion = ReducedMotion ?? UserSettings.Default.ReducedMotion,
         VisualizerBars = VisualizerBars ?? UserSettings.Default.VisualizerBars,
     };
 }
