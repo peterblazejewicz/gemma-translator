@@ -40,7 +40,7 @@ public static class SpeechChunks
 
     // A cut costs 0.9 s of EXTRA AUDIO, measured: the same Japanese sentence
     // gives 4.10 s of sound whole and 5.00 s in two pieces, because each piece
-    // carries its own lead-in and tail. At 1.7 times realtime that is 1.5 s of
+    // carries its own lead-in and tail. At 1.8 times realtime that is 1.6 s of
     // synthesis for nothing. Thus a short answer must stay whole: below this
     // length the cut costs more than it saves.
     //
@@ -50,16 +50,27 @@ public static class SpeechChunks
 
     // The target for a text that is long enough to cut. A piece of 40 gives
     // about 4.6 s to the first word, against 14.6 s for a whole answer of 51
-    // characters. CAUTION: the space with no sound at each join is 0.7 of the
-    // time that the piece before it plays, because the synthesis is 1.7 times
-    // realtime and it cannot keep in front of the speaker. A smaller value here
-    // gives the first word sooner and makes that space more frequent.
+    // characters. HoldToStart keeps the joins without a space; a smaller value
+    // here gives the first word sooner and makes the hold longer.
     public const int PieceLength = 40;
 
-    // The synthesis makes 1 s of sound in 1.7 s, measured on the appliance over
-    // nine pieces: 1.76, 1.84, 1.82, 1.82, 1.82 for whole answers and 1.69 for
-    // a piece. A fraction and not a double, because this decides a join.
-    private const int RealtimeNumerator = 17;
+    // The synthesis makes 1 s of sound in about 1.8 s, measured on the
+    // appliance: 1.76, 1.84, 1.82, 1.82, 1.82 for whole answers and 1.74, 1.77,
+    // 1.78, 1.78, 1.79 for the five pieces of one long answer.
+    //
+    // CAUTION: the value here is 1.9 and not 1.8, and the margin is not
+    // timidity. HoldToStart divides the sound by the characters on the two
+    // sides of its comparison, and that is only correct while one character
+    // gives the same sound in each piece. It does not: each piece carries its
+    // own lead-in and tail, thus a SHORT piece gives more sound for one
+    // character than a long one. A measurement of one answer of five pieces
+    // gives 0.157 s for one character in the piece of 26 and 0.224 s in the
+    // piece of 14, which is 43 % more. With 1.7 that answer held two pieces,
+    // and the journal then shows spaces with no sound of 1.61 s and 0.62 s at
+    // the last two joins. With 1.9 it holds three and it has none.
+    //
+    // A fraction and not a double, because this decides a join.
+    private const int RealtimeNumerator = 19;
     private const int RealtimeDenominator = 10;
 
     // CAUTION: a port of the upstream rule gives nothing for one half of the
@@ -118,10 +129,16 @@ public static class SpeechChunks
     /// <para>
     /// For each piece k after the hold, the synthesis of the pieces from the
     /// hold to k must be complete before the speaker has played the pieces in
-    /// front of k. The seconds for one character are the same on the two sides
-    /// of that comparison and go away, thus this is arithmetic on the COUNT OF
-    /// CHARACTERS and it needs no measurement of the sound and no value for a
+    /// front of k. The seconds for one character stand on the two sides of that
+    /// comparison and go away, thus this is arithmetic on the COUNT OF
+    /// CHARACTERS: it needs no measurement of the sound and no value for a
     /// language.
+    /// </para>
+    /// <para>
+    /// CAUTION: that cancellation is an APPROXIMATION, and the margin in
+    /// RealtimeNumerator pays for it. One character does not give the same
+    /// sound in each piece, because a short piece carries the same lead-in and
+    /// tail as a long one.
     /// </para>
     /// </remarks>
     public static int HoldToStart(IReadOnlyList<string> pieces)
@@ -142,9 +159,7 @@ public static class SpeechChunks
 
             for (int k = hold + 1; k <= count; k++)
             {
-                // RealtimeNumerator over RealtimeDenominator is the 1.7 of the
-                // measurement, as a fraction so that no rounding of a double
-                // decides a join.
+                // A fraction, so that no rounding of a double decides a join.
                 if (RealtimeNumerator * (through[k] - through[hold])
                     > RealtimeDenominator * through[k - 1])
                 {
