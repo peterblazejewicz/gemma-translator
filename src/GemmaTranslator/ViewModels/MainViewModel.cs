@@ -118,6 +118,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     // null between two exchanges.
     private Exchange? _turn;
 
+    // The speech that operates now, or null while the appliance says nothing.
+    // A press takes it and cuts the sound short, as stopSpeaking of
+    // frontend/src/TranslatorApp.jsx:81 does. CAUTION: one object and not four
+    // fields, because each crosses an await and a press starts the NEXT
+    // exchange in that space; ReferenceEquals on this object is what stops the
+    // exchange that ends from writing the display of the one that began.
+    private Speech? _speaking;
+
     private long _pressTicks;
 
     private DispatcherTimer? _limitTimer;
@@ -136,6 +144,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdlePrompt))]
     [NotifyPropertyChangedFor(nameof(IsRecording))]
+    [NotifyPropertyChangedFor(nameof(IsSpeaking))]
     [NotifyPropertyChangedFor(nameof(IsStatusVisible))]
     private AppState _state = AppState.WarmUp;
 
@@ -269,7 +278,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public bool IsRecording => State == AppState.Recording;
 
-    public bool IsSpeaking => SpeakingLabel is not null;
+    // CAUTION: the recording wins. A person who cuts the speech short is
+    // recording before the cancelled speech clears its label, thus the test of
+    // the label alone would put the two pills in the same position for a frame.
+    // MainView.axaml says that the two are never on together, and this line is
+    // what makes that true.
+    public bool IsSpeaking => SpeakingLabel is not null && !IsRecording;
 
     /// <remarks>
     /// A message and the two pills go in the same position, and a pill wins: a
@@ -843,14 +857,34 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // The turn is complete. DropTurn must not find it: a message that comes
         // after this belongs to the next exchange, and it must not remove this
         // one from the thread.
-        _turn = null;
+        // CAUTION: only if this pipeline still owns the turn. A person who
+        // cuts the speech short starts the next exchange while this method is
+        // between two awaits, and that exchange puts its own turn in the field.
+        // A write of null here would then take the turn of the NEW exchange
+        // away, and each line that it writes would go nowhere.
+        bool mine = ReferenceEquals(_turn, turn);
+
+        if (mine)
+        {
+            _turn = null;
+        }
 
         // CAUTION: this line is inside the guard on purpose. GoTo raises
         // PropertyChanged, Avalonia then applies a style, and that can throw.
         // Nothing awaits this task, thus the error goes away in silence and the
         // state stays at Working. StartRecording refuses each button in that
         // state, and the appliance then hears nobody again and says nothing.
-        Safely(() => GoTo(AppState.Result));
+        //
+        // The test of the state is the same rule as the turn above: a person
+        // who cut the speech short is recording now, and Result over that would
+        // take the microphone away in the middle of a word.
+        Safely(() =>
+        {
+            if (mine && State == AppState.Working)
+            {
+                GoTo(AppState.Result);
+            }
+        });
     }
 
     /// <remarks>
@@ -878,11 +912,22 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
+        using CancellationTokenSource stop =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        stop.CancelAfter(SpeechBudget);
+
+        // The turn goes in NOW: by the finally the field can hold the turn of
+        // an exchange that a press started.
+        Speech mine = new(stop, destination, _turn);
+
+        _speaking = mine;
+
         // The cue comes on before the call to the server and not after it. That
         // call takes 1 s to 3 s, and for all of that time the state is Working:
         // the two buttons do nothing and nothing on the display says that the
         // appliance still works.
-        SetSpeaking(destination, true);
+        BeginSpeaking(mine);
 
         // A queue of one piece. CAUTION: it becomes EMPTY at each connection.
         // Synthesis is 1.74 times the sound it makes (deploy/README.md 8.21,
@@ -891,11 +936,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // sentence after the synthesis of that sentence only.
         Channel<SpokenAudio> line = Channel.CreateBounded<SpokenAudio>(1);
 
-        using CancellationTokenSource stop =
-            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
-        stop.CancelAfter(SpeechBudget);
-
         Task producer = SynthesizeIntoAsync(
             line.Writer,
             pieces,
@@ -903,6 +943,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             stop.Token);
 
         int spoken = 0;
+        int given = 0;
         bool failure = false;
         int hold = SpeechChunks.HoldToStart(pieces);
         List<SpokenAudio> held = [];
@@ -945,6 +986,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                             // PlayAsync retires the player of the call before
                             // it, thus two calls together cut the first piece in
                             // its middle.
+                            // Before the await. A piece that a person cuts in
+                            // its middle never reaches the line below it, and
+                            // the journal would then say that no sound came
+                            // out when a person heard part of a sentence.
+                            given++;
+
                             await _playback.PlayAsync(piece, stop.Token).ConfigureAwait(true);
 
                             spoken++;
@@ -967,14 +1014,29 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         catch (Exception exception)
 #pragma warning restore CA1031
         {
-            LogSpeechFailed(_logger, spoken, pieces.Count, exception);
+            // The TYPE and the value. A failure of the server that lands in the
+            // same moment as a press would take this branch on the value alone,
+            // and the journal would then hold no trace of that failure.
+            if (mine.CutShort && exception is OperationCanceledException)
+            {
+                LogSpeechCutShort(_logger, pieces.Count, given, spoken);
+            }
+            else
+            {
+                LogSpeechFailed(_logger, spoken, pieces.Count, exception);
 
-            // The message waits for the pill to go, or it spends its 6 s
-            // behind the pill and a person sees none of it.
-            failure = spoken > 0;
+                // The message waits for the pill to go, or it spends its 6 s
+                // behind the pill and a person sees none of it. A person who
+                // cut the sound short gets no message: they know.
+                failure = spoken > 0;
+            }
         }
         finally
         {
+            // Before the two awaits. The play loop has ended, thus a pill that
+            // waits for the producer says SPEAKING over silence.
+            EndSpeaking(mine);
+
             await stop.CancelAsync().ConfigureAwait(true);
             await producer.ConfigureAwait(true);
 
@@ -999,8 +1061,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             }
 
             held.Clear();
-
-            SetSpeaking(destination, false);
 
             if (failure)
             {
@@ -1068,40 +1128,88 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         writer.Complete(failure);
     }
 
+    /// <returns><c>true</c> if it was speaking and the sound stops.</returns>
     /// <remarks>
-    /// CAUTION: the one definition of "the appliance speaks". Four things
-    /// carry that fact: the glyph in the bubble, the pill, the bars of the lane
-    /// that listens, and the timer that moves them. A path that writes one of
-    /// them somewhere else makes a display that disagrees with itself.
+    /// CAUTION: <c>Cancel</c> runs the registrations of the token on THIS
+    /// thread, thus the request of the synthesis ends inside this call. The
+    /// continuations of the speech do not: Avalonia gives its own
+    /// synchronization context and .NET refuses to run one inline on it.
     /// </remarks>
-    private void SetSpeaking(LaneViewModel destination, bool speaking) => Safely(() =>
+    private bool CutSpeechShort()
     {
-        // CAUTION: the exit clears the lane and the bubble BEFORE the label.
-        // A property write applies a style and can throw, and Safely swallows
-        // it; with the label first, a throw would leave the lane bright for the
-        // session, because nothing else writes it. The next exchange always
-        // writes the label again.
-        if (!speaking)
+        if (_speaking is not { } speech)
         {
-            StopSpeechTimer();
+            return false;
+        }
 
-            destination.IsSpokenTo = false;
-            destination.Levels = new double[BarCount];
-            _turn?.IsSpeaking = false;
-            SpeakingLabel = null;
+        speech.CutShort = true;
+        speech.Stop.Cancel();
 
+        return true;
+    }
+
+    /// <remarks>
+    /// CAUTION: this and <see cref="EndSpeaking"/> are the one definition of
+    /// "the appliance speaks". Four things carry that fact: the glyph in the
+    /// bubble, the pill, the bars of the lane that listens, and the timer that
+    /// moves them. A path that writes one of them somewhere else makes a
+    /// display that disagrees with itself.
+    /// </remarks>
+    private void BeginSpeaking(Speech mine) => Safely(() =>
+    {
+        SpeakingLabel = string.Create(
+            CultureInfo.InvariantCulture,
+            $"SPEAKING · {mine.Destination.Language.Name.ToUpperInvariant()}");
+
+        mine.Destination.IsSpokenTo = true;
+        mine.Turn?.IsSpeaking = true;
+
+        StartSpeechTimer(mine.Destination);
+    });
+
+    /// <remarks>
+    /// It gives the display back ONLY if this speech still owns it. A person
+    /// who cuts the sound short starts the next exchange while this one is
+    /// still between two awaits, and without this test the exchange that ends
+    /// would take the pill, the bars and the glyph of the exchange that began.
+    /// </remarks>
+    private void EndSpeaking(Speech mine)
+    {
+        if (!ReferenceEquals(_speaking, mine))
+        {
             return;
         }
 
-        SpeakingLabel = string.Create(
-            CultureInfo.InvariantCulture,
-            $"SPEAKING · {destination.Language.Name.ToUpperInvariant()}");
+        _speaking = null;
 
-        destination.IsSpokenTo = true;
-        _turn?.IsSpeaking = true;
+        Safely(() =>
+        {
+            // The lane and the bubble BEFORE the label. A property write applies
+            // a style and can throw, and Safely swallows it; with the label
+            // first the lane would stay bright for the session.
+            StopSpeechTimer();
 
-        StartSpeechTimer(destination);
-    });
+            mine.Destination.IsSpokenTo = false;
+            mine.Destination.Levels = new double[BarCount];
+            mine.Turn?.IsSpeaking = false;
+            SpeakingLabel = null;
+        });
+    }
+
+    /// <summary>One speech, and the display that belongs to it.</summary>
+    private sealed class Speech(
+        CancellationTokenSource stop,
+        LaneViewModel destination,
+        Exchange? turn)
+    {
+        public CancellationTokenSource Stop { get; } = stop;
+
+        public LaneViewModel Destination { get; } = destination;
+
+        public Exchange? Turn { get; } = turn;
+
+        public bool CutShort { get; set; }
+    }
 
     /// <remarks>
     /// CAUTION: this is the one protection against a release that does not
@@ -1215,7 +1323,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         lane.Levels = levels;
     }
 
-    // It stops the timer and touches no lane. SetSpeaking gives the strip back.
+    // It stops the timer and touches no lane. EndSpeaking gives the strip back.
     private void StopSpeechTimer()
     {
         _speechTimer?.Stop();
@@ -1368,21 +1476,38 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void StartRecording(int lane)
     {
-        // The first push wins. The button of the other person does nothing
-        // until the full operation is complete, and not only until the
-        // recording stops.
-        if (RecordingLane != 0 || State == AppState.Working)
+        if (RecordingLane != 0)
+        {
+            LogButtonIgnored(_logger, lane);
+            return;
+        }
+
+        // A press while the appliance SPEAKS cuts the sound short and records,
+        // as handleRecordStart of frontend/src/TranslatorApp.jsx:155 does. The
+        // port took that away and was then deaf for the whole answer.
+        //
+        // A press while it TRANSLATES is refused, and that half is NOT upstream:
+        // the model server keeps the work of a call that the client lets go, so
+        // the next answer would come later than before.
+        if (State == AppState.Working && _speaking is null)
         {
             LogButtonIgnored(_logger, lane);
             return;
         }
 
         // A recording that cannot hear is worse than a refusal that says why.
+        // CAUTION: each refusal comes BEFORE the cut. A press that takes the
+        // answer away and then records nothing is worse than a press that does
+        // nothing at all.
         if (IsSpeakerMissing)
         {
             ShowStatus("Speaker not found. Check the device connections.");
             return;
         }
+
+        // The point of no return. The sound stops before the microphone opens,
+        // in the sequence that upstream uses.
+        CutSpeechShort();
 
         // The ring lights before the microphone accumulates, and it goes dark
         // after the microphone stops. An indicator that comes after the
@@ -1593,6 +1718,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         double translate,
         double speak,
         double total);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "A person cut the speech short. Of the {pieces} pieces, {given} went to the speaker and {spoken} played to the end.")]
+    private static partial void LogSpeechCutShort(
+        ILogger logger,
+        int pieces,
+        int given,
+        int spoken);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

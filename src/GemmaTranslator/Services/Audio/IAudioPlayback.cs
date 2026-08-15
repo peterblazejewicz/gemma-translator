@@ -15,8 +15,8 @@
 //
 // This file is part of a fork of google-gemma/gemma-translator and has
 // been modified. It replaces playTTS of frontend/src/TranslatorApp.jsx. The
-// appliance refuses the button of a person while it speaks, thus it has no
-// equivalent of the upstream function that cuts the sound short.
+// equivalent of stopSpeaking is the cancellation token of PlayAsync: a press of
+// a button cancels it and the sound stops. See MainViewModel.CutSpeechShort.
 
 using GemmaTranslator.Services.Speech;
 

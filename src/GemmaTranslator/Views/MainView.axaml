@@ -602,8 +602,8 @@
 
       <!-- These two pills have no hidden class. The microphone is open, or the
            appliance speaks, and nothing that a finger does on the thread can
-           remove that signal. The two are never on together: the first is
-           AppState.Recording and the second is inside AppState.Working. -->
+           remove that signal. The two are never on together, and
+           MainViewModel.IsSpeaking is the one line that makes that true. -->
       <Border Classes="pill"
               IsVisible="{Binding IsRecording}"
               Background="{DynamicResource InverseBrush}">
