@@ -37,13 +37,14 @@
       </ResourceDictionary.MergedDictionaries>
 
       <!--
-        Appearance replaces these three at the start. They are here so that the
+        Appearance replaces these four at the start. They are here so that the
         previewer and the harness have a value, and so that a binding that
         reads one before the first Apply does not fail.
       -->
       <SolidColorBrush x:Key="AccentBrush" Color="#FFD100" />
       <SolidColorBrush x:Key="AccentInkBrush" Color="#1A1A18" />
       <SolidColorBrush x:Key="AccentDeepBrush" Color="#FFD100" />
+      <SolidColorBrush x:Key="AccentOnInverseBrush" Color="#8A6E00" />
     </ResourceDictionary>
   </Application.Resources>
 

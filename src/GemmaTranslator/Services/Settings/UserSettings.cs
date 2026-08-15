@@ -65,12 +65,12 @@ public sealed record UserSettings
     private const string InkOnDark = "#FFFFFF";
 
     /// <remarks>
-    /// A glyph of 22 pixels in <c>#FFD100</c> on the white card of the light
-    /// variant has too little contrast to see. The design gives this darker
-    /// yellow at that one position. The dark variant needs no such value,
-    /// because the card is dark there.
+    /// A glyph of 22 pixels in <c>#FFD100</c> on a LIGHT GROUND has too little
+    /// contrast to see. The design gives this darker yellow at each such
+    /// position: the card of the light variant, and the inverse surface of the
+    /// dark variant.
     /// </remarks>
-    private const string DeepOnLight = "#8A6E00";
+    private const string DeepOnLightGround = "#8A6E00";
 
     /// <remarks>White text on <c>#FFD100</c> cannot be read.</remarks>
     private static readonly string[] Bright = ["#FFD100", "#FFA500"];
@@ -131,10 +131,21 @@ public sealed record UserSettings
     public Color Ink => Color.Parse(IsBright(AccentColor) ? InkOnBright : InkOnDark);
 
     /// <summary>
-    /// The accent of a small glyph, which stays legible on a light card.
+    /// The accent of a small glyph on <c>CardBrush</c>, which is light in the
+    /// LIGHT variant.
     /// </summary>
     public Color DeepAccent => IsBright(AccentColor) && !IsDark
-        ? Color.Parse(DeepOnLight)
+        ? Color.Parse(DeepOnLightGround)
+        : Accent;
+
+    /// <summary>
+    /// The accent of a small glyph on <c>InverseBrush</c>, which is light in
+    /// the DARK variant. CAUTION: the condition is the opposite of
+    /// <see cref="DeepAccent"/> and that is correct — the card is light in the
+    /// light variant, thus one value cannot serve the two surfaces.
+    /// </summary>
+    public Color AccentOnInverse => IsBright(AccentColor) && IsDark
+        ? Color.Parse(DeepOnLightGround)
         : Accent;
 
     public Color Accent => Color.Parse(AccentColor);

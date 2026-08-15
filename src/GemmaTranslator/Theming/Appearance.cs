@@ -40,8 +40,11 @@ public sealed partial class Appearance
 
     public const string AccentInkKey = "AccentInkBrush";
 
-    /// <summary>The key of the accent that stays legible on a light surface.</summary>
+    /// <summary>The key of the accent of a glyph on the card.</summary>
     public const string AccentDeepKey = "AccentDeepBrush";
+
+    /// <summary>The key of the accent of a glyph on the inverse surface.</summary>
+    public const string AccentOnInverseKey = "AccentOnInverseBrush";
 
     private readonly ILogger<Appearance> _logger;
 
@@ -80,6 +83,7 @@ public sealed partial class Appearance
         application.Resources[AccentKey] = new SolidColorBrush(safe.Accent);
         application.Resources[AccentInkKey] = new SolidColorBrush(safe.Ink);
         application.Resources[AccentDeepKey] = new SolidColorBrush(safe.DeepAccent);
+        application.Resources[AccentOnInverseKey] = new SolidColorBrush(safe.AccentOnInverse);
 
         LogApplied(_logger, safe.IsDark ? "dark" : "light", safe.AccentColor);
     }
