@@ -16,6 +16,7 @@
 // This file is part of a fork of google-gemma/gemma-translator and has
 // been modified. It replaces frontend/src/TranslatorApp.jsx.
 
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading.Channels;
@@ -83,6 +84,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     // AppState.Working with each button dead.
     private static readonly TimeSpan SpeechBudget = TimeSpan.FromMinutes(5);
 
+    // The design gives these three. The limit of 12 turns is also the second
+    // privacy control of the thread: the screensaver removes all of them, and
+    // until it comes the appliance keeps 12 and no more.
+    private const int MaxTurns = 12;
+    private const int BrightTurns = 2;
+    private const double OldTurnOpacity = 0.72;
+
     private readonly ITranslator _translator;
     private readonly ISpeechService _speech;
     private readonly IAudioCapture _capture;
@@ -101,6 +109,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     // Each call to the server and to the speaker takes this token, thus a stop
     // of the software does not wait for the timeout of the client. See Dispose.
     private readonly CancellationTokenSource _shutdown = new();
+
+    // The turn that the pipeline writes. It is at the end of Turns, and it is
+    // null between two exchanges.
+    private Exchange? _turn;
 
     private long _pressTicks;
 
@@ -122,9 +134,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private AppState _state = AppState.WarmUp;
 
 
+    // A count of the requests and not a condition. A finger can move the thread
+    // between two exchanges, thus the same request comes again, and a value
+    // that does not change raises no event. See
+    // Views/Behaviors/ConversationScroll.cs.
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsIdlePrompt))]
-    private Exchange? _exchange;
+    private int _pinRequest;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsStatusVisible))]
@@ -227,9 +242,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public LaneViewModel Lane2 { get; }
 
+    public ObservableCollection<Exchange> Turns { get; } = [];
+
     public int BarCount => _store.Current.VisualizerBars;
 
-    public bool IsIdlePrompt => State == AppState.Idle && Exchange is null;
+    public bool IsIdlePrompt => State == AppState.Idle && Turns.Count == 0;
 
 
     public bool IsRecording => State == AppState.Recording;
@@ -265,6 +282,52 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public string RecordingLabel => string.Create(
         CultureInfo.InvariantCulture,
         $"RECORDING · SPEAKER {(RecordingLane == 0 ? 1 : RecordingLane)}");
+
+    private void AddTurn(Exchange turn)
+    {
+        Turns.Add(turn);
+        _turn = turn;
+
+        while (Turns.Count > MaxTurns)
+        {
+            Turns.RemoveAt(0);
+        }
+
+        Fade();
+        OnPropertyChanged(nameof(IsIdlePrompt));
+    }
+
+    private void DropTurn()
+    {
+        if (_turn is null)
+        {
+            return;
+        }
+
+        Turns.Remove(_turn);
+        _turn = null;
+
+        Fade();
+        OnPropertyChanged(nameof(IsIdlePrompt));
+    }
+
+    private void ClearTurns()
+    {
+        Turns.Clear();
+        _turn = null;
+
+        OnPropertyChanged(nameof(IsIdlePrompt));
+    }
+
+    private void Fade()
+    {
+        for (int index = 0; index < Turns.Count; index++)
+        {
+            Turns[index].Opacity = index >= Turns.Count - BrightTurns
+                ? 1
+                : OldTurnOpacity;
+        }
+    }
 
     private void GoTo(AppState next)
     {
@@ -382,7 +445,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // languages, at 42 pixels. In the European Union the speech of a
             // person is personal data, and showing it to an unrelated person
             // is a disclosure.
-            Exchange = null;
+            //
+            // The thread makes this control more important, and not less: the
+            // display holds a maximum of 12 turns of that session. This line
+            // must remove all of them, and it must not keep one of them.
+            ClearTurns();
 
             StartClock();
             GoTo(AppState.Screensaver);
@@ -565,13 +632,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <remarks>
-    /// The conversation goes away with the message. A bubble that holds
-    /// "Listening…" or a dash says that the appliance heard something, and the
-    /// message below it says that it did not.
+    /// The turn goes away with the message. A bubble that holds "Listening…"
+    /// or a dash says that the appliance heard something, and the message below
+    /// it says that it did not. The turns before it stay: they are complete.
     /// </remarks>
     private void ShowNoResult(string status) => Safely(() =>
     {
-        Exchange = null;
+        DropTurn();
         GoTo(AppState.Idle);
         ShowStatus(status);
     });
@@ -625,6 +692,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         string heard;
 
+        Exchange turn = new()
+        {
+            SourceLanguage = lane.Language,
+            TargetLanguage = other.Language,
+            SourceText = "Listening…",
+            TargetText = "—",
+            SourceIsLane2 = lane.Number == 2,
+            IsSourceMuted = true,
+            IsTargetMuted = true,
+        };
+
         try
         {
             // SECURITY CONTROL. This method owns the recording, and this block
@@ -637,16 +715,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             {
                 GoTo(AppState.Working);
 
-                Exchange = new Exchange
-                {
-                    SourceLanguage = lane.Language,
-                    TargetLanguage = other.Language,
-                    SourceText = "Listening…",
-                    TargetText = "—",
-                    SourceIsLane2 = lane.Number == 2,
-                    IsSourceMuted = true,
-                    IsTargetMuted = true,
-                };
+                AddTurn(turn);
 
                 long ticks = Stopwatch.GetTimestamp();
 
@@ -682,13 +751,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        Exchange = Exchange with
-        {
-            SourceText = heard,
-            TargetText = "Translating…",
-            IsSourceMuted = false,
-            IsTargetMuted = true,
-        };
+        turn.SourceText = heard;
+        turn.TargetText = "Translating…";
+        turn.IsSourceMuted = false;
+        turn.IsTargetMuted = true;
 
         string? translated = null;
 
@@ -698,11 +764,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 .TranslateAsync(heard, lane.Language, other.Language, _shutdown.Token)
                 .ConfigureAwait(true);
 
-            Exchange = Exchange with
-            {
-                TargetText = result.Translation,
-                IsTargetMuted = false,
-            };
+            turn.TargetText = result.Translation;
+            turn.IsTargetMuted = false;
 
             translated = result.Translation;
 
@@ -713,7 +776,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         catch (TranslationException exception)
         {
             LogTranslationFailed(_logger, exception);
-            Exchange = Exchange with { TargetText = "—", IsTargetMuted = true };
+            turn.TargetText = "—";
+            turn.IsTargetMuted = true;
             ShowStatus("Translation service isn't responding.");
         }
 #pragma warning disable CA1031 // The appliance must not stop. See the remark.
@@ -726,7 +790,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // display becomes black, systemd starts the software again, and the
             // same answer stops it again.
             LogTranslationFailed(_logger, exception);
-            Exchange = Exchange with { TargetText = "—", IsTargetMuted = true };
+            turn.TargetText = "—";
+            turn.IsTargetMuted = true;
             ShowStatus("Translation service isn't responding.");
         }
 
@@ -751,6 +816,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             translateSeconds,
             speakSeconds,
             totalSeconds);
+
+        // The turn is complete. DropTurn must not find it: a message that comes
+        // after this belongs to the next exchange, and it must not remove this
+        // one from the thread.
+        _turn = null;
 
         // CAUTION: this line is inside the guard on purpose. GoTo raises
         // PropertyChanged, Avalonia then applies a style, and that can throw.
@@ -928,13 +998,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         writer.Complete(failure);
     }
 
-    private void SetSpeaking(bool speaking) => Safely(() =>
-    {
-        if (Exchange is not null)
-        {
-            Exchange = Exchange with { IsSpeaking = speaking };
-        }
-    });
+    private void SetSpeaking(bool speaking) => Safely(() => _turn?.IsSpeaking = speaking);
 
     /// <remarks>
     /// CAUTION: this is the one protection against a release that does not
@@ -1186,6 +1250,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         RecordingLane = lane;
         RecordingTime = "0:00";
         StatusText = null;
+
+        // A person who reads the history and then speaks wants to see the words
+        // that they say. This takes the thread back to the newest turn.
+        PinRequest++;
 
         LaneViewModel speaking = lane == 1 ? Lane1 : Lane2;
 

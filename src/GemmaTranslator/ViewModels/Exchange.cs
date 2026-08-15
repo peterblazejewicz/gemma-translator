@@ -18,6 +18,7 @@
 
 using Avalonia.Layout;
 using Avalonia.Media;
+using CommunityToolkit.Mvvm.ComponentModel;
 using GemmaTranslator.Fonts;
 
 namespace GemmaTranslator.ViewModels;
@@ -29,8 +30,13 @@ namespace GemmaTranslator.ViewModels;
 /// different correct shape, and a fallback can give only one of the two. See
 /// <see cref="AppFonts.For(Language)"/>.
 /// </para>
+/// <para>
+/// A class and not a record. One turn changes while it is on the display, and
+/// a new instance in the collection makes a new container: the thread then
+/// loses its position.
+/// </para>
 /// </remarks>
-public sealed record Exchange
+public sealed partial class Exchange : ObservableObject
 {
     private const double NormalSize = 42;
 
@@ -43,21 +49,33 @@ public sealed record Exchange
 
     private const int LongText = 70;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SourceFontSize))]
+    [NotifyPropertyChangedFor(nameof(SourceLineHeight))]
+    private string _sourceText = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TargetFontSize))]
+    [NotifyPropertyChangedFor(nameof(TargetLineHeight))]
+    private string _targetText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isSourceMuted;
+
+    [ObservableProperty]
+    private bool _isTargetMuted;
+
+    [ObservableProperty]
+    private bool _isSpeaking;
+
+    [ObservableProperty]
+    private double _opacity = 1;
+
     public required Language SourceLanguage { get; init; }
 
     public required Language TargetLanguage { get; init; }
 
-    public required string SourceText { get; init; }
-
-    public required string TargetText { get; init; }
-
     public required bool SourceIsLane2 { get; init; }
-
-    public bool IsSourceMuted { get; init; }
-
-    public bool IsTargetMuted { get; init; }
-
-    public bool IsSpeaking { get; init; }
 
     public HorizontalAlignment SourceSide => SourceIsLane2
         ? HorizontalAlignment.Right

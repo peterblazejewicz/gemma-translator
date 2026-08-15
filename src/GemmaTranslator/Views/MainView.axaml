@@ -20,6 +20,7 @@
 -->
 
 <UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:b="using:GemmaTranslator.Views.Behaviors"
              xmlns:controls="using:GemmaTranslator.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -105,6 +106,26 @@
       <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
     </Style>
 
+    <Style Selector="Button.jump">
+      <Setter Property="Width" Value="104" />
+      <Setter Property="Height" Value="104" />
+      <Setter Property="CornerRadius" Value="52" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource HairBrush}" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.jump:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource HairBrush}" />
+    </Style>
+    <Style Selector="Button.jump:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource HairBrush}" />
+    </Style>
+
     <Style Selector="Border.pill">
       <Setter Property="CornerRadius" Value="40" />
       <Setter Property="Padding" Value="30,14" />
@@ -172,8 +193,8 @@
         </StackPanel>
 
         <!--
-          The two texts. The bubble of the speaker goes above the lane of that
-          speaker.
+          The thread of the conversation. Each turn gives two bubbles, and the
+          bubble of the speaker goes above the lane of that speaker.
 
           CAUTION: the two texts need a different type from the shell, and a
           DataTemplate is the one way to change it. x:DataType applies to the
@@ -181,15 +202,32 @@
           element would look for its own path in the new type and not in the
           shell.
 
-          A Content of null draws nothing, thus this needs no test of the
-          visibility.
+          An ItemsControl and not a ListBox: a touch on a bubble must select
+          nothing. The panel of the items keeps each of the 12 containers, thus
+          the arithmetic of the scroll uses a measurement and not an estimate.
+
+          CAUTION: a Background of null takes no touch. The pan of a finger
+          starts on the control below the finger, and with no brush the item
+          panel is not that control. Transparent is not the same as null here.
         -->
-        <ContentControl Content="{Binding Exchange}" VerticalAlignment="Center">
-          <ContentControl.ContentTemplate>
-            <DataTemplate x:DataType="vm:Exchange">
-        <StackPanel Spacing="26"
-                    Margin="44,106,44,36"
-                    VerticalAlignment="Center">
+        <ScrollViewer x:Name="Thread"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Hidden"
+                      b:ConversationScroll.IsEnabled="True"
+                      b:ConversationScroll.PinRequest="{Binding PinRequest}">
+          <ItemsControl ItemsSource="{Binding Turns}"
+                        Background="Transparent"
+                        VerticalAlignment="Bottom"
+                        Padding="44,106,44,36">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="32" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:Exchange">
+        <StackPanel Spacing="26" Opacity="{Binding Opacity}">
 
           <Border Classes="bubble" HorizontalAlignment="{Binding SourceSide}">
             <StackPanel>
@@ -241,9 +279,10 @@
             </StackPanel>
           </Border>
         </StackPanel>
-            </DataTemplate>
-          </ContentControl.ContentTemplate>
-        </ContentControl>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
 
         <StackPanel Orientation="Horizontal"
                     Spacing="10"
@@ -375,6 +414,23 @@
                        VerticalAlignment="Center" />
           </StackPanel>
         </Border>
+
+        <Button Classes="jump"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Bottom"
+                Margin="0,0,0,18"
+                IsVisible="{Binding !#Thread.(b:ConversationScroll.IsPinned)}"
+                Command="{Binding #Thread.(b:ConversationScroll.JumpToEndCommand)}">
+          <Viewbox Width="44" Height="44">
+            <Canvas Width="24" Height="24">
+              <Path Data="M12,5 V18 M6,12 L12,18 L18,12"
+                    Stroke="{DynamicResource InkBrush}"
+                    StrokeThickness="2"
+                    StrokeLineCap="Round"
+                    StrokeJoin="Round" />
+            </Canvas>
+          </Viewbox>
+        </Button>
       </Panel>
 
       <Grid Grid.Row="1"
