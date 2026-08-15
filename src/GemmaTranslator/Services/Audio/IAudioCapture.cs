@@ -48,6 +48,18 @@ public interface IAudioCapture : IDisposable
     Recording? StopRecording();
 
     /// <summary>
+    /// Writes a value from 0.0 to 1.0 in each element of
+    /// <paramref name="bars"/>. The bars come down at each call, thus a
+    /// microphone that stops gives a strip that falls to the floor.
+    /// </summary>
+    /// <remarks>
+    /// CAUTION: one caller, on one thread, and each call takes the samples that
+    /// came after the call before it. Thus two callers divide the sound between
+    /// them, and neither one of them gets an error.
+    /// </remarks>
+    void ReadSpectrum(Span<double> bars);
+
+    /// <summary>
     /// Gets <c>true</c> while the machine gives the device that
     /// <see cref="Configuration.AudioOptions.PreferredDeviceName"/> names, or
     /// <c>null</c> if this machine cannot answer the question.

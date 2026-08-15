@@ -98,6 +98,10 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
     // more makes the appliance wait for hours with each button dead.
     private const double MaximumPlaybackSeconds = 360;
 
+    // 4096 floats are 256 ms at 16 kHz, thus one whole tick of the display is
+    // always in the ring, also the 200 ms of the reduced-motion setting.
+    private const int SpectrumRingLength = 4096;
+
     private readonly AudioOptions _options;
     private readonly ILogger<SoundFlowAudioDevice> _logger;
     private readonly CancellationTokenSource _stop = new();
@@ -109,6 +113,9 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
     // One buffer, made one time. The audio thread writes in it and it never
     // increases. See AudioOptions.MaximumRecordingSeconds.
     private readonly float[] _buffer;
+
+    private readonly float[] _spectrumRing = new float[SpectrumRingLength];
+    private readonly Spectrum _spectrum;
 
     private MiniAudioEngine? _engine;
     private FullDuplexDevice? _device;
@@ -130,6 +137,7 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
     private volatile bool _reachedLimit;
     private volatile int _written;
     private volatile int _peakBits;
+    private volatile int _ringWritten;
 
     // 0 says that this machine cannot answer, 1 that the device is there, and 2
     // that it is not. This is an int and not a bool?, because Volatile and
@@ -151,6 +159,7 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
 
         _buffer = new float[_options.SampleRate * _options.MaximumRecordingSeconds];
         _deviceSampleRate = _options.SampleRate;
+        _spectrum = new Spectrum();
     }
 
     public bool? IsDevicePresent => Volatile.Read(ref _presence) switch
@@ -201,8 +210,15 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
             // in the heap. Here the audio thread has been quiet since the last
             // release of this lock. The cost is a memset of 7.68 MB, far less
             // than a millisecond, and the device is already 1.22 s warm.
+            // The ring of the visualizer holds the same speech and it gets the
+            // same clear. Spectrum wipes its own transform after each frame,
+            // and the values that leave it are magnitudes with no phase, which
+            // do not invert.
             Array.Clear(_buffer);
+            Array.Clear(_spectrumRing);
 
+            _ringWritten = 0;
+            _spectrum.Reset();
             _written = 0;
             _peakBits = 0;
             _reachedLimit = false;
@@ -246,10 +262,21 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
             // The finally makes the clear come also when the copy above does
             // not operate. No later call can do it: StopRecording gives null
             // when no session is open.
+            // The frame timer stops before this call, thus nothing reads the
+            // ring now.
             Array.Clear(_buffer);
+            Array.Clear(_spectrumRing);
+
+            _ringWritten = 0;
         }
 
-        LogStopped(_logger, duration.TotalSeconds, written, peak, _deviceSampleRate);
+        LogStopped(
+            _logger,
+            duration.TotalSeconds,
+            written,
+            peak,
+            _deviceSampleRate,
+            _spectrum.Loudest);
 
         if (_reachedLimit)
         {
@@ -486,8 +513,11 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
             _accumulating = false;
 
             // A person can hold a button while the software stops. Then no
-            // StopRecording occurs and the buffer keeps the speech.
+            // StopRecording occurs and the two buffers keep the speech.
             Array.Clear(_buffer);
+            Array.Clear(_spectrumRing);
+
+            _ringWritten = 0;
 
             device = _device;
             engine = _engine;
@@ -823,6 +853,8 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
         Span<float> taken = samples[..Math.Min(room, samples.Length)];
         taken.CopyTo(_buffer.AsSpan(at));
 
+        WriteRing(taken);
+
         // The peak comes from this same loop, thus StopRecording does not
         // examine each sample again while the audio thread waits.
         float peak = BitConverter.Int32BitsToSingle(_peakBits);
@@ -840,6 +872,35 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
         _peakBits = BitConverter.SingleToInt32Bits(peak);
         _written = at + taken.Length;
     }
+
+    private void WriteRing(ReadOnlySpan<float> samples)
+    {
+        ReadOnlySpan<float> newest = samples.Length > SpectrumRingLength
+            ? samples[^SpectrumRingLength..]
+            : samples;
+
+        int at = _ringWritten % SpectrumRingLength;
+        int first = Math.Min(newest.Length, SpectrumRingLength - at);
+
+        newest[..first].CopyTo(_spectrumRing.AsSpan(at));
+
+        if (first < newest.Length)
+        {
+            newest[first..].CopyTo(_spectrumRing);
+        }
+
+        _ringWritten += newest.Length;
+    }
+
+    /// <remarks>
+    /// CAUTION: the audio thread can write in the ring while this reads it, and
+    /// one frame of bars is then not correct. Spectrum holds its oldest window
+    /// 256 samples behind that thread, which is 16 ms at 16 kHz, and that
+    /// margin is the guarantee. A lock would put that thread behind the
+    /// display.
+    /// </remarks>
+    public void ReadSpectrum(Span<double> bars) =>
+        _spectrum.Fill(_spectrumRing, _ringWritten, bars);
 
     [LoggerMessage(
         Level = LogLevel.Information,
@@ -863,13 +924,14 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The recording stopped after {seconds:F2} s with {samples} samples at {sampleRate} Hz. The largest level is {peak:F3}.")]
+        Message = "The recording stopped after {seconds:F2} s with {samples} samples at {sampleRate} Hz. The largest level is {peak:F3} and the largest bar of the visualizer is {loudestBar:F2} of 1.00.")]
     private static partial void LogStopped(
         ILogger logger,
         double seconds,
         int samples,
         float peak,
-        int sampleRate);
+        int sampleRate,
+        double loudestBar);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

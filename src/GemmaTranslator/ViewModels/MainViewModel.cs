@@ -1059,7 +1059,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             double seconds = Stopwatch.GetElapsedTime(start).TotalSeconds;
 
-            lane.Levels = VisualizerLevels.At(BarCount, seconds);
+            double[] levels = new double[BarCount];
+
+            _capture.ReadSpectrum(levels);
+
+            lane.Levels = levels;
 
             int whole = (int)seconds;
             RecordingTime = string.Create(

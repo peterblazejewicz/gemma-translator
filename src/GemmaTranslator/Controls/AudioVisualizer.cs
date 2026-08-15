@@ -30,14 +30,20 @@ namespace GemmaTranslator.Controls;
 public sealed class AudioVisualizer : Control
 {
     private const double PadX = 24;
-    private const double PadY = 10;
+    private const double PadY = 6;
     private const double Gap = 3;
     private const float Radius = 2f;
 
     private const double IdleHeight = 6;
     private const double IdleOpacity = 0.4;
 
-    private const double ActiveScale = 0.72;
+    // A level of 1.0 fills the strip. With a smaller value here, and with a
+    // larger PadY, a bar cannot come to the top: at 0.72 and a PadY of 10 the
+    // tallest bar was 26 of the 56 pixels of the strip, thus a person who
+    // spoke saw bars below one half and the appliance looked deaf. A
+    // measurement on the appliance gives 0.74 to 0.87 for the largest bar of a
+    // recording, which is the value that must come near the top.
+    private const double ActiveScale = 1.0;
 
     // A lane that records and hears nothing must not go empty.
     private const double MinActiveHeight = 2;
