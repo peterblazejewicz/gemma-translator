@@ -204,23 +204,20 @@ public sealed partial class LiteRtTranslator : ITranslator
 
             string translation = TranslationPrompt.Read(modelText);
 
-            int tokens = completion?.Usage?.TotalTokens ?? 0;
+            LogTranslated(_logger, source.Code, target.Code, duration.TotalSeconds);
 
-            LogTranslated(_logger, source.Code, target.Code, duration.TotalSeconds, tokens);
-
-            return new TranslationResult(translation, duration, tokens);
+            return new TranslationResult(translation, duration);
         }
     }
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Translated {source} to {target} in {seconds:F2} s with {tokens} tokens.")]
+        Message = "Translated {source} to {target} in {seconds:F2} s.")]
     private static partial void LogTranslated(
         ILogger logger,
         string source,
         string target,
-        double seconds,
-        int tokens);
+        double seconds);
 
     [LoggerMessage(
         Level = LogLevel.Error,

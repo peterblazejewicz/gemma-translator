@@ -46,13 +46,10 @@ internal sealed record ResponseMessage(
 internal sealed record ChatChoice(
     [property: JsonPropertyName("message")] ResponseMessage? Message);
 
-/// <param name="TotalTokens">The sum of the input tokens and the output tokens.</param>
-internal sealed record ChatUsage(
-    [property: JsonPropertyName("total_tokens")] int TotalTokens);
-
+// CAUTION: no `usage`. `litert-lm serve` sends none, thus a count of the
+// tokens read 0 on each exchange for the life of this software.
 internal sealed record ChatCompletionResponse(
-    [property: JsonPropertyName("choices")] IReadOnlyList<ChatChoice>? Choices,
-    [property: JsonPropertyName("usage")] ChatUsage? Usage);
+    [property: JsonPropertyName("choices")] IReadOnlyList<ChatChoice>? Choices);
 
 /// <summary>
 /// The object that the system message tells the model to send.

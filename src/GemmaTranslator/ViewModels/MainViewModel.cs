@@ -794,7 +794,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
             translateSeconds = result.Duration.TotalSeconds;
 
-            LogTranslated(_logger, translateSeconds, result.TotalTokens);
+            LogTranslated(_logger, translateSeconds, heard.Length);
         }
         catch (TranslationException exception)
         {
@@ -1565,8 +1565,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The translation took {seconds:F2} s and used {tokens} tokens.")]
-    private static partial void LogTranslated(ILogger logger, double seconds, int tokens);
+        Message = "The translation took {seconds:F2} s for a transcript of {characters} characters.")]
+    private static partial void LogTranslated(ILogger logger, double seconds, int characters);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
