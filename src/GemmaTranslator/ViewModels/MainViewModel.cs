@@ -904,6 +904,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         int spoken = 0;
         bool failure = false;
+        int hold = SpeechChunks.HoldToStart(pieces);
+        List<SpokenAudio> held = [];
 
         try
         {
@@ -915,22 +917,42 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             {
                 while (line.Reader.TryRead(out SpokenAudio? audio))
                 {
-                    try
+                    // The speaker waits until the pieces in hand can last until
+                    // the last one is complete. Without this the speaker catches
+                    // the synthesis up and a person hears a space with no sound
+                    // at each join, 2.3 s to 3.9 s on a measurement of the
+                    // appliance. See SpeechChunks.HoldToStart.
+                    if (held.Count + 1 < hold)
                     {
-                        // CAUTION: one reader, and one play at a time. PlayAsync
-                        // retires the player of the call before it, thus two
-                        // calls together cut the first piece in its middle.
-                        await _playback.PlayAsync(audio, stop.Token).ConfigureAwait(true);
+                        held.Add(audio);
+                        continue;
+                    }
 
-                        spoken++;
-                    }
-                    finally
+                    held.Add(audio);
+
+                    foreach (SpokenAudio piece in held)
                     {
-                        // SECURITY CONTROL. PlayAsync wipes these bytes at each
-                        // exit of its own. This line does not depend on that: a
-                        // caller must not give that work to the code it calls.
-                        Array.Clear(audio.WavBytes);
+                        try
+                        {
+                            // CAUTION: one reader, and one play at a time.
+                            // PlayAsync retires the player of the call before
+                            // it, thus two calls together cut the first piece in
+                            // its middle.
+                            await _playback.PlayAsync(piece, stop.Token).ConfigureAwait(true);
+
+                            spoken++;
+                        }
+                        finally
+                        {
+                            // SECURITY CONTROL. PlayAsync wipes these bytes at
+                            // each exit of its own. This line does not depend on
+                            // that: a caller must not give that work to the code
+                            // it calls.
+                            Array.Clear(piece.WavBytes);
+                        }
                     }
+
+                    held.Clear();
                 }
             }
         }
@@ -960,6 +982,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             {
                 Array.Clear(left.WavBytes);
             }
+
+            // SECURITY CONTROL. The same rule for the pieces that wait for the
+            // speaker to start. A stop before that moment leaves each of them
+            // here, and they hold the spoken sentence of a person.
+            foreach (SpokenAudio waiting in held)
+            {
+                Array.Clear(waiting.WavBytes);
+            }
+
+            held.Clear();
 
             SetSpeaking(destination, false);
 

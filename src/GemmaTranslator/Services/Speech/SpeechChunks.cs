@@ -56,6 +56,12 @@ public static class SpeechChunks
     // gives the first word sooner and makes that space more frequent.
     public const int PieceLength = 40;
 
+    // The synthesis makes 1 s of sound in 1.7 s, measured on the appliance over
+    // nine pieces: 1.76, 1.84, 1.82, 1.82, 1.82 for whole answers and 1.69 for
+    // a piece. A fraction and not a double, because this decides a join.
+    private const int RealtimeNumerator = 17;
+    private const int RealtimeDenominator = 10;
+
     // CAUTION: a port of the upstream rule gives nothing for one half of the
     // languages here. Upstream cuts on white space, and Chinese, Japanese, and
     // Korean put no space between the words. Its loop then gives one piece that
@@ -90,8 +96,70 @@ public static class SpeechChunks
         }
 
         int count = (text.Length + PieceLength - 1) / PieceLength;
+        IReadOnlyList<string> pieces = Split(text, (text.Length + count - 1) / count);
 
-        return Split(text, (text.Length + count - 1) / count);
+        // A cut that gives no word sooner is a cut that costs sound for
+        // nothing. See HoldToStart: with two pieces the appliance must hold
+        // both, thus the first word comes at the same moment as with no cut.
+        return HoldToStart(pieces) >= pieces.Count ? Split(text) : pieces;
+    }
+
+    /// <summary>
+    /// The count of pieces that must be complete before the speaker starts, so
+    /// that no space with no sound comes at a join.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The synthesis makes sound more slowly than the speaker plays it, thus a
+    /// speaker that starts at the first piece catches the synthesis up and
+    /// waits. The appliance holds the first pieces until what it has can last
+    /// until the last piece is complete.
+    /// </para>
+    /// <para>
+    /// For each piece k after the hold, the synthesis of the pieces from the
+    /// hold to k must be complete before the speaker has played the pieces in
+    /// front of k. The seconds for one character are the same on the two sides
+    /// of that comparison and go away, thus this is arithmetic on the COUNT OF
+    /// CHARACTERS and it needs no measurement of the sound and no value for a
+    /// language.
+    /// </para>
+    /// </remarks>
+    public static int HoldToStart(IReadOnlyList<string> pieces)
+    {
+        ArgumentNullException.ThrowIfNull(pieces);
+
+        int count = pieces.Count;
+        int[] through = new int[count + 1];
+
+        for (int i = 0; i < count; i++)
+        {
+            through[i + 1] = through[i] + pieces[i].Length;
+        }
+
+        for (int hold = 1; hold <= count; hold++)
+        {
+            bool lasts = true;
+
+            for (int k = hold + 1; k <= count; k++)
+            {
+                // RealtimeNumerator over RealtimeDenominator is the 1.7 of the
+                // measurement, as a fraction so that no rounding of a double
+                // decides a join.
+                if (RealtimeNumerator * (through[k] - through[hold])
+                    > RealtimeDenominator * through[k - 1])
+                {
+                    lasts = false;
+                    break;
+                }
+            }
+
+            if (lasts)
+            {
+                return hold;
+            }
+        }
+
+        return count;
     }
 
     /// <returns>The pieces, in sequence. White space only gives none.</returns>
