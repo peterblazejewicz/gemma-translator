@@ -26,6 +26,14 @@
 *.sh            text eol=lf
 *.bash          text eol=lf
 *.service       text eol=lf
+# The theme of Plymouth. A CR in gemma.plymouth becomes part of the value of
+# ModuleName, thus plymouth-set-default-theme looks for "script\r.so", says
+# that it does not exist, and the panel keeps the console. The overlay of the
+# GPIO and the rules of udev fail the same way, in the kernel and in udev.
+*.plymouth      text eol=lf
+*.script        text eol=lf
+*.dts           text eol=lf
+*.rules         text eol=lf
 Dockerfile      text eol=lf
 *.yml           text eol=lf
 *.yaml          text eol=lf
