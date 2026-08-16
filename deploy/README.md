@@ -1514,3 +1514,80 @@ PIP_CONFIG_FILE=/dev/null pip install --require-hashes \
 It gives `Would install ...` with 40 packages on the Raspberry Pi and 41 on
 Windows, and it gives 0. A hash that does not agree names its package and gives
 the value that it expected and the value that it got.
+
+---
+
+## 14. The cell of the real time clock
+
+The Raspberry Pi 5 holds the time while it has no power, and it needs a cell on
+the J5 connector to do it. **This appliance needs that more than a machine on a
+desk does: it operates offline, thus no NTP corrects the clock in the field, and
+the screensaver puts the time on the panel.** With no cell each start begins at
+the last time that the file system recorded.
+
+### 14.1 The cell
+
+| Item | Value |
+| --- | --- |
+| The cell | Panasonic **ML-2020**, which Raspberry Pi sells as RPI-23926 |
+| The chemistry | Lithium-manganese, and it takes a charge |
+| The window of the charge | 2.8 V to 3.2 V |
+| Nominal | 3.0 V, 45 mAh, 20 mm x 2.0 mm |
+
+**CAUTION: THE CHARGER IS OFF UNTIL A PERSON PUTS IT ON, AND THE CHEMISTRY OF
+THE CELL DECIDES WHETHER THAT IS SAFE.**
+
+| Cell | The charger |
+| --- | --- |
+| ML-2020, ML2032 | Correct. It takes a charge. |
+| **CR2032** | **NEVER.** A primary cell of lithium leaks, opens or bursts. |
+| **LIR2032** | **NEVER.** Lithium-ion, and a different chemistry. |
+
+Raspberry Pi names the second and the third as wrong for this connector. The
+default of the firmware is a charger that is off, thus a machine that gets no
+argument is safe with any of the three.
+
+### 14.2 How to put the charger on
+
+```bash
+./deploy-pi.sh --with-rtc-charge
+```
+
+It writes one line and the machine must start again:
+
+```ini
+dtparam=rtc_bbat_vchg=3000000
+```
+
+3.0 V sits in the middle of the window of the ML-2020. The overlays README of
+the firmware gives the parameter: "Set the RTC backup battery charging voltage
+in microvolts. If set to 0 or not specified, the trickle charger is disabled.
+(2712 only, default 0)".
+
+**CAUTION: `charging_voltage_max` gives 4400000 and that is not a value for
+this cell.** It is the range of the driver, which serves other chemistries.
+4.4 V corrodes an ML-2020.
+
+### 14.3 How to make sure
+
+```bash
+grep . /sys/class/rtc/rtc0/charging_voltage /sys/class/rtc/rtc0/battery_voltage
+timedatectl | grep -iE "RTC time|Local time"
+```
+
+Measured on this appliance:
+
+| Moment | `charging_voltage` | `battery_voltage` |
+| --- | --- | --- |
+| Before the line | 0 | 2 720 510 |
+| A few minutes after the restart | 3 000 000 | 2 889 740 |
+| Later | 3 000 000 | 2 903 416 |
+
+A cell that is not there reads near 0. `RTC time` is in UTC and `Local time` is
+the time of the place, thus the two differ by the offset and that is correct.
+
+**The last proof needs a full loss of power, and no command gives it.** Note the
+time, stop the machine, take the mains AND the cells of the X1201 away, wait,
+and give the power back. Read `timedatectl` before NTP corrects anything. A cell
+that holds gives the correct time; a cell that is empty gives a date near the
+epoch. Wait a day after 14.2 first, so that the cell is full.

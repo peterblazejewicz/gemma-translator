@@ -49,6 +49,7 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CURRENT_USER="$(whoami)"
 CURRENT_UID="$(id -u)"
 WITH_SPLASH=0
+WITH_RTC_CHARGE=0
 
 # Put one word on the ONE line of cmdline.txt, and give 0 when the file
 # changed. A word of the form key=value takes the position of a key that is
@@ -91,9 +92,14 @@ set_cmdline_word() {
 for arg in "$@"; do
     case "$arg" in
         --with-splash) WITH_SPLASH=1 ;;
+        --with-rtc-charge) WITH_RTC_CHARGE=1 ;;
         *)
             echo "[ERROR] ${arg} is not a known argument."
-            echo "[ERROR] Usage: ./deploy-pi.sh [--with-splash]"
+            echo "[ERROR] Usage: ./deploy-pi.sh [--with-splash] [--with-rtc-charge]"
+            echo "[ERROR]"
+            echo "[ERROR] --with-rtc-charge puts a charging voltage on the cell of"
+            echo "[ERROR] the clock. Give it with a rechargeable cell only, which"
+            echo "[ERROR] is an ML-2020 and not a CR2032 and not a LIR2032."
             exit 1
             ;;
     esac
@@ -320,6 +326,56 @@ if [ -f "$OVERLAY_SRC" ] && [ -d "${BOOT_DIR}/overlays" ]; then
     fi
 else
     echo "[INFO] ${BOOT_DIR}/overlays not found. Skipping the GPIO overlay."
+fi
+
+# The charger of the cell of the real time clock, with --with-rtc-charge only.
+#
+# CAUTION: THIS LINE PUTS A CHARGING VOLTAGE ON THE CELL OF THE J5 CONNECTOR.
+# GIVE THE ARGUMENT ONLY WITH A CELL THAT TAKES A CHARGE.
+#
+# The cell of this appliance is a Panasonic ML-2020, which Raspberry Pi sells
+# as RPI-23926. ML is lithium-manganese and it is rechargeable. Its window is
+# 2.8 V to 3.2 V, thus 3.0 V sits in the middle of it.
+#
+# A CR2032 is a primary cell of lithium. It does not take a charge, and a
+# charge makes it leak, open or burst. A LIR2032 is lithium-ion and its
+# chemistry is not this one either. Raspberry Pi names both as wrong for this
+# connector. **A person who fits one of those must not give this argument.**
+#
+# CAUTION: /sys/class/rtc/rtc0/charging_voltage_max gives 4400000, and that
+# number is the range of the driver and not a value for this cell. 4.4 V on an
+# ML-2020 corrodes it.
+#
+# The default of the firmware is 0, which is the charger off. Thus a machine
+# with no argument charges nothing, and a cell of the wrong kind is safe.
+if [ "$WITH_RTC_CHARGE" = "1" ]; then
+    CONFIG_TXT="${BOOT_DIR}/config.txt"
+    RTC_SYSFS="/sys/class/rtc/rtc0/charging_voltage"
+
+    if [ ! -e "$RTC_SYSFS" ]; then
+        echo "[ERROR] This machine gives no ${RTC_SYSFS}, thus it has no charger"
+        echo "[ERROR] of a backup cell. The parameter is for the 2712 of the"
+        echo "[ERROR] Raspberry Pi 5 only."
+        exit 1
+    fi
+
+    if [ ! -f "$CONFIG_TXT" ]; then
+        echo "[ERROR] ${CONFIG_TXT} is not there."
+        exit 1
+    fi
+
+    if grep -qE '^[[:space:]]*dtparam=rtc_bbat_vchg=' "$CONFIG_TXT"; then
+        echo "[INFO] config.txt already gives the charge of the clock cell."
+    else
+        printf '\n[all]\ndtparam=rtc_bbat_vchg=3000000\n' | sudo tee -a "$CONFIG_TXT" > /dev/null
+        echo "[INFO] Added dtparam=rtc_bbat_vchg=3000000 to config.txt, which is"
+        echo "[INFO] 3.0 V, in the window of 2.8 V to 3.2 V of the ML-2020."
+        REBOOT_NEEDED=1
+    fi
+
+    echo "[INFO] The cell of the clock reads $(cat /sys/class/rtc/rtc0/battery_voltage 2>/dev/null) microvolts."
+    echo "[INFO] The charger reads $(cat "$RTC_SYSFS" 2>/dev/null) microvolts, and it"
+    echo "[INFO] takes the new value after the next start of this machine."
 fi
 
 # The console of the panel, which is native portrait. This turns the console
