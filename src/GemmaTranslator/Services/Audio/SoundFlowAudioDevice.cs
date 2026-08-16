@@ -92,10 +92,10 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
     // thus a full sentence goes past that limit.
     private const double DefaultPlaybackSeconds = 60;
 
-    // The client of the speech server refuses a body of more than 16 MB, which
-    // is about 5.5 minutes of the 24 kHz 16-bit audio that a measurement gives.
-    // Thus no correct answer needs more than this, and a header that asks for
-    // more makes the appliance wait for hours with each button dead.
+    // The software makes the WAV itself, and one piece is 180 characters at
+    // the most (SpeechChunks.DefaultLimit), which is about 27 s of sound. Thus
+    // no correct answer needs more than this, and a header that asks for more
+    // makes the appliance wait for hours with each button dead.
     private const double MaximumPlaybackSeconds = 360;
 
     // 4096 floats are 256 ms at 16 kHz, thus one whole tick of the display is
@@ -316,10 +316,10 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
             // own, and by then the caller has taken that piece out of its
             // queue, so nothing else would ever clear it.
             //
-            // The wipe covers the array of this code only. HttpClient buffered
-            // the whole WAV inside the response, and miniaudio decodes a second
-            // copy into native memory; neither is wiped, thus a memory dump is
-            // not clean. Recording.Dispose does the same work for the input.
+            // The wipe covers the array of this code only. miniaudio decodes a
+            // second copy into native memory and nothing wipes that one, thus a
+            // memory dump is not clean. Recording.Dispose does the same work
+            // for the input.
             Array.Clear(speech.WavBytes);
         }
     }
@@ -328,9 +328,9 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
     /// <para>
     /// CAUTION: the provider gets the format of the DEVICE and not the format
     /// of the WAV. Nothing in SoundFlow changes the rate; this value makes the
-    /// decoder of miniaudio change it in native code. The server sends 24000 Hz
-    /// and this device operates at 16000 Hz. Thus the other constructor, which
-    /// reads the rate from the file, speaks at two thirds of the speed.
+    /// decoder of miniaudio change it in native code. The synthesis gives
+    /// 24000 Hz and the device operates at 16000 Hz. Thus the other constructor,
+    /// which reads the rate from the file, speaks at two thirds of the speed.
     /// </para>
     /// <para>
     /// CAUTION: <c>PlaybackEnded</c> comes on the audio thread, from
@@ -502,11 +502,11 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
     }
 
     /// <remarks>
-    /// CAUTION: the value comes from the header of the WAV, which the speech
-    /// server writes. A measurement on .NET 10 gives an ArgumentException for a
-    /// value that is not a number, an OverflowException for 1e18, and an
-    /// ArgumentOutOfRangeException for 1e9, because the longest timer is about
-    /// 49.7 days.
+    /// CAUTION: the value comes from the header of the WAV, which
+    /// <c>WavAudio</c> writes. A measurement on .NET 10 gives an
+    /// ArgumentException for a value that is not a number, an
+    /// OverflowException for 1e18, and an ArgumentOutOfRangeException for 1e9,
+    /// because the longest timer is about 49.7 days.
     /// </remarks>
     private static TimeSpan MakeBudget(double declared)
     {
@@ -564,6 +564,22 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
         // The device goes first. Then no audio thread is in the player when the
         // line below closes it.
         CloseDevice(device);
+
+        // SECURITY CONTROL. Do not delete this second clear as a copy of the
+        // one above. OnAudioProcessed takes no lock, on purpose, thus a
+        // callback already past its test of _accumulating writes samples into
+        // these two arrays after that clear - about one period of miniaudio,
+        // some 10 ms of the speech of a person who still holds the button while
+        // the software stops. Nothing else ever removes those samples: this
+        // object is disposed and no StopRecording follows. CloseDevice has now
+        // stopped the audio thread, so this clear is the final one. The clear
+        // inside the lock stays, because it is the only one that operates if
+        // CloseDevice throws. StartRecording defends the same race the same way.
+        Array.Clear(_buffer);
+        Array.Clear(_spectrumRing);
+
+        _ringWritten = 0;
+
         Retire(player);
 
         // CloseDevice only ASKED the audio thread to stop and it swallows an
@@ -1019,7 +1035,7 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The decoder refused {bytes} bytes of audio from the speech server.")]
+        Message = "The decoder refused {bytes} bytes of audio that the synthesis made.")]
     private static partial void LogPlaybackFailed(ILogger logger, int bytes, Exception exception);
 
     [LoggerMessage(

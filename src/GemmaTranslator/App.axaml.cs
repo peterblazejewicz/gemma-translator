@@ -73,10 +73,10 @@ public partial class App : Application
         // sent to whatever endpoint the settings named.
         LiteRtOptions liteRt = provider.GetRequiredService<IOptions<LiteRtOptions>>().Value;
 
-        // SECURITY CONTROL. The same reason, and a stronger one: this endpoint
-        // gets the recorded voice of a person, not text. This line runs the
-        // loopback check in SpeechOptionsValidator before the microphone
-        // opens.
+        // The same reason, without the security part: the loopback check went
+        // away with the server that took the voice of a person on a socket.
+        // The read stays, because an incorrect count of the models or an
+        // incorrect timeout must give a message at the start.
         _ = provider.GetRequiredService<IOptions<SpeechOptions>>().Value;
 
         // The same reason: a rate of 0 or a minimum press of 99999 ms gives an
@@ -106,20 +106,39 @@ public partial class App : Application
             LogNoMicrophoneAtStart(logger, exception);
         }
 
-        // SECURITY CONTROL. Do not delete this. The appliance takes the single
-        // view lifetime below, and that lifetime raises no Exit event. Thus
-        // provider.Dispose() ran on Windows only, and on the Raspberry Pi
-        // nothing disposed SoundFlowAudioDevice. Its Dispose is what clears
-        // the audio buffer when the software stops while a person holds a
-        // button. Without these two lines that buffer keeps the speech of that
-        // person in the memory of a machine that then stops.
+        // SECURITY CONTROL. Do not delete this, and do not change the order of
+        // the two lines in Stop. The appliance takes the single view lifetime
+        // below, and that lifetime raises no Exit event. Thus provider.Dispose()
+        // ran on Windows only, and on the Raspberry Pi nothing disposed
+        // SoundFlowAudioDevice. Its Dispose is what clears the audio buffer
+        // when the software stops while a person holds a button.
+        //
+        // The device goes first and the container second. The container made
+        // this device before MainViewModel and the speech part, and it disposes
+        // in the reverse of the order it made them, so provider.Dispose() on
+        // its own reaches the wipe LAST — after the view model, the speech
+        // service and the cache of the models — and it catches nothing. One
+        // throw from any of them, managed or from the native library, and the
+        // wipe never runs. That order is not even a promise: the documents of
+        // .NET do not state the order of disposal. A control that holds the
+        // speech of a person must not rest on it. Dispose here is safe to call
+        // two times, thus the call that the container makes after this one
+        // does nothing.
         //
         // Each way that stops this appliance sends SIGTERM: systemctl stop,
         // the pkill of the notes, and the cleanup trap of start.sh. SIGINT is
         // for a person who starts the software by hand.
+        SoundFlowAudioDevice audio = provider.GetRequiredService<SoundFlowAudioDevice>();
+
+        void Stop()
+        {
+            audio.Dispose();
+            provider.Dispose();
+        }
+
         foreach (PosixSignal signal in (PosixSignal[])[PosixSignal.SIGTERM, PosixSignal.SIGINT])
         {
-            Signals.Add(PosixSignalRegistration.Create(signal, _ => provider.Dispose()));
+            Signals.Add(PosixSignalRegistration.Create(signal, _ => Stop()));
         }
 
         MainViewModel viewModel = provider.GetRequiredService<MainViewModel>();
@@ -135,7 +154,7 @@ public partial class App : Application
 
             desktop.MainWindow = window;
 
-            desktop.Exit += (_, _) => provider.Dispose();
+            desktop.Exit += (_, _) => Stop();
         }
         else if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
         {
