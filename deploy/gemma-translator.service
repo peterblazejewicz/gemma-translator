@@ -1,7 +1,25 @@
 [Unit]
 Description=Gemma Offline Translator Appliance
-After=network.target sound.target
-Wants=network-online.target
+# plymouth-quit-wait.service is here because Plymouth holds the DRM device
+# while it draws. The software takes the panel through /dev/dri/appliance-panel
+# and it cannot get it while Plymouth has it, thus the display would keep the
+# image of the start and the translator would never come. The unit is not
+# installed unless deploy-pi.sh got --with-splash, and systemd ignores an After=
+# of a unit that is not there.
+After=network.target sound.target plymouth-quit-wait.service
+# Wants=network-online.target is not here. It was, with no matching After=,
+# thus it pulled the target in and ordered nothing. This appliance operates
+# offline and needs neither.
+
+# CAUTION: without these two, Restart=always never gives up. The default window
+# is 10 s and RestartSec below is 5 s, thus 5 restarts take 25 s, the default
+# burst of 5 never fills inside the window, and a machine that cannot start
+# loops for ever: it writes to the SD card, it shows nothing on the panel, and
+# `systemctl is-active` answers "activating" to a person who asks if the
+# appliance operates. With these, 5 failures in 5 minutes end in "failed",
+# which is a state that a person can see.
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -26,8 +44,8 @@ Environment=XDG_RUNTIME_DIR=/run/user/{{UID}}
 # process dump. It needs no crash, no ptrace permission and no change to
 # RLIMIT_CORE, because the runtime starts createdump and writes the file
 # itself. start.sh runs litert-lm as this same account with this same $TMPDIR,
-# and litert-lm is a pip package with a large dependency tree (onnxruntime,
-# numpy, requests, typer, rich, tqdm). One bad package in that tree - or
+# and litert-lm is a pip package that brings 40 more with it (huggingface_hub,
+# requests, urllib3, numpy, click, rich and the rest). One bad package - or
 # anybody who gets a shell as this account - then walks away with the raw
 # microphone buffer, every Moonshine transcript, and the LiteRT API key. The
 # voices in that dump belong to members of the public who never agreed to being
@@ -114,10 +132,6 @@ SystemCallArchitectures=native
 # Thus deploy-pi.sh puts the account in this line. Each home path has a "-",
 # which tells systemd to ignore a path that is not there: an account with a
 # home in a different place then loses its settings file and keeps its display.
-#
-# ProtectHome=read-only also makes /run/user read-only. Nothing here writes
-# there. `wpctl` in start.sh can fail for that cause, and that line ends with
-# `|| true`.
 #
 # PrivateTmp=yes is not here. gemma-battery-guard.service records the cause: if
 # ext4 becomes read-only, which is the damage that the guard stops, the

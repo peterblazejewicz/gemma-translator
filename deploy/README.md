@@ -1145,9 +1145,14 @@ because Avalonia does not read the console.
 
 If the text on the display is in landscape and inverted, change 270 to 90.
 
-`deploy-pi.sh` does not write this parameter. The appliance shows the software
-and not the console, thus a console that turns is an aid to a person who does
-maintenance.
+`deploy-pi.sh` writes this parameter in its step 2, on the one line of
+`cmdline.txt` and after a backup to `cmdline.txt.gemma-backup`. It writes it
+one time only: a file that already gives `video=DSI-1:` with a different value
+gets a warning and keeps what it has, because that value belongs to whoever put
+it there.
+
+The appliance shows the software and not the console, thus a console that turns
+is an aid to a person who does maintenance.
 
 ### 8.14 The overlay of the panel selects a different DSI interface
 
@@ -1322,7 +1327,16 @@ each of those three takes away. The unit gives the cause for each one.
 
 ### 12.1 How to make sure of the limits
 
-**IMPORTANT: nobody has done these steps on the appliance.**
+**These steps are done on the appliance.** `systemd-analyze verify` gives no
+line, thus the unit is well formed, and `systemd-analyze security` gives
+**6.5 MEDIUM**. The one item that it names and that this project has not taken
+is `UMask=`, which it scores at 0.1: a file that the software makes is readable
+by each account of the machine. The software writes `user-settings.json` and
+nothing else, and that file holds an accent colour and a language. Take `UMask=`
+if the software ever writes a file that holds the speech of a person, and that
+is a change that section 5.4 of `CLAUDE.md` does not permit on its own.
+
+The steps below give the same result again.
 
 ```bash
 systemd-analyze verify /etc/systemd/system/gemma-translator.service
@@ -1341,3 +1355,92 @@ is the test of `ReadWritePaths=`. The paths in that line are
 `/home/<account>/...`, because `%h` gives `/root` in a system unit. An account
 with a home in a different place keeps its display and loses that file, and the
 journal then gives "The software did not write ...".
+
+---
+
+## 13. The pins of Python and their hashes
+
+`backend/requirements.txt` holds 41 pinned packages, and each one carries the
+sha256 of its wheel. `setup.sh` installs with `--require-hashes`, thus a
+package that does not match its hash does not go in, and the installation
+stops with a message about tampering.
+
+### 13.1 The index is part of the control
+
+**CAUTION: Raspberry Pi OS does not go to PyPI by default.** The image ships
+`/etc/pip.conf` with this line:
+
+```text
+[global]
+extra-index-url=https://www.piwheels.org/simple
+```
+
+piwheels is a service that **builds its own wheel** of a package for the
+Raspberry Pi. It does not serve the file that PyPI has. The two carry the same
+version and different bytes, thus a hash of the one does not match the other.
+
+A measurement of this repository shows the effect. `anyio 4.14.1` is a wheel of
+pure Python, and it is not the same file on the two services:
+
+| Source | sha256 of `anyio-4.14.1-py3-none-any.whl` |
+| --- | --- |
+| PyPI | `4e5533c5b8ff0a24f5d7a176cbe6877129cd183893f66b537f8f227d10527d72` |
+| piwheels | `7e463996095e5923f5a6d201ede676b3f107b77f73c0980f577f333b6b2871b1` |
+
+Thus `setup.sh` gives two things, and both are necessary:
+
+```bash
+PIP_CONFIG_FILE=/dev/null pip install --require-hashes \
+    --index-url https://pypi.org/simple/ -r backend/requirements.txt
+```
+
+- `PIP_CONFIG_FILE=/dev/null` makes pip read no configuration file, thus the
+  `extra-index-url` of the image does not apply.
+- `--index-url` names PyPI as the one index.
+
+With neither, each hash fails and the message reads like an attack. It is not
+one.
+
+**CAUTION: `PIP_CONFIG_FILE=/dev/null` operates on Linux only.** pip stops at
+the configuration file when the value is the null device of the machine, and on
+Windows that name is `nul`. `setup.sh` is a script of Linux, thus this is
+correct where it stands, and a person who uses the same line on the development
+host does not get the same effect.
+
+### 13.2 How to make the file again
+
+A change of a version needs the hash of each new wheel. Do this on the
+Raspberry Pi **and** on the Windows host, because ten of the packages ship a
+different wheel for each platform:
+
+```bash
+grep -oE '^[A-Za-z0-9._-]+==[0-9A-Za-z.]+' backend/requirements.txt > pins.txt
+PIP_CONFIG_FILE=/dev/null pip download --no-deps \
+    --index-url https://pypi.org/simple/ --dest wheels -r pins.txt
+sha256sum wheels/*.whl
+```
+
+Put one `--hash=sha256:` line below each pin. A package with a wheel for each
+platform gets two, and pip takes the one that matches the file it downloads.
+
+The ten with two hashes are `cffi`, `charset-normalizer`, `hf-xet`,
+`litert-lm-api`, `moonshine-voice`, `numpy`, `protobuf`, `PyYAML`,
+`sounddevice`, and `tomli`. The other 31 wheels are pure Python and are one
+file on the two platforms.
+
+`colorama` is in the file with a marker of the platform, because `click` and
+`tqdm` ask for it on Windows and the appliance never installs it.
+`--require-hashes` needs each package of the graph, and not the ones that this
+project names.
+
+### 13.3 How to make sure
+
+```bash
+PIP_CONFIG_FILE=/dev/null pip install --require-hashes \
+    --index-url https://pypi.org/simple/ --dry-run --ignore-installed \
+    -r backend/requirements.txt
+```
+
+It gives `Would install ...` with 40 packages on the Raspberry Pi and 41 on
+Windows, and it gives 0. A hash that does not agree names its package and gives
+the value that it expected and the value that it got.

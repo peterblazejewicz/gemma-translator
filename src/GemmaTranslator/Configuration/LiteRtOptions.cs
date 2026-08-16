@@ -34,9 +34,12 @@ public sealed class LiteRtOptions
     public const string SectionName = "LiteRt";
 
     /// <summary>
-    /// The address that upstream uses if the field is empty.
+    /// The address that upstream uses if the field is empty. It gives the
+    /// address and not the name "localhost", because start.sh starts the
+    /// server with --host 127.0.0.1 and "localhost" also holds ::1, where
+    /// nothing listens.
     /// </summary>
-    public const string DefaultEndpointUrl = "http://localhost:9379/v1";
+    public const string DefaultEndpointUrl = "http://127.0.0.1:9379/v1";
 
     /// <summary>
     /// The address of the LiteRT-LM server, which speaks the OpenAI protocol.

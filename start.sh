@@ -42,7 +42,6 @@ for arg in "$@"; do
     esac
 done
 
-# Ensure PipeWire env is available for volume control (wpctl)
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
 # Unbuffered Python stdout so litert-lm logs reach journald immediately
@@ -57,7 +56,13 @@ fi
 
 LITERT_PORT=9379
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LITERT_CMD="${PROJECT_DIR}/venv/bin/litert-lm serve"
+# SECURITY CONTROL. Do not remove --host 127.0.0.1.
+#
+# litert-lm serve listens on 0.0.0.0:9379 by default. This appliance sits on a
+# network, so without this flag any machine that can reach it can send prompts
+# to the model and read the answers, with no authentication. LiteRtOptions-
+# Validator restricts the client the same way; this is the server half of it.
+LITERT_CMD="${PROJECT_DIR}/venv/bin/litert-lm serve --host 127.0.0.1"
 
 # The Moonshine library is in the venv, because it comes in a wheel of Python.
 # The venv itself gives the directory: the name holds the version of Python and
@@ -94,16 +99,6 @@ cleanup() {
 }
 trap cleanup EXIT TERM INT
 
-# Wait for network (max 15s) - simpler check for macOS/Linux
-echo "[start.sh] Waiting for network..."
-for i in $(seq 1 15); do
-    if ping -c 1 8.8.8.8 &> /dev/null; then
-        echo "[start.sh] Network ready."
-        break
-    fi
-    sleep 1
-done
-
 # The user interface must be there before anything starts. A missing binary
 # gives a black panel with no cause on it, and the appliance has no console.
 if [ ! -x "${PROJECT_DIR}/publish/GemmaTranslator" ]; then
@@ -113,20 +108,27 @@ if [ ! -x "${PROJECT_DIR}/publish/GemmaTranslator" ]; then
     exit 1
 fi
 
-# Set system volume to max
-echo "[start.sh] Setting system volume to max..."
-wpctl set-volume @DEFAULT_AUDIO_SINK@ 1.0 || amixer sset Master 100% 2>/dev/null || true
+# MEASURED: nothing here sets the level of the sound. The host control stays
+# where it is while the Speak2 40 moves its own level in the device, thus a
+# call to wpctl or amixer changes nothing that a person hears. Do not add a
+# gain in software either: two controls that a person can move, and that do not
+# agree, are worse than the one on the speakerphone. See section 8.20 of
+# deploy/README.md.
 
 # Start litert-lm in background
 echo "[start.sh] Starting litert-lm..."
 $LITERT_CMD &
 LITERT_PID=$!
 
-# Wait for litert-lm to be ready (max 60s)
+# Wait for litert-lm to be ready (max 60s). The probe gives the address and not
+# the name "localhost", which also holds ::1: the server binds 127.0.0.1 only,
+# thus a probe that reaches ::1 finds nothing there.
 echo "[start.sh] Waiting for litert-lm on port ${LITERT_PORT}..."
+LITERT_READY=0
 for i in $(seq 1 60); do
-    if nc -z localhost ${LITERT_PORT} 2>/dev/null; then
+    if nc -z 127.0.0.1 "${LITERT_PORT}" 2>/dev/null; then
         echo "[start.sh] litert-lm ready after ${i}s."
+        LITERT_READY=1
         break
     fi
     # Check if process died
@@ -136,6 +138,14 @@ for i in $(seq 1 60); do
     fi
     sleep 1
 done
+
+# Without this, 60 seconds with no port gives the same lines as a good start,
+# minus one, and the user interface comes on the panel with a translation that
+# can never answer. A person then reads a defect of the translator.
+if [ "$LITERT_READY" -eq 0 ]; then
+    echo "[start.sh] ERROR: litert-lm did not open ${LITERT_PORT} in 60s."
+    exit 1
+fi
 
 # Start the user interface on the panel.
 echo "[start.sh] Starting the user interface..."
