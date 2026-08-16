@@ -58,12 +58,31 @@ display and no desktop. Use the `avalonia-docs` server to get the current
 Avalonia API before you write the startup code. See section 6.1.
 
 **The change to C# removes our Python. It does not remove all Python.**
-`litert-lm` is a pip package, and `start.sh:45` starts it as a CLI. Thus the
-venv, `setup.sh`, and `download_model.sh` stay on the Raspberry Pi.
+`litert-lm` is a pip package. `start.sh:60` makes the command and
+`start.sh:122` starts it as a CLI. Thus the venv, `setup.sh`, and
+`download_model.sh` stay on the Raspberry Pi.
 
 `deploy-pi.sh` must keep `python3-venv` and `python3-pip`. What leaves is
-`moonshine-voice`, `numpy`, `sounddevice`, `soundfile`, and
-`backend/server.py`.
+`soundfile` and `backend/server.py`.
+
+**CAUTION: `moonshine-voice` STAYS, and `numpy` and `sounddevice` stay with
+it. Do not remove those three pins from `backend/requirements.txt`.** To this
+fork that wheel is not a library of Python: it carries `libmoonshine.so`, which
+the C# software calls directly, and the part that puts the models in the cache.
+`numpy` and `sounddevice` are its own dependencies, and `setup.sh` installs
+with `--require-hashes`, thus a pin that goes away stops the installation.
+
+Four locations need that package:
+
+| Location | What it needs |
+| --- | --- |
+| `start.sh:68` | It imports `moonshine_voice` to find the directory of the library. |
+| `Configuration/SpeechOptions.cs` | It looks in each venv for a directory with the name `moonshine_voice`. |
+| `Services/Speech/Native/MoonshineResolver.cs` | It loads `libmoonshine.so` from that directory. |
+| `Services/Speech/Native/SpeechModels.cs` | It reads the cache of the package at `~/.cache/moonshine_voice`. |
+
+A person who removes those three pins gets no error from the build. The
+appliance hears nothing and says nothing after the next installation.
 
 ### 3.1 The Avalonia constraints
 
@@ -233,8 +252,18 @@ document that it comes from, by the identifier of that document.
 
 ### 4.1 Computer
 
-A Raspberry Pi 5 with 8 GB of RAM, the same as upstream. The system image is
-Raspberry Pi OS Lite.
+A Raspberry Pi 5 with **16 GB** of RAM. The system image is Raspberry Pi OS
+Lite.
+
+**CAUTION: this line said 8 GB and no measurement ever gave that value.**
+Upstream uses 8 GB. The appliance had a 4 GB board first, and `/proc/meminfo`
+gave `MemTotal: 4146288 kB`. A person then changed the board, which is the
+same change that section 8.22 of `deploy/README.md` examines, and the machine
+now measures 16 GB: the speech part takes 5214 MB and 11364 MB stays free.
+
+Thus a memory limit that comes from this document is not a limit that a
+measurement gave. Measure the appliance before you make a decision about the
+memory, and put the number and the board in the note.
 
 `RP-008347-DS-1` gives the dimensions. The connector section of `dims.scad`
 gives each value that the enclosure uses, with the identifier adjacent to it
@@ -710,9 +739,9 @@ This section records what the C# code must replace.
 | One lane | `frontend/src/components/LanguageLane.jsx` | One person. The two lanes are adjacent to each other in a strip of 60 pixels, not two half screens. |
 | API client | `frontend/src/utils/api.js` | The STT, translation, and TTS calls. |
 | Audio capture | `frontend/src/hooks/useAudioRecorder.js` | 16 kHz mono Float32 capture. |
-| Server | `backend/server.py` | Static files, `/proxy`, `/api/stt`, `/api/tts`, `/api/volume`. |
+| Server | `backend/server.py` | **Ported and deleted.** It held `/api/stt`, `/api/tts` and `/api/warm` over the Moonshine library. `Services/Speech/` calls that library in the process of the user interface. |
 | Settings | `frontend/src/components/SettingsOverlay.jsx` | The endpoint, the model, the API key, and the volume. |
-| Startup | `start.sh`, `deploy-pi.sh` | Three processes, and the systemd unit. |
+| Startup | `start.sh`, `deploy-pi.sh` | Two processes, and the systemd unit. |
 
 `litert-lm serve` is not in this table. It is a Python CLI and it stays on the
 device. See section 3.
@@ -748,19 +777,23 @@ speaks the result in the other language.
 
 ### 9.1 The set of languages
 
-The set of languages is in four locations. A change must touch all four
-locations. If you miss one location, the software falls back to English without
-an error.
+Upstream keeps the set of languages in four locations, and a change must touch
+all four. If you miss one, the software falls back to English with no error:
+`AVAILABLE_LANGUAGES` at `frontend/src/TranslatorApp.jsx:34`, and
+`SUPPORTED_STT_LANGS`, `TTS_LANG_MAP` and `TTS_VOICE_MAP` in
+`backend/server.py`.
 
-| Location | File |
-| --- | --- |
-| `AVAILABLE_LANGUAGES` | `frontend/src/TranslatorApp.jsx:34` |
-| `SUPPORTED_STT_LANGS` | `backend/server.py:37` |
-| `TTS_LANG_MAP` | `backend/server.py:47` |
-| `TTS_VOICE_MAP` | `backend/server.py:57` |
+**This is done.** The set is in two locations that a change must keep together:
 
-The current languages are Arabic, English, Spanish, Japanese, Chinese, and
-Korean. The C# code must hold this set in one location only.
+| Location | File | What it holds |
+| --- | --- | --- |
+| `Languages.All` | `src/GemmaTranslator/Languages.cs` | The code and the name that the display shows. |
+| `SpeechModels` | `src/GemmaTranslator/Services/Speech/Native/SpeechModels.cs` | The directory of the model, the architecture, the tag of the text-to-speech part, and the voice. |
+
+The languages are Arabic, English, Spanish, Japanese, Chinese, and Korean.
+`SpeechModels.For` throws for a code that it does not hold, and it does not
+fall back to English: a fallback that says nothing gives a person the wrong
+language with no message.
 
 ---
 

@@ -1,3 +1,13 @@
+# The Python of the appliance. None of it is our code.
+#
+# litert-lm*        the large language model server on port 9379, a pip CLI.
+# moonshine-voice   NOT a Python library to us: the wheel carries
+#                   libmoonshine.so, which the C# software calls directly, and
+#                   the downloader that puts the models in the cache. Its own
+#                   dependencies numpy and sounddevice come with it.
+#
+# backend/server.py is gone. The speech-to-text part and the text-to-speech
+# part are C# now, and soundfile left with them.
 absl-py==2.4.0
 annotated-doc==0.0.4
 anyio==4.14.1
@@ -32,7 +42,6 @@ requests==2.34.2
 rich==15.0.0
 shellingham==1.5.4
 sounddevice==0.5.5
-soundfile==0.14.0
 tomli==2.4.1
 tqdm==4.68.3
 typer==0.25.1

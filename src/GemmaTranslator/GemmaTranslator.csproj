@@ -17,6 +17,11 @@
 
     <!-- The two runtime identifiers of this fork. macOS is not a target. -->
     <RuntimeIdentifiers>win-x64;linux-arm64</RuntimeIdentifiers>
+
+    <!-- LibraryImport makes the interop of Services/Speech/Native. The source
+         generator writes unsafe code, thus this is not a decision about our
+         own code: without it the generator does not compile. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

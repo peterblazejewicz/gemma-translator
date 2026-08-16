@@ -34,7 +34,7 @@ internal sealed class PlaybackMeter(AudioFormat format) : AudioAnalyzer(format)
     private const double ReleaseMilliseconds = 220;
 
     // MEASURED on the appliance. The journal gives -8.3 dBFS for the largest
-    // sound of one sentence of the speech server, thus a ceiling of -6 puts
+    // sound of one sentence that the synthesis makes, thus a ceiling of -6 puts
     // that sentence at 0.96 and keeps a little room for a louder one. The first
     // value here was -15, and each sentence then stood at 1.00: the bars filled
     // the strip and followed nothing. The floor gives 0.37 at -40 dBFS.

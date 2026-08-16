@@ -24,17 +24,23 @@ namespace GemmaTranslator.Services.Speech;
 
 /// <summary>
 /// Cuts a translation into the pieces of the text-to-speech part. One piece is
-/// one call. Thus the appliance speaks the first sentence while the server
+/// one call. Thus the appliance speaks the first sentence while the synthesis
 /// makes the next one, and no piece is longer than the limit.
 /// </summary>
 public static class SpeechChunks
 {
     /// <summary>The longest piece, in characters of UTF-16.</summary>
     /// <remarks>
-    /// backend/server.py reads the request line with readline(65537) and
-    /// answers 414 above 65536 bytes. Uri.EscapeDataString gives ASCII, thus
-    /// one Japanese character of the address is 9 bytes. A larger value here
-    /// must keep the address of one call below that limit of the server.
+    /// CAUTION: the cause of this number is gone and the number stays. It came
+    /// from backend/server.py, which read the request line with readline(65537)
+    /// and answered 414 above 65536 bytes; the text of a call went in the
+    /// address, and one Japanese character became 9 bytes there. There is no
+    /// address now, thus no length of the text is too long for the library.
+    /// <para>
+    /// The value stays because a change to it changes what a person hears: it
+    /// decides how many pieces an answer has, and thus the holds that
+    /// <see cref="HoldToStart"/> computes. Measure before you move it.
+    /// </para>
     /// </remarks>
     public const int DefaultLimit = 180;
 
@@ -313,9 +319,9 @@ public static class SpeechChunks
 
         // A cut in a grapheme cluster makes a character that no font can show.
         // Thus a cluster keeps its full length, but not past the limit: a
-        // cluster has no limit of its own, and a piece that is longer makes an
-        // address that the server answers with 414. One character that is not
-        // correct is less than the loss of all the sound.
+        // cluster has no limit of its own, and a piece must not go past the
+        // limit that DefaultLimit sets. One character that is not correct is
+        // less than the loss of all the sound.
         return hard > 0
             ? hard
             : Math.Min(StringInfo.GetNextTextElementLength(piece), limit);

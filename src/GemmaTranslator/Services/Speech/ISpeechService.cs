@@ -29,7 +29,7 @@ public interface ISpeechService
     /// speech, and that condition is not an error.
     /// </returns>
     /// <exception cref="SpeechException">
-    /// The server is not available, or it sends an error.
+    /// The library is not available, or it gives an error.
     /// </exception>
     Task<string> TranscribeAsync(
         ReadOnlyMemory<float> samples,
@@ -37,13 +37,12 @@ public interface ISpeechService
         CancellationToken cancellationToken = default);
 
     /// <returns>
-    /// The WAV file that the server sent. Give these bytes to the audio
-    /// decoder. See <see cref="SpokenAudio"/>: this software does not decode
-    /// them, because the decoder is the one component that changes the rate.
+    /// A WAV file of the spoken text. Give these bytes to the audio decoder.
+    /// See <see cref="SpokenAudio"/>: this software does not decode them,
+    /// because the decoder is the one component that changes the rate.
     /// </returns>
     /// <exception cref="SpeechException">
-    /// The text is empty, the server is not available, or the server sends an
-    /// error or a body that is not audio.
+    /// The text is empty, the library is not available, or it makes no audio.
     /// </exception>
     Task<SpokenAudio> SynthesizeAsync(
         string text,
@@ -55,19 +54,19 @@ public interface ISpeechService
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A measurement on the appliance gives 6.0 s for a language that the
-    /// server does not hold, and 0.001 s for one that it holds. Thus the first
+    /// A measurement on the appliance gives 6.0 s for a language that the cache
+    /// does not hold, and 0.001 s for one that it holds. Thus the first
     /// exchange in a language costs 6 s more than each exchange after it.
     /// </para>
     /// <para>
-    /// CAUTION: the server holds one lock for the speech-to-text part, and it
-    /// holds that lock while it makes the model. A recording that comes at that
-    /// moment waits for the model. Thus the software calls this while the
-    /// appliance is idle, and never in front of a push.
+    /// CAUTION: <c>SpeechEngineCache</c> holds one lock for the speech-to-text
+    /// part, and it holds that lock while it makes the model. A recording that
+    /// comes at that moment waits for the model. Thus the software calls this
+    /// while the appliance is idle, and never in front of a push.
     /// </para>
     /// </remarks>
     /// <exception cref="SpeechException">
-    /// The server is not available, or it does not know the language.
+    /// The library is not available, or it does not know the language.
     /// </exception>
     Task WarmAsync(Language language, CancellationToken cancellationToken = default);
 }

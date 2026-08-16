@@ -256,20 +256,10 @@ if [ -f "$TEMPLATE_FILE" ]; then
     sudo systemctl enable gemma-translator.service
     sudo systemctl restart gemma-translator.service
 
-    echo "[9/10] Configuring GUI kiosk autostart..."
-    LXSESSION_DIR="/home/${CURRENT_USER}/.config/lxsession/rpd-x"
-    AUTOSTART_FILE="${LXSESSION_DIR}/autostart"
-    if [ -d "$LXSESSION_DIR" ] || [ -f "/etc/xdg/lxsession/rpd-x/autostart" ]; then
-        mkdir -p "$LXSESSION_DIR"
-        if [ -f "/etc/xdg/lxsession/rpd-x/autostart" ] && [ ! -f "$AUTOSTART_FILE" ]; then
-            cp /etc/xdg/lxsession/rpd-x/autostart "$AUTOSTART_FILE"
-        fi
-        sed -i '/@chromium/d' "$AUTOSTART_FILE" 2>/dev/null || true
-        echo '@chromium --password-store=basic --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble --disable-features=TranslateUI --check-for-update-interval=31536000 --remote-debugging-port=9222 --remote-allow-origins=* --ozone-platform=x11 --use-fake-ui-for-media-stream --autoplay-policy=no-user-gesture-required --allow-insecure-localhost http://localhost:3000' >> "$AUTOSTART_FILE"
-        echo "[INFO] Kiosk autostart configured in ${AUTOSTART_FILE} -> http://localhost:3000"
-    else
-        echo "[INFO] LXDE rpd-x session not detected. Skipping LXDE autostart config."
-    fi
+    # [9/10] was a Chromium kiosk on http://localhost:3000. There is no
+    # browser on this appliance and nothing listens on that port: the user
+    # interface is the Avalonia software on the DRM backend, and the speech
+    # part is in that same process.
 
     echo "[10/10] Systemd service configured and started."
     systemctl status --no-pager gemma-translator.service || true
@@ -279,7 +269,7 @@ else
 fi
 
 echo "==========================================================="
-echo "Deployment complete! Appliance running at http://localhost:3000"
+echo "Deployment complete! The user interface draws on the panel."
 echo "==========================================================="
 
 if [ "$REBOOT_NEEDED" = "1" ]; then

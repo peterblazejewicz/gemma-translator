@@ -19,12 +19,12 @@
 namespace GemmaTranslator.Services.Speech;
 
 /// <remarks>
-/// SECURITY CONTROL. Keep the body of an answer out of this message. No caller
+/// SECURITY CONTROL. Keep the words of a person out of this message. No caller
 /// shows this message today; MainViewModel shows a fixed text and sends the
 /// exception to the log. That is why the rule is here and not at the caller: a
 /// later change that does show the message must not be the moment somebody
-/// discovers that the body of the speech-to-text answer holds the words of a
-/// person, and that the body of an error is text the server chose.
+/// discovers that the transcript went into it, and that the journal of systemd
+/// then keeps every line of it.
 /// </remarks>
 public sealed class SpeechException : Exception
 {

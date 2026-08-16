@@ -23,6 +23,7 @@ using GemmaTranslator.Services.PushToTalk;
 using GemmaTranslator.Services.Settings;
 using GemmaTranslator.Services.Speakerphone;
 using GemmaTranslator.Services.Speech;
+using GemmaTranslator.Services.Speech.Native;
 using GemmaTranslator.Services.Translation;
 using GemmaTranslator.Theming;
 using GemmaTranslator.ViewModels;
@@ -121,36 +122,36 @@ public static class ServiceRegistration
 
         services.AddSingleton<IValidateOptions<SpeechOptions>, SpeechOptionsValidator>();
 
-        // The lifetime and the redirect: the same as the client above, and the
-        // redirect matters more here. A redirect sends the recorded voice of a
-        // person to a machine that the operator did not select, and the
-        // loopback check of SpeechOptionsValidator cannot see that machine.
-        services.AddHttpClient<ISpeechService, MoonshineSpeechService>((provider, client) =>
+        // The speech has no client and no handler. It was an HTTP call to a
+        // server of Python on port 3000, and it is a call into a library in
+        // this process. The two controls that stood here, the loopback address
+        // and UseProxy, protected a socket that no longer exists.
+        //
+        // One cache holds the models, thus it is a singleton: a model is about
+        // 800 MB and a second container of them would take the memory two
+        // times.
+        services.AddSingleton(provider =>
         {
             SpeechOptions options = provider
                 .GetRequiredService<IOptions<SpeechOptions>>().Value;
 
-            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            return new SpeechEngineCache(
+                options.MaxModels,
+                options.ResolveModelCacheRoot(),
+                provider.GetRequiredService<ILogger<SpeechEngineCache>>());
+        });
 
-            // The limit is on the answer, which is the WAV of the
-            // text-to-speech part. 16 MB is 5.5 minutes of the 24 kHz 16-bit
-            // audio that a measurement gives. The length of that audio follows
-            // the text of the translation, and not the recording.
-            client.MaxResponseContentBufferSize = 16 * 1024 * 1024;
-        })
-            .SetHandlerLifetime(Timeout.InfiniteTimeSpan)
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
-            {
-                AllowAutoRedirect = false,
+        services.AddSingleton(provider => new MoonshineLocator(
+            provider.GetRequiredService<IOptions<SpeechOptions>>().Value.LibraryDirectory,
+            provider.GetRequiredService<ILogger<MoonshineLocator>>()));
 
-                // SECURITY CONTROL. Do not delete this line and do not make it
-                // a setting. Without it, one environment variable in the
-                // systemd unit sends every recording of a voice to a machine of
-                // somebody's choice, and the loopback check of
-                // SpeechOptionsValidator does not see it. The full explanation
-                // is on the client above.
-                UseProxy = false,
-            });
+        // The library is not opened here. MoonshineSpeechService finds it at the
+        // first press: a machine with no library must show the user interface and
+        // give its message on that press, and not a black display at the start.
+        services.AddSingleton<ISpeechService>(provider => new MoonshineSpeechService(
+            provider.GetRequiredService<SpeechEngineCache>(),
+            provider.GetRequiredService<MoonshineLocator>(),
+            provider.GetRequiredService<ILogger<MoonshineSpeechService>>()));
 
         services.AddOptions<AudioOptions>()
             .Bind(configuration.GetSection(AudioOptions.SectionName));

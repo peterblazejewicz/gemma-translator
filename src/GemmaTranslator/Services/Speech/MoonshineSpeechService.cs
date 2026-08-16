@@ -14,52 +14,54 @@
 // limitations under the License.
 //
 // This file is part of a fork of google-gemma/gemma-translator and has been
-// modified. It replaces transcribeAudio of frontend/src/utils/api.js and the
-// /api/tts calls of frontend/src/TranslatorApp.jsx.
+// modified. It replaces transcribeAudio of frontend/src/utils/api.js, the
+// /api/tts calls of frontend/src/TranslatorApp.jsx, and the three handlers of
+// backend/server.py.
 
-using System.Buffers;
-using System.Buffers.Text;
 using System.Diagnostics;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using System.Runtime.InteropServices;
-using System.Text.Json;
-using GemmaTranslator.Configuration;
+using GemmaTranslator.Services.Speech.Native;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace GemmaTranslator.Services.Speech;
 
 /// <summary>
-/// Speaks to the Moonshine server of <c>backend/server.py</c>, which holds the
-/// speech-to-text part and the text-to-speech part.
+/// The speech-to-text part and the text-to-speech part, in this process.
 /// </summary>
+/// <remarks>
+/// There is no server and no port: upstream put an HTTP server of Python
+/// between the user interface and this same library, and that server did the
+/// base64, the JSON and the WAV that this code now does not need. The time that
+/// this saves is small against a synthesis of seconds. What it removes is a
+/// service with no authentication that took the recorded voice of a person on a
+/// socket.
+/// </remarks>
 public sealed partial class MoonshineSpeechService : ISpeechService
 {
-    private const string TranscribePath = "api/stt";
-    private const string SynthesizePath = "api/tts";
-    private const string WarmPath = "api/warm";
-    private const string WavMediaType = "audio/wav";
+    /// <remarks>
+    /// The rate that <see cref="ISpeechService"/> makes a condition of its
+    /// samples. Upstream gives the same number to the same call at
+    /// server.py:216, and neither side checks it.
+    /// </remarks>
+    private const int TranscribeSampleRate = 16000;
 
-    // `{"audio_base64":"` is 17 bytes and `","language":"xx"}` is 18. 64 keeps
-    // a margin, thus the writer of WriteTranscribeBody does not grow.
-    private const int JsonOverheadBytes = 64;
-
-    private readonly HttpClient _httpClient;
-    private readonly SpeechOptions _options;
+    private readonly SpeechEngineCache _engines;
+    private readonly MoonshineLocator _locator;
+    private readonly Lock _libraryGate = new();
     private readonly ILogger<MoonshineSpeechService> _logger;
 
-    public MoonshineSpeechService(
-        HttpClient httpClient,
-        IOptions<SpeechOptions> options,
+    private volatile bool _libraryOpen;
+
+    internal MoonshineSpeechService(
+        SpeechEngineCache engines,
+        MoonshineLocator locator,
         ILogger<MoonshineSpeechService> logger)
     {
-        ArgumentNullException.ThrowIfNull(httpClient);
-        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(engines);
+        ArgumentNullException.ThrowIfNull(locator);
         ArgumentNullException.ThrowIfNull(logger);
 
-        _httpClient = httpClient;
-        _options = options.Value;
+        _engines = engines;
+        _locator = locator;
         _logger = logger;
     }
 
@@ -70,95 +72,32 @@ public sealed partial class MoonshineSpeechService : ISpeechService
     {
         ArgumentNullException.ThrowIfNull(language);
 
-        // With no test, backend/server.py answers 500 for an empty
-        // audio_base64, and the display then accuses the server.
         if (samples.IsEmpty)
         {
             throw new SpeechException("There is no audio to transcribe.");
         }
 
-        Uri url = new(_options.GetBaseUri(), TranscribePath);
-
-        ArrayBufferWriter<byte> body = WriteTranscribeBody(samples.Span, language);
         long startTicks = Stopwatch.GetTimestamp();
 
-        HttpResponseMessage response;
-        try
-        {
-            // CAUTION: the length of the body must be known before the send.
-            //
-            // A content that cannot give its length makes HttpClient send
-            // `Transfer-Encoding: chunked` and no `Content-Length`. The server
-            // is a simple HTTP server in Python: backend/server.py reads
-            // `Content-Length` only, it then gets no body, and it answers 500.
-            ReadOnlyMemoryContent content = new(body.WrittenMemory);
-            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        // The samples go to the library as they are. Upstream made a base64
+        // copy of them for the wire, and that copy is the reason the old code
+        // had a buffer to wipe here. Recording.Dispose wipes the one buffer
+        // that now holds this audio.
+        string text = await CallAsync(
+            () => _engines.UseTranscriberAsync(
+                language,
+                engine => engine.Transcribe(samples.Span, TranscribeSampleRate),
+                cancellationToken),
+            "The transcription").ConfigureAwait(false);
 
-            using HttpRequestMessage request = new(HttpMethod.Post, url)
-            {
-                Content = content,
-            };
+        TimeSpan duration = Stopwatch.GetElapsedTime(startTicks);
 
-            response = await CallAsync(request, TranscribePath, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        finally
-        {
-            // SECURITY CONTROL. Do not delete this line. This buffer holds the
-            // recorded voice of a person as base64, and without the wipe that
-            // audio is readable in a memory dump of the process until a later
-            // allocation takes the memory. Recording.Dispose does the same for
-            // the samples of the microphone.
-            //
-            // The wipe covers the buffer that this code owns. HttpClient copies
-            // the bytes into pooled write buffers and returns them unwiped,
-            // thus a memory dump is not clean.
-            body.Clear();
-        }
+        // An empty text is not an error. Moonshine gives no words when the
+        // microphone heard no speech, and upstream puts that empty text on the
+        // display. The translation part is not the same.
+        LogTranscribed(_logger, language.Code, samples.Length, duration.TotalSeconds, text.Length);
 
-        using (response)
-        {
-            ThrowIfNotSuccess(response, TranscribePath);
-
-            TranscriptResponse? result;
-            try
-            {
-                result = await response.Content
-                    .ReadFromJsonAsync(SpeechJsonContext.Default.TranscriptResponse, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            catch (JsonException exception)
-            {
-                // The message of a JsonException holds the characters where the
-                // read stopped, and this body holds the words of a person. Thus
-                // the exception does not go to the log. The path and the
-                // position are a name of a field and a number.
-                LogBadJson(_logger, exception.Path ?? "(none)", exception.BytePositionInLine ?? -1);
-
-                throw new SpeechException("The speech server sent a body that is not JSON.");
-            }
-            catch (Exception exception) when (
-                exception is InvalidOperationException or NotSupportedException)
-            {
-                LogBadCharacterSet(_logger, exception);
-
-                throw new SpeechException(
-                    "The speech server sent a body that is not JSON.",
-                    exception);
-            }
-
-            TimeSpan duration = Stopwatch.GetElapsedTime(startTicks);
-
-            // An empty text is not an error. Moonshine gives no words when the
-            // microphone heard no speech, and upstream puts that empty text on
-            // the display. The translation part is not the same: there an empty
-            // answer is an error.
-            string text = result?.Text ?? string.Empty;
-
-            LogTranscribed(_logger, language.Code, samples.Length, duration.TotalSeconds, text.Length);
-
-            return text;
-        }
+        return text;
     }
 
     public async Task<SpokenAudio> SynthesizeAsync(
@@ -174,46 +113,34 @@ public sealed partial class MoonshineSpeechService : ISpeechService
             throw new SpeechException("There is no text to speak.");
         }
 
-        // `lang` is Language.Code. TTS_LANG_MAP in backend/server.py makes the
-        // change to the code of Moonshine, and TTS_VOICE_MAP selects the voice
-        // of Chinese.
-        Uri url = new(
-            _options.GetBaseUri(),
-            $"{SynthesizePath}?text={Uri.EscapeDataString(text)}&lang={Uri.EscapeDataString(language.Code)}");
-
         long startTicks = Stopwatch.GetTimestamp();
 
-        using HttpRequestMessage request = new(HttpMethod.Get, url);
+        Synthesis synthesis = await CallAsync(
+            () => _engines.UseSynthesizerAsync(
+                language,
+                engine => engine.Synthesize(text),
+                cancellationToken),
+            "The synthesis").ConfigureAwait(false);
 
-        using HttpResponseMessage response =
-            await CallAsync(request, SynthesizePath, cancellationToken).ConfigureAwait(false);
-
-        ThrowIfNotSuccess(response, SynthesizePath);
-
-        long declared = response.Content.Headers.ContentLength ?? -1;
-
-        // The test is before the read, because ReadAsByteArrayAsync copies the
-        // buffer of SendAsync and that copy is 16 MB at the limit. The test is
-        // strict, thus `audio/wave` is refused: backend/server.py sends
-        // `audio/wav` and this software speaks to that server only.
-        string mediaType = response.Content.Headers.ContentType?.MediaType ?? "(none)";
-
-        if (!string.Equals(mediaType, WavMediaType, StringComparison.OrdinalIgnoreCase))
+        if (synthesis.Samples.Length == 0)
         {
-            LogBadMediaType(_logger, mediaType, declared);
-            throw new SpeechException($"The speech server sent {mediaType} and not {WavMediaType}.");
+            throw new SpeechException("The synthesizer made no audio.");
         }
 
-        byte[] wav = await response.Content
-            .ReadAsByteArrayAsync(cancellationToken)
-            .ConfigureAwait(false);
+        byte[] wav;
 
-        // SendAsync buffers the body and throws if it is not complete. An answer
-        // of 200 with 0 bytes does not throw.
-        if (wav.Length == 0)
+        try
         {
-            LogBadLength(_logger, declared, wav.Length);
-            throw new SpeechException("The speech server sent audio that is not complete.");
+            wav = WavAudio.FromSamples(synthesis.Samples, synthesis.SampleRate);
+        }
+        finally
+        {
+            // SECURITY CONTROL. Do not delete this line. These samples are the
+            // translation of what a person said. The WAV above is a second copy
+            // of the same sound, and the player wipes that one; without this
+            // line the first copy stays readable in a memory dump of the process
+            // until a later allocation takes the memory.
+            Array.Clear(synthesis.Samples);
         }
 
         TimeSpan duration = Stopwatch.GetElapsedTime(startTicks);
@@ -223,120 +150,120 @@ public sealed partial class MoonshineSpeechService : ISpeechService
         return new SpokenAudio(wav);
     }
 
-    /// <remarks>
-    /// The writer gets the full length at the start. Without it each array that
-    /// it outgrows keeps a part of the speech of a person until a collection.
-    /// </remarks>
-    private static ArrayBufferWriter<byte> WriteTranscribeBody(
-        ReadOnlySpan<float> samples,
-        Language language)
-    {
-        // backend/server.py reads the bytes with
-        // np.frombuffer(raw, dtype=np.float32), thus it needs raw
-        // little-endian float32 and not a WAV file. This cast gives the
-        // sequence of the bytes of the machine, and the two targets of this
-        // software are little-endian.
-        ReadOnlySpan<byte> raw = MemoryMarshal.AsBytes(samples);
-
-        ArrayBufferWriter<byte> body =
-            new(Base64.GetMaxEncodedToUtf8Length(raw.Length) + JsonOverheadBytes);
-
-        try
-        {
-            using Utf8JsonWriter writer = new(body);
-
-            writer.WriteStartObject();
-            writer.WriteBase64String("audio_base64"u8, raw);
-            writer.WriteString("language"u8, language.Code);
-            writer.WriteEndObject();
-        }
-        catch
-        {
-            // SECURITY CONTROL. Do not delete this. The buffer above is 10 MB
-            // for the longest recording, and the lines above fill it with the
-            // voice of a person. The caller wipes it after the send, but the
-            // caller never receives it if a write throws here. Out of memory is
-            // the failure to expect: the appliance has 4 GB and a model of
-            // 2.4 GB is already in it. Without this, that speech stays readable
-            // in the heap until a later allocation takes the memory.
-            body.Clear();
-            throw;
-        }
-
-        return body;
-    }
-
     public async Task WarmAsync(Language language, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(language);
 
-        // CAUTION: the address must be absolute. The client of this service has
-        // no BaseAddress, thus a relative address gives
-        // InvalidOperationException at the call and not at the build.
-        Uri url = new(
-            _options.GetBaseUri(),
-            $"{WarmPath}?lang={Uri.EscapeDataString(language.Code)}");
-
         long startTicks = Stopwatch.GetTimestamp();
 
-        using HttpRequestMessage request = new(HttpMethod.Get, url);
+        // The two parts one after the other, and never the two locks together.
+        // handle_warm of upstream makes the same promise at server.py:254.
+        await CallAsync(
+            () => _engines.UseTranscriberAsync(language, static _ => true, cancellationToken),
+            "The load of the transcriber").ConfigureAwait(false);
 
-        using HttpResponseMessage response =
-            await CallAsync(request, WarmPath, cancellationToken).ConfigureAwait(false);
+        await CallAsync(
+            () => _engines.UseSynthesizerAsync(language, static _ => true, cancellationToken),
+            "The load of the synthesizer").ConfigureAwait(false);
 
-        ThrowIfNotSuccess(response, WarmPath);
-
-        // The body says which models the server made now and which it held
-        // already. The software does not read it: the time in the line below
-        // gives the same fact, and a value near 0 says that the models were
-        // there.
         double seconds = Stopwatch.GetElapsedTime(startTicks).TotalSeconds;
 
         LogWarmed(_logger, language.Code, seconds);
     }
 
-    private async Task<HttpResponseMessage> CallAsync(
-        HttpRequestMessage request,
-        string path,
-        CancellationToken cancellationToken)
+    // One time and at the first call, and not at the start: upstream keeps its
+    // user interface when backend/server.py is dead, and it fails at each press.
+    // Only a success stays, the same as the import in each handler of upstream:
+    // the appliance has no keyboard, thus a failure that stayed makes it deaf.
+    private void OpenLibrary()
     {
-        try
+        lock (_libraryGate)
         {
-            return await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        }
-        catch (HttpRequestException exception)
-        {
-            LogNoServer(_logger, path, exception);
-            throw new SpeechException("The speech server did not answer.", exception);
-        }
-        catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
-        {
-            LogTooSlow(_logger, path, _httpClient.Timeout.TotalSeconds, exception);
-            throw new SpeechException("The speech server took too much time.", exception);
+            if (_libraryOpen)
+            {
+                return;
+            }
+
+            string directory = _locator.Locate();
+
+            MoonshineResolver.Register(directory);
+
+            int version = MoonshineLibrary.GetVersion();
+
+            LogLibrary(_logger, directory, version);
+
+            if (version != MoonshineLibrary.HeaderVersion)
+            {
+                throw new SpeechException(
+                    $"The Moonshine library at {directory} gives version {version}, and this " +
+                    $"software reads the structures of version {MoonshineLibrary.HeaderVersion}.");
+            }
+
+            _libraryOpen = true;
         }
     }
 
-    private void ThrowIfNotSuccess(HttpResponseMessage response, string path)
+    private async Task<TResult> CallAsync<TResult>(
+        Func<Task<TResult>> work,
+        string operation)
     {
-        if (response.IsSuccessStatusCode)
+        try
         {
-            return;
+            // In the try, thus a library that does not open gives the message of
+            // a press and not an exception that no caller expects. Task.Run keeps
+            // the walk of the venv and the first P/Invoke off the thread of the
+            // press, which is the thread of the user interface.
+            if (!_libraryOpen)
+            {
+                await Task.Run(OpenLibrary).ConfigureAwait(false);
+            }
+
+            return await work().ConfigureAwait(false);
         }
+        catch (MoonshineException exception)
+        {
+            LogEngineFailed(_logger, operation, exception.Code, exception);
 
-        int status = (int)response.StatusCode;
+            throw new SpeechException($"{operation} did not succeed.", exception);
+        }
+        catch (KeyNotFoundException exception)
+        {
+            throw new SpeechException(exception.Message, exception);
+        }
+        catch (DllNotFoundException exception)
+        {
+            LogNoLibrary(_logger, exception);
 
-        // The body does not go to the log. backend/server.py sends str(error)
-        // as plain text and not as JSON, and that message comes from a process
-        // that holds the speech of a person. The status line and the length
-        // name the failure and hold no speech.
-        LogBadStatus(
-            _logger,
-            path,
-            status,
-            response.ReasonPhrase ?? "(none)",
-            response.Content.Headers.ContentLength ?? -1);
+            throw new SpeechException("The speech library is not installed.", exception);
+        }
+        catch (DirectoryNotFoundException exception)
+        {
+            LogNoLibrary(_logger, exception);
 
-        throw new SpeechException($"The speech server gave status {status}.");
+            throw new SpeechException("The speech library is not on this machine.", exception);
+        }
+        catch (EntryPointNotFoundException exception)
+        {
+            LogNoLibrary(_logger, exception);
+
+            throw new SpeechException(
+                "The speech library does not hold the functions that this software calls.",
+                exception);
+        }
+        catch (BadImageFormatException exception)
+        {
+            LogNoLibrary(_logger, exception);
+
+            throw new SpeechException(
+                "The speech library is not for the processor of this machine.",
+                exception);
+        }
+        catch (ObjectDisposedException exception)
+        {
+            LogStopping(_logger, operation, exception);
+
+            throw new SpeechException($"{operation} stopped with the software.", exception);
+        }
     }
 
     [LoggerMessage(
@@ -351,7 +278,7 @@ public sealed partial class MoonshineSpeechService : ISpeechService
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The models of {language} are ready. The call took {seconds:F2} s; a value near 0 says that the server held them already.")]
+        Message = "The models of {language} are ready. The call took {seconds:F2} s; a value near 0 says that the software held them already.")]
     private static partial void LogWarmed(ILogger logger, string language, double seconds);
 
     [LoggerMessage(
@@ -366,45 +293,25 @@ public sealed partial class MoonshineSpeechService : ISpeechService
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The speech server did not answer at {path}.")]
-    private static partial void LogNoServer(ILogger logger, string path, Exception exception);
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "The speech server took more than {seconds:F0} seconds at {path}.")]
-    private static partial void LogTooSlow(
+        Message = "{operation} gave the Moonshine error {code}.")]
+    private static partial void LogEngineFailed(
         ILogger logger,
-        string path,
-        double seconds,
+        string operation,
+        int code,
         Exception exception);
 
     [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "The speech server gave status {status} ({reason}) at {path}. The body is {bytes} bytes, and -1 says that the server gave no length.")]
-    private static partial void LogBadStatus(
-        ILogger logger,
-        string path,
-        int status,
-        string reason,
-        long bytes);
+        Level = LogLevel.Information,
+        Message = "The Moonshine library is at {directory}, and it gives version {version}.")]
+    private static partial void LogLibrary(ILogger logger, string directory, int version);
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The speech server sent a body that is not JSON. The read stopped at {path}, {bytePosition} bytes into the line.")]
-    private static partial void LogBadJson(ILogger logger, string path, long bytePosition);
+        Message = "The Moonshine library did not load. The software cannot hear and cannot speak.")]
+    private static partial void LogNoLibrary(ILogger logger, Exception exception);
 
     [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "The speech server sent a character set that .NET does not know.")]
-    private static partial void LogBadCharacterSet(ILogger logger, Exception exception);
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "The speech server sent {mediaType} and not audio. The body is {bytes} bytes, and -1 says that the server gave no length.")]
-    private static partial void LogBadMediaType(ILogger logger, string mediaType, long bytes);
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "The speech server told of {declared} bytes of audio and sent {received}. A value of -1 says that the server gave no length.")]
-    private static partial void LogBadLength(ILogger logger, long declared, int received);
+        Level = LogLevel.Information,
+        Message = "{operation} stopped because the software is closing.")]
+    private static partial void LogStopping(ILogger logger, string operation, Exception exception);
 }

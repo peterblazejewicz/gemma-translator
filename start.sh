@@ -18,14 +18,17 @@
 # modified. The Vite server of the user interface went away, and the Avalonia
 # software came in.
 
-# The startup of the appliance. It starts three processes:
+# The startup of the appliance. It starts two processes:
 #
 #   litert-lm            the model, which speaks the OpenAI protocol
-#   backend/server.py    the speech-to-text part and the text-to-speech part
 #   publish/GemmaTranslator --drm   the user interface, on the panel
 #
 # The Vite dev server is gone with frontend/. The user interface is the
 # Avalonia software now, and it needs no browser and no web server.
+#
+# backend/server.py is gone also. The speech-to-text part and the
+# text-to-speech part call the Moonshine library in the process of the user
+# interface, thus there is no third process and nothing listens on port 3000.
 #
 # --prod and -p do nothing. The systemd unit gives --prod, and this script
 # takes it so that an old unit does not stop the appliance.
@@ -42,21 +45,36 @@ done
 # Ensure PipeWire env is available for volume control (wpctl)
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
-# Unbuffered Python stdout so server logs reach journald immediately
+# Unbuffered Python stdout so litert-lm logs reach journald immediately
 # (block-buffered prints previously hid request logs and hampered debugging)
 export PYTHONUNBUFFERED=1
 
 # Kill existing processes only if NOT running under systemd
 # (systemd handles process lifecycle; killing ports here causes crash loops)
 if [ -z "$INVOCATION_ID" ]; then
-    lsof -ti:9379,3000,5173 | xargs kill -9 2>/dev/null || true
+    lsof -ti:9379 | xargs kill -9 2>/dev/null || true
 fi
 
 LITERT_PORT=9379
-API_PORT=3000
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LITERT_CMD="${PROJECT_DIR}/venv/bin/litert-lm serve"
-API_CMD="${PROJECT_DIR}/venv/bin/python3 ${PROJECT_DIR}/backend/server.py"
+
+# The Moonshine library is in the venv, because it comes in a wheel of Python.
+# The venv itself gives the directory: the name holds the version of Python and
+# this script must not build that path. With no value the software looks for
+# the package on its own, and this makes it look for nothing.
+if [ -z "${GEMMA_Speech__LibraryDirectory:-}" ]; then
+    MOONSHINE_DIR="$("${PROJECT_DIR}/venv/bin/python3" -c \
+        'import os, moonshine_voice; print(os.path.dirname(moonshine_voice.__file__))' \
+        2>/dev/null || true)"
+
+    if [ -n "$MOONSHINE_DIR" ]; then
+        export GEMMA_Speech__LibraryDirectory="$MOONSHINE_DIR"
+        echo "[start.sh] Moonshine: ${MOONSHINE_DIR}"
+    else
+        echo "[start.sh] The venv does not hold moonshine_voice. The software will look for it."
+    fi
+fi
 
 # The user interface is the Avalonia software. --drm makes it draw on the panel
 # with no window manager and no browser. deploy-pi.sh puts the files here.
@@ -68,7 +86,7 @@ cleanup() {
     CLEANING_UP=1
     echo "[start.sh] Shutting down..."
     # Kill only tracked child processes, not the entire process group
-    for pid in $LITERT_PID $API_PID $UI_PID; do
+    for pid in $LITERT_PID $UI_PID; do
         [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
     done
     wait 2>/dev/null || true
@@ -119,11 +137,6 @@ for i in $(seq 1 60); do
     sleep 1
 done
 
-# Start API server
-echo "[start.sh] Starting API server on port ${API_PORT}..."
-$API_CMD &
-API_PID=$!
-
 # Start the user interface on the panel.
 echo "[start.sh] Starting the user interface..."
 $UI_CMD &
@@ -131,7 +144,6 @@ UI_PID=$!
 
 echo "[start.sh] All services running."
 echo "[start.sh] LiteRT-LM PID: $LITERT_PID"
-echo "[start.sh] API Server PID: $API_PID"
 echo "[start.sh] User interface PID: $UI_PID"
 
 # Wait for any child to exit (then the trap will clean up the others)

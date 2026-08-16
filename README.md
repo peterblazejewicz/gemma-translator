@@ -2,7 +2,7 @@
 
 # Gemma Translator
 
-This repo was built with the assistance of [Google Antigravity](https://antigravity.google/) and includes code to run an on-device, fully offline voice translator powered by [Gemma 4](https://ai.google.dev/gemma/docs/core) and [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-lm). This fork replaces the web frontend with an Avalonia user interface on .NET, which draws on the panel of the appliance with no browser and no window manager. A Python API server (`http.server`) holds the speech-to-text part and the text-to-speech part. Text-to-speech is powered by [Moonshine](https://github.com/moonshine-ai/moonshine).
+This repo was built with the assistance of [Google Antigravity](https://antigravity.google/) and includes code to run an on-device, fully offline voice translator powered by [Gemma 4](https://ai.google.dev/gemma/docs/core) and [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-lm). This fork replaces the web frontend with an Avalonia user interface on .NET, which draws on the panel of the appliance with no browser and no window manager. The speech-to-text part and the text-to-speech part call the Moonshine library in that same process, thus there is no API server. Text-to-speech is powered by [Moonshine](https://github.com/moonshine-ai/moonshine).
 
 https://github.com/user-attachments/assets/343072ce-dc78-44a7-a783-99312845cabe
 
@@ -50,7 +50,7 @@ https://github.com/user-attachments/assets/343072ce-dc78-44a7-a783-99312845cabe
 
 ## Running the Application
 
-Start all services (LiteRT-LM, the Python API server, and the user interface):
+Start all services (LiteRT-LM and the user interface):
 ```bash
 ./start.sh
 ```
@@ -61,7 +61,6 @@ takes it so that an old unit does not stop the appliance.
 The user interface draws on the panel of the appliance. It is not a page, thus
 there is no address for it. The two servers are here:
 
-- **API server (speech-to-text, text-to-speech)**: `http://localhost:3000`
 - **LiteRT-LM**: `http://localhost:9379`
 
 ## Raspberry Pi Appliance Deployment
@@ -70,12 +69,12 @@ To deploy as a permanent systemd kiosk service on a Raspberry Pi 5 (8GB):
 ```bash
 ./deploy-pi.sh
 ```
-This automated script installs Debian audio/venv packages, sets up the Python environment, builds production UI assets, downloads the LiteRT model, registers the systemd unit from `deploy/gemma-translator.service`, and configures LXDE GUI autostart (`~/.config/lxsession/rpd-x/autostart`) to launch Chromium in kiosk mode pointing to `http://localhost:3000`.
+This automated script installs Debian audio/venv packages, sets up the Python environment, builds production UI assets, downloads the LiteRT model, and registers the systemd unit from `deploy/gemma-translator.service`.
 
 ## Project Structure
 
 - `src/GemmaTranslator/` - the Avalonia user interface on .NET 10.
-- `backend/` - Python API server (`server.py` and `requirements.txt`) for Moonshine STT, moonshine-voice TTS, and model proxying.
+- `backend/` - `requirements.txt` only. It pins `litert-lm`, and `moonshine-voice` for the native speech library and the models that the C# software loads.
 - `deploy/` - Parameterizable systemd service unit template (`gemma-translator.service`).
 - `stl/` - STL files for 3D printing the hardware case.
 - `setup.sh` - Automates Python virtual environment creation and dependency installation.
