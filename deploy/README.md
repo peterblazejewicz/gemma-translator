@@ -17,7 +17,7 @@ Each value below comes from a measurement on the actual hardware.
 
 | Item | Value |
 | --- | --- |
-| Computer | Raspberry Pi 5, 8 GB |
+| Computer | Raspberry Pi 5 Model B Rev 1.1, 16 GB |
 | System | Raspberry Pi OS Trixie (Debian 13), 64-bit |
 | Kernel | 6.18.39+rpt-rpi-2712 |
 | Electrical supply | Geekworm X1201 UPS with two 18650 cells |
@@ -79,6 +79,7 @@ active low flag, thus low is a key down.
 | `deploy/99-gemma-translator.rules` | The udev rules that make a stable path for the buttons, the touchscreen, the panel, and the speakerphone. |
 | `deploy/gemma-battery-guard.sh` | The low battery guard of section 9 |
 | `deploy/gemma-battery-guard.service` | The unit of the guard, which operates as root |
+| `deploy/gemma-translator.service` | The unit of the translator. Section 12 gives its limits. |
 
 The fuel gauge needs no file of this project. `i2c-sensor` is an overlay of
 Raspberry Pi OS and it has a `max17040` parameter.
@@ -667,6 +668,11 @@ time of the call divided by the length of the sound.
 The method: `warm` the language, then one GET of `/api/tts`. The time of the
 call is the synthesis. The length of the sound comes from the header of the
 WAV file that comes back.
+
+**CAUTION: that method cannot be done again. `/api/tts` went away with
+`backend/server.py`, and the speech part is now in the process of the user
+interface.** The numbers stay because they are measurements. To repeat them,
+use the log, which is the second path below and which gives the same ratio.
 
 | Language | Characters | The call | Sound | Call ÷ sound |
 | --- | --- | --- | --- | --- |
@@ -1270,3 +1276,68 @@ A disk with encryption asks for a password at the start. Plymouth calls
 `display_password`, it finds nothing, and the machine stays at the image with
 no prompt and no cause, for ever. Put that callback in the theme before the
 disk gets encryption, and not after.
+
+---
+
+## 12. The limits of the unit of the translator
+
+`deploy/gemma-translator.service` is the unit of the appliance. `deploy-pi.sh`
+puts the account, the project directory and the uid in it in its step 8.
+
+Two lines of that unit keep the speech of a person off the SD card and away
+from the other processes of the account. The unit gives the full text on each
+one. Read it before you change it.
+
+| Line | What it stops |
+| --- | --- |
+| `Environment=DOTNET_EnableDiagnostics=0` | A process of the same account cannot order a full dump of the memory through the diagnostic socket of .NET in `/tmp`. |
+| `LimitCORE=0` | A fault in native code does not write a core file that holds the recording, the transcripts and the sound of the answer. |
+
+The speech part operates in the process of the user interface now. Thus one
+dump or one core file holds all of it, and not the words alone.
+
+**CAUTION: `LimitCORE=0` stops a core file only.** `core(5)` says that the
+limit "is not enforced for core dumps that are piped to a program". Thus
+`systemd-coredump` and `apport` make that path again. Do not install one of
+them on the appliance.
+
+The other limits are the same group as the limits of the guard of section 9.
+`ProtectSystem=strict` makes the file system read-only, and `ReadWritePaths=`
+gives back the four paths that the appliance writes:
+
+| Path | What writes it |
+| --- | --- |
+| `~/.config` | The settings of a person, in `gemma-translator/user-settings.json`. |
+| `~/.cache` | The models of Moonshine, and the cache of Hugging Face of `litert-lm`. |
+| `~/.local` | The data and the state of the packages of Python, through platformdirs. |
+| `/tmp` | A temporary file of .NET or of Python. |
+
+The project directory is not in that group, because the software writes nothing
+in it. Thus `publish/`, `venv/` and the scripts are read-only while the
+appliance operates.
+
+`PrivateDevices=`, `SystemCallFilter=` and `RestrictRealtime=` are not in the
+unit. The panel, the buttons, the speakerphone and the audio thread need what
+each of those three takes away. The unit gives the cause for each one.
+
+### 12.1 How to make sure of the limits
+
+**IMPORTANT: nobody has done these steps on the appliance.**
+
+```bash
+systemd-analyze verify /etc/systemd/system/gemma-translator.service
+systemd-analyze security gemma-translator.service
+systemctl show -p LimitCore -p Environment gemma-translator.service
+```
+
+Do the test on the file in `/etc/systemd/system/`, which `deploy-pi.sh` writes.
+The file in git holds `{{USER}}` and `{{PROJECT_DIR}}`, and those are not
+paths.
+
+Then make sure that the appliance still operates: the panel shows the user
+interface, the two buttons record, the speakerphone speaks, and a change in the
+settings screen stays after `systemctl restart gemma-translator`. The last one
+is the test of `ReadWritePaths=`. The paths in that line are
+`/home/<account>/...`, because `%h` gives `/root` in a system unit. An account
+with a home in a different place keeps its display and loses that file, and the
+journal then gives "The software did not write ...".

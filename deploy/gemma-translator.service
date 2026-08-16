@@ -17,5 +17,114 @@ TimeoutStopSec=15
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=XDG_RUNTIME_DIR=/run/user/{{UID}}
 
+# SECURITY CONTROL. Do not delete this line to make dotnet-counters,
+# dotnet-trace or a debugger work against the appliance.
+#
+# The .NET runtime opens a diagnostic port by default. On Linux that is a Unix
+# domain socket at $TMPDIR/dotnet-diagnostic-<pid>-<key>-socket. Any process
+# running under the same user account can connect to it and order a full
+# process dump. It needs no crash, no ptrace permission and no change to
+# RLIMIT_CORE, because the runtime starts createdump and writes the file
+# itself. start.sh runs litert-lm as this same account with this same $TMPDIR,
+# and litert-lm is a pip package with a large dependency tree (onnxruntime,
+# numpy, requests, typer, rich, tqdm). One bad package in that tree - or
+# anybody who gets a shell as this account - then walks away with the raw
+# microphone buffer, every Moonshine transcript, and the LiteRT API key. The
+# voices in that dump belong to members of the public who never agreed to being
+# recorded at all.
+#
+# Microsoft says the same thing about the same port: "The diagnostic port
+# exposes sensitive information about a running application ... If your
+# security model does not trust other processes with the same user account
+# credentials, you can disable all diagnostic ports by setting environment
+# variable DOTNET_EnableDiagnostics=0."
+# https://learn.microsoft.com/dotnet/core/diagnostics/diagnostic-port
+#
+# The price is that no dotnet-* tool can attach to the appliance any more. On a
+# machine that stands in a public place and holds other people's speech, that
+# is not a fair trade. Set the variable to 1 by hand on a development host, for
+# as long as one measurement takes, and never in this file.
+Environment=DOTNET_EnableDiagnostics=0
+
+# SECURITY CONTROL. Do not delete this line.
+#
+# A core dump of this process is a copy of everything it holds at that instant:
+# the recording buffer, every transcript, the audio the Moonshine library keeps
+# for each of the six languages, and the synthesized sentence. It lands on the
+# SD card in the clear. The card outlives the machine, no part of the software
+# can reach that file to erase it, and this appliance keeps no recording on
+# purpose. The speech now runs inside this one process, so a single native
+# fault in a pre-1.0 C++ library writes the lot - see
+# Services/Speech/Native/NativeHeap.cs for a documented heap corruption class
+# in exactly that library.
+#
+# CAUTION: this stops a core FILE only. core(5) says the limit "is not enforced
+# for core dumps that are piped to a program", so a person who installs
+# systemd-coredump or apport on this appliance opens the hole again and gets no
+# warning from this line. Do not install either package here.
+LimitCORE=0
+
+# The limits below are the same examination as the limits of
+# gemma-battery-guard.service. This unit needs the panel (/dev/dri), the two
+# buttons (/dev/input), the speakerphone (/dev/snd and /dev/hidraw), one TCP
+# connection to litert-lm on localhost, and no privilege of the kernel.
+#
+# Three limits that the guard has are not here, and each one has a cause:
+#
+# PrivateDevices=yes gives a private /dev that holds none of the four device
+# groups above. The panel stays black, the buttons are dead, and there is no
+# sound.
+#
+# SystemCallFilter= needs a measurement. Nobody has recorded which calls the
+# DRM backend, miniaudio and onnxruntime make on the appliance. A filter that
+# comes from an assumption stops the software at a moment that no person sees.
+#
+# RestrictRealtime=yes can hold back the audio thread of miniaudio, which asks
+# for a high priority to keep the microphone and the speaker in time.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectProc=invisible
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+
+# ProtectSystem=strict makes the full file system read-only. These four paths
+# are everything that this unit writes:
+#
+#   ~/.config  JsonUserSettingsStore writes user-settings.json below it,
+#              through SpecialFolder.ApplicationData.
+#   ~/.cache   the models of Moonshine at ~/.cache/moonshine_voice, and the
+#              cache of Hugging Face that litert-lm reads.
+#   ~/.local   litert-lm and the other packages of Python use platformdirs,
+#              which puts the data and the state of an application below it.
+#   /tmp       .NET and Python make a temporary file there.
+#
+# The project directory is not in the list, because the software writes nothing
+# in it. Thus publish/, venv/ and the scripts are read-only while the appliance
+# operates, and so is the directory that a core file would go to.
+#
+# CAUTION: %h is not the home of User=. systemd.unit(5) says that %h "is the
+# home directory of the user running the service manager instance" and that it
+# "is not influenced by the User= setting". A system unit gets /root from it.
+# Thus deploy-pi.sh puts the account in this line. Each home path has a "-",
+# which tells systemd to ignore a path that is not there: an account with a
+# home in a different place then loses its settings file and keeps its display.
+#
+# ProtectHome=read-only also makes /run/user read-only. Nothing here writes
+# there. `wpctl` in start.sh can fail for that cause, and that line ends with
+# `|| true`.
+#
+# PrivateTmp=yes is not here. gemma-battery-guard.service records the cause: if
+# ext4 becomes read-only, which is the damage that the guard stops, the
+# namespace does not start and systemd gives 226/NAMESPACE. The exposure in
+# /tmp that PrivateTmp would close is the diagnostic port, and
+# DOTNET_EnableDiagnostics=0 closes it above.
+ReadWritePaths=-/home/{{USER}}/.config -/home/{{USER}}/.cache -/home/{{USER}}/.local /tmp
+
 [Install]
 WantedBy=multi-user.target
