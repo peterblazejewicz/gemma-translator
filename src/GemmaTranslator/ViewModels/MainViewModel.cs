@@ -73,10 +73,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private static readonly TimeSpan WarmSettleTime = TimeSpan.FromSeconds(1.5);
 
     // The wait for ONE piece is SpeechOptions.TimeoutSeconds and this margin.
-    // ServiceRegistration gives that timeout to the HttpClient, thus one call
-    // is already bounded and this margin covers the moment between two calls.
-    // It starts again at each piece, thus it finds a server that stopped and
-    // not an answer that is long. SpeechBudget does that work.
+    // A call into the library cannot be stopped and it has no timeout of its
+    // own, thus this wait is the one bound on one piece. It starts again at
+    // each piece, thus it finds a synthesis that stopped and not an answer that
+    // is long. SpeechBudget does that work.
     private static readonly TimeSpan PieceMargin = TimeSpan.FromSeconds(10);
 
     // The longest that the appliance speaks one answer, and the one limit on
@@ -110,8 +110,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly CancellationTokenSource?[] _warmStops =
         new CancellationTokenSource?[2];
 
-    // Each call to the server and to the speaker takes this token, thus a stop
-    // of the software does not wait for the timeout of the client. See Dispose.
+    // Each call of the exchange takes this token, thus a stop of the software
+    // does not wait for the timeout of the translation client. See Dispose.
     private readonly CancellationTokenSource _shutdown = new();
 
     // The turn that the pipeline writes. It is at the end of Turns, and it is
@@ -597,7 +597,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <remarks>
     /// <see cref="ISpeechService.WarmAsync"/> gives the measured cost and the
-    /// lock of the server. The two callers are the end of the warm-up screen
+    /// lock that it holds. The two callers are the end of the warm-up screen
     /// and a change of a language; the test below refuses each other moment,
     /// because only those two are moments when nobody waits.
     /// </remarks>
@@ -625,7 +625,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             try
             {
                 // The selector stops first. Without this each touch makes a
-                // call, and each call holds the lock of the server.
+                // call, and each call takes the lock of the cache of models.
                 await Task.Delay(WarmSettleTime, stop.Token).ConfigureAwait(false);
 
                 await _speech.WarmAsync(language, stop.Token).ConfigureAwait(false);
@@ -768,7 +768,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         catch (SpeechException exception)
         {
             LogTranscriptionFailed(_logger, exception);
-            ShowNoResult("Speech service isn't responding.");
+            ShowNoResult("The appliance cannot hear or speak. Try again.");
             return;
         }
 #pragma warning disable CA1031 // The appliance must not stop. See the remark.
@@ -778,7 +778,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // CAUTION: this catch is the last one on purpose. See the same
             // catch on the translation below.
             LogTranscriptionFailed(_logger, exception);
-            ShowNoResult("Speech service isn't responding.");
+            ShowNoResult("The appliance cannot hear or speak. Try again.");
             return;
         }
 
@@ -795,10 +795,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         string? translated = null;
 
+        // CAUTION: the language of the other lane is read ONE time, here. A
+        // person can move the selector while the exchange runs, and the
+        // translation and the synthesis are seconds apart. With two reads the
+        // appliance translated into Arabic and then spoke that text with the
+        // engine of Korean, which gives no sound at all. A measurement on the
+        // appliance holds that exchange: "Translated en to ar", then "Loaded
+        // the TTS model of ko", then no audio.
+        Language target = other.Language;
+
         try
         {
             TranslationResult result = await _translator
-                .TranslateAsync(heard, lane.Language, other.Language, _shutdown.Token)
+                .TranslateAsync(heard, lane.Language, target, _shutdown.Token)
                 .ConfigureAwait(true);
 
             turn.TargetText = result.Translation;
@@ -839,7 +848,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             long speakTicks = Stopwatch.GetTimestamp();
 
-            await SpeakAsync(translated, other, _shutdown.Token).ConfigureAwait(true);
+            await SpeakAsync(translated, other, target, _shutdown.Token).ConfigureAwait(true);
 
             speakSeconds = Stopwatch.GetElapsedTime(speakTicks).TotalSeconds;
         }
@@ -899,9 +908,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private async Task SpeakAsync(
         string text,
         LaneViewModel destination,
+        Language language,
         CancellationToken cancellationToken)
     {
-        // The pieces cost the server about 6 % more. A measurement gives
+        // The pieces cost the synthesis about 6 % more. A measurement gives
         // 11.25 s of synthesis for 258 characters in one call, and 11.94 s for
         // the same text in four. But the person hears the first sentence after
         // the first piece, thus the appliance answers more quickly.
@@ -923,10 +933,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         _speaking = mine;
 
-        // The cue comes on before the call to the server and not after it. That
-        // call takes 1 s to 3 s, and for all of that time the state is Working:
-        // the two buttons do nothing and nothing on the display says that the
-        // appliance still works.
+        // The cue comes on before the call to the synthesis and not after it.
+        // That call takes 1 s to 3 s, and for all of that time the state is
+        // Working: the two buttons do nothing and nothing on the display says
+        // that the appliance still works.
         BeginSpeaking(mine);
 
         // A queue of one piece. CAUTION: it becomes EMPTY at each connection.
@@ -936,10 +946,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // sentence after the synthesis of that sentence only.
         Channel<SpokenAudio> line = Channel.CreateBounded<SpokenAudio>(1);
 
+        // The language of the caller, and not destination.Language. See the
+        // CAUTION at the read of it: the selector can move while this runs.
         Task producer = SynthesizeIntoAsync(
             line.Writer,
             pieces,
-            destination.Language,
+            language,
             stop.Token);
 
         int spoken = 0;
@@ -1014,9 +1026,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         catch (Exception exception)
 #pragma warning restore CA1031
         {
-            // The TYPE and the value. A failure of the server that lands in the
-            // same moment as a press would take this branch on the value alone,
-            // and the journal would then hold no trace of that failure.
+            // The TYPE and the value. A failure of the synthesis that lands in
+            // the same moment as a press would take this branch on the value
+            // alone, and the journal would then hold no trace of that failure.
             if (mine.CutShort && exception is OperationCanceledException)
             {
                 LogSpeechCutShort(_logger, pieces.Count, given, spoken);
@@ -1044,9 +1056,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // bytes that it played, but a piece that waits in the queue never
             // reaches PlayAsync when the software stops or a later piece fails.
             // Those bytes are the spoken sentence of a person, and the producer
-            // ended above, so nothing can add a piece after this line. The wipe
-            // covers the array of this code only: HttpClient holds a copy of
-            // the same WAV that nothing wipes, thus a memory dump is not clean.
+            // ended above, so nothing can add a piece after this line. This
+            // array is the only copy left: the piece never reached the decoder.
             while (line.Reader.TryRead(out SpokenAudio? left))
             {
                 Array.Clear(left.WavBytes);
@@ -1078,9 +1089,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             .WaitAsync(_pieceWait, cancellationToken)
             .ConfigureAwait(true);
 
-    // One worker, and the pieces in their sequence. backend/server.py holds
-    // _tts_lock while it makes the audio. Thus two calls together give no
-    // speed on a machine that has 4 GB and a model in its memory.
+    // One worker, and the pieces in their sequence. SpeechEngineCache holds one
+    // lock while it makes the audio, thus two calls together give no speed on a
+    // machine that has 4 GB and a model in its memory.
     //
     // ConfigureAwait(false) below, and true at each other await of this class.
     // This method makes the next piece while the appliance speaks, thus a
@@ -1111,8 +1122,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     // SECURITY CONTROL. Do not delete this line. The reader
                     // stopped, so this piece never reaches PlayAsync, the code
                     // that usually wipes it. It is the spoken sentence of a
-                    // person. As above, this clears the array of this code
-                    // only, and HttpClient keeps a copy that nothing wipes.
+                    // person, and this array is the only copy left.
                     Array.Clear(audio.WavBytes);
                     throw;
                 }
@@ -1131,9 +1141,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <returns><c>true</c> if it was speaking and the sound stops.</returns>
     /// <remarks>
     /// CAUTION: <c>Cancel</c> runs the registrations of the token on THIS
-    /// thread, thus the request of the synthesis ends inside this call. The
-    /// continuations of the speech do not: Avalonia gives its own
-    /// synchronization context and .NET refuses to run one inline on it.
+    /// thread, thus the wait for the lock of the synthesis ends inside this
+    /// call. A call that is already in the library does not end. The
+    /// continuations of the speech do not run here either: Avalonia gives its
+    /// own synchronization context and .NET refuses to run one inline on it.
     /// </remarks>
     private bool CutSpeechShort()
     {
