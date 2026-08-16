@@ -41,6 +41,21 @@
          native library for win-x64 and for linux-arm64. -->
     <PackageReference Include="SoundFlow" Version="1.4.1" />
 
+    <!--
+      The reader of the SVG of the brand mark. See Services/Branding/.
+
+      CAUTION: this version is pinned and it must not move to 5.2.0 or above
+      until Avalonia moves to SkiaSharp 4. Svg.Skia 5.1.1 asks for SkiaSharp
+      3.119.2 and Avalonia.Skia 12.1.1 asks for 3.119.4, thus NuGet takes
+      3.119.4 and the two agree. Svg.Skia 5.2.0 asks for SkiaSharp 4.148.0,
+      which would replace the library that draws the panel and shapes the text
+      of six languages.
+
+      This is the core package and not Avalonia.Svg.Skia, whose last version is
+      11.3.0 and which cannot operate with Avalonia 12.
+    -->
+    <PackageReference Include="Svg.Skia" Version="5.1.1" />
+
     <!-- The dependency injection container. See ServiceRegistration.cs. The
          software uses the container only. It does not use the generic host,
          because Avalonia has its own lifetime. -->
@@ -94,6 +109,24 @@
     <!-- The licence of the fonts goes beside the binary, as the SIL Open Font
          License makes necessary. -->
     <Content Include="Assets\Fonts\OFL.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The brand mark. deploy/assets/ holds each asset of the brand, because the
+      images of the start and the stop are there and deploy-pi.sh takes them
+      from that one location. These two go beside the binary instead of in the
+      assembly, so that a person can put a mark on an appliance that operates
+      and restart it, with no build.
+
+      The branded file is a glob because git does not hold it. See .gitignore.
+    -->
+    <Content Include="..\..\deploy\assets\brand-mark.svg"
+             Link="Assets\brand-mark.svg"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\deploy\assets\branded\brand-mark.svg"
+             Link="Assets\branded\brand-mark.svg"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

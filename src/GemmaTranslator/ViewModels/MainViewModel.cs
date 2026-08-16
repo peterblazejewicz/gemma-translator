@@ -20,11 +20,13 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading.Channels;
+using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GemmaTranslator.Configuration;
 using GemmaTranslator.Services.Audio;
+using GemmaTranslator.Services.Branding;
 using GemmaTranslator.Services.Power;
 using GemmaTranslator.Services.PushToTalk;
 using GemmaTranslator.Services.Settings;
@@ -198,6 +200,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IPushToTalk pushToTalk,
         IPowerMonitor power,
         IUserSettingsStore store,
+        IBrandMark brandMark,
         SettingsViewModel settings,
         IOptions<AudioOptions> audioOptions,
         IOptions<SpeechOptions> speechOptions,
@@ -211,6 +214,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(pushToTalk);
         ArgumentNullException.ThrowIfNull(power);
         ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(brandMark);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(audioOptions);
         ArgumentNullException.ThrowIfNull(speechOptions);
@@ -223,6 +227,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _callIndicator = callIndicator;
         _store = store;
         Settings = settings;
+        BrandImage = brandMark.Image;
         _audioOptions = audioOptions.Value;
         _pieceWait = TimeSpan.FromSeconds(speechOptions.Value.TimeoutSeconds) + PieceMargin;
         _logger = logger;
@@ -258,6 +263,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// The text that the Moonshine licence conditions make necessary.
     /// </summary>
     public static string Attribution => "Powered by Moonshine AI";
+
+    /// <summary>
+    /// The mark of the appliance, or null when no file gave one. It does not
+    /// change while the software operates, thus it is not an observable
+    /// property.
+    /// </summary>
+    public IImage? BrandImage { get; }
 
     public SettingsViewModel Settings { get; }
 

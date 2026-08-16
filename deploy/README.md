@@ -1207,7 +1207,19 @@ The mark in these two files is the mark of `Assets/Branding.axaml`, which is a
 placeholder. The owner puts the mark of the brand in its position. Do not put a
 file of a brand in git.
 
+**`deploy/assets/branded/` is the location for that mark.** Put a file there
+with the same name as the placeholder, and `deploy-pi.sh --with-splash` takes
+it in place of the placeholder. Each file is taken on its own, thus an
+appliance can give its own image of the start and keep the placeholder of the
+stop. `.gitignore` holds each file of that directory out of git, and the script
+gives a warning for a name that the theme does not use.
+`deploy/assets/branded/README.md` gives the three properties that a file needs.
+
 ### 11.2 Installation
+
+`deploy-pi.sh --with-splash` does each step below in its step 8, and it does
+none of them without that argument. The steps stay here because a person who
+examines the theme, or removes it, does them one at a time.
 
 ```bash
 sudo apt-get install -y plymouth plymouth-themes
@@ -1281,6 +1293,41 @@ A disk with encryption asks for a password at the start. Plymouth calls
 `display_password`, it finds nothing, and the machine stays at the image with
 no prompt and no cause, for ever. Put that callback in the theme before the
 disk gets encryption, and not after.
+
+### 11.5 The mark of the software, and the one rule for the three assets
+
+`deploy/assets/` holds three assets with no brand and `deploy/assets/branded/`
+takes the same three with the brand of the owner. **One rule covers all three:
+if the branded file is there it is used, and if it is not the file with no brand
+is used. Each file follows the rule on its own.**
+
+| File | Who draws it | How it arrives |
+| --- | --- | --- |
+| `boot-splash-720x1280.png` | Plymouth | `deploy-pi.sh --with-splash`, step 8 |
+| `shutdown-splash-720x1280.png` | Plymouth | `deploy-pi.sh --with-splash`, step 8 |
+| `brand-mark.svg` | The software | The publish of step 4 puts it beside the binary |
+
+The two images go to `/usr/share/plymouth/themes/gemma/`. The mark goes to
+`publish/Assets/` and `publish/Assets/branded/`, and the software reads it at
+each start. Thus **a person can put a mark on an appliance that operates and
+restart it, with no build**:
+
+```bash
+cp brand-mark.svg ~/develop/gemma-translator/publish/Assets/branded/
+sudo systemctl restart gemma-translator
+journalctl -u gemma-translator -b | grep -i mark
+```
+
+The software draws the mark as the designer authored it. It does not recolour
+it and it does not follow the theme with it.
+
+**CAUTION: the letters of a mark must be outlines and not text.** A `<text>`
+element sends the reader of the SVG to the fonts of the system, and this machine
+carries four faces of DejaVu. The fonts that the software supplies to its own
+user interface are a different font manager and the reader never asks it. A mark
+with live text looks correct on the development host, which has the font, and
+wrong here. `deploy/assets/branded/README.md` gives each property that a file
+needs.
 
 ---
 

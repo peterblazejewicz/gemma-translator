@@ -18,6 +18,7 @@
 
 using GemmaTranslator.Configuration;
 using GemmaTranslator.Services.Audio;
+using GemmaTranslator.Services.Branding;
 using GemmaTranslator.Services.Power;
 using GemmaTranslator.Services.PushToTalk;
 using GemmaTranslator.Services.Settings;
@@ -172,6 +173,10 @@ public static class ServiceRegistration
         // and the disk gets one read.
         services.AddSingleton<IUserSettingsStore, JsonUserSettingsStore>();
         services.AddSingleton<Appearance>();
+
+        // The mark reads its file and rasterizes it in the constructor, thus it
+        // is a singleton and that work happens one time.
+        services.AddSingleton<IBrandMark, SvgBrandMark>();
 
         // The buttons: Avalonia gives no key event on the Raspberry Pi,
         // because the DRM backend raises a pointer event and a touch event

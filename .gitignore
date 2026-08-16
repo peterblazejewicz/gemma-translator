@@ -171,3 +171,18 @@ $RECYCLE.BIN/
 # and is not listed in GemmaTranslator.slnx. See CLAUDE.md section 5.2.
 # -----------------------------------------------------------------------------
 /tools/
+
+# =============================================================================
+# The assets of the brand
+# deploy/assets/ holds the three assets with no brand, which this repository
+# owns: the image of the start, the image of the stop, and the mark of the
+# software. A person who makes an appliance with their own brand puts their
+# files in deploy/assets/branded/ with the SAME names. deploy-pi.sh takes the
+# two images from there, and the software takes the mark from there.
+#
+# A file of a brand does not go in git. Thus this ignores each file below that
+# directory, whatever its type. README.md is tracked and it keeps the directory,
+# thus no .gitkeep is necessary. It is a drop box and not a location for source.
+# =============================================================================
+deploy/assets/branded/*
+!deploy/assets/branded/README.md

@@ -38,6 +38,9 @@ The software calls these components. It does not include their source.
   LiteRT-LM (Google LLC) — Apache License, Version 2.0
   Gemma model weights (Google LLC) — Apache License, Version 2.0
   Moonshine (Useful Sensors) — Moonshine Community Licence
+  Svg.Skia 5.1.1 (Wiesław Šoltés) — MIT License
+      https://github.com/wieslawsoltes/Svg.Skia
+      It reads the SVG of the mark. See Services/Branding/.
 
 The user interface shows "Powered by Moonshine AI", which the Moonshine
 licence conditions make necessary.
