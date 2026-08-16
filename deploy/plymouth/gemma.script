@@ -11,10 +11,32 @@ Window.SetBackgroundBottomColor(0, 0, 0);
 boot = Image("boot-splash-720x1280.png");
 shutdown = Image("shutdown-splash-720x1280.png");
 
+fun smaller(a, b) {
+    if (a < b) {
+        return a;
+    }
+    return b;
+}
+
+# MEASURED: a sprite of the image at its own size came on the panel larger than
+# the panel, and a person saw the middle of it only. Thus this fits the image
+# inside the window instead of trusting that the two agree.
+#
+# The proportion is kept: the one scale is the smaller of the two, thus the
+# whole image is on the panel and the ground of the theme fills the remainder.
+# A window that reports the size of the panel gives a scale of 1 and this
+# changes nothing.
 fun place(image) {
-    sprite = Sprite(image);
-    sprite.SetX((Window.GetWidth() - image.GetWidth()) / 2);
-    sprite.SetY((Window.GetHeight() - image.GetHeight()) / 2);
+    window_width = Window.GetWidth();
+    window_height = Window.GetHeight();
+
+    scale = smaller(window_width / image.GetWidth(),
+                    window_height / image.GetHeight());
+
+    fitted = image.Scale(image.GetWidth() * scale, image.GetHeight() * scale);
+    sprite = Sprite(fitted);
+    sprite.SetX((window_width - fitted.GetWidth()) / 2);
+    sprite.SetY((window_height - fitted.GetHeight()) / 2);
     return sprite;
 }
 

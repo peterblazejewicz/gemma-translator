@@ -399,6 +399,34 @@ if [ -f "$UDEV_TEMPLATE" ]; then
     fi
 fi
 
+# The console of the panel goes away.
+#
+# MEASURED: Plymouth gives the panel back when it stops, and the software draws
+# its first frame about 7 seconds later, because it starts litert-lm and waits
+# for the port. In that window the login of tty1 is on the display, and a person
+# sees text on an appliance that shows no text anywhere else.
+#
+# The appliance has no keyboard, thus a login on the panel serves nobody. With
+# no getty the display stays black until the warm-up screen comes.
+#
+# CAUTION: linger comes first and it is not optional. The session of that same
+# getty is what made /run/user/1000, which the unit gives to the software as
+# XDG_RUNTIME_DIR. With the getty gone and no linger, that directory is not
+# there. Nothing reads it today - a measurement of the running software gives
+# no open file below /run/user - and a variable that names a directory that
+# does not exist is a trap for whoever adds the next library.
+if command -v loginctl &> /dev/null; then
+    if [ "$(loginctl show-user "$CURRENT_USER" --property=Linger --value 2>/dev/null)" != "yes" ]; then
+        sudo loginctl enable-linger "$CURRENT_USER"
+        echo "[INFO] linger is on for ${CURRENT_USER}, thus /run/user/$(id -u) is made at each start."
+    fi
+fi
+
+if [ "$(systemctl is-enabled getty@tty1.service 2>/dev/null)" = "enabled" ]; then
+    sudo systemctl disable --now getty@tty1.service
+    echo "[INFO] The login of tty1 is off. The panel shows no console."
+fi
+
 echo "[3/9] Making the Python environment..."
 "${PROJECT_DIR}/setup.sh"
 
@@ -571,6 +599,22 @@ if [ "$WITH_SPLASH" = "1" ]; then
 
     sudo plymouth-set-default-theme -R gemma
 
+    # An earlier form of this step gave --ignore-serial-consoles to the five
+    # units of systemd that start plymouthd. That cannot work and the words of
+    # cmdline.txt below replace it: the plymouthd that draws the image of the
+    # start runs from the INITRAMFS, one second into the start, and no unit and
+    # no file of /etc exists at that moment. These files are ours, thus this
+    # takes them away.
+    for unit in plymouth-start plymouth-reboot plymouth-poweroff \
+                plymouth-halt plymouth-kexec; do
+        STALE="/etc/systemd/system/${unit}.service.d/99-gemma-panel.conf"
+        if [ -f "$STALE" ]; then
+            sudo rm -f "$STALE"
+            sudo rmdir "$(dirname "$STALE")" 2>/dev/null || true
+            echo "[INFO] Removed ${STALE}, which never applied."
+        fi
+    done
+
     # SECURITY OF THE FUNCTION, not of the data: this bounds the wait.
     #
     # plymouth-quit-wait.service of Debian gives `plymouth --wait` with
@@ -598,11 +642,31 @@ if [ "$WITH_SPLASH" = "1" ]; then
     # loglevel=4 or vt.global_cursor_default=1 from an earlier configuration
     # must give way, and not stand beside the value that this appliance needs.
     # set_cmdline_word replaces the value of a key that is there.
-    # loglevel=4 or vt.global_cursor_default=1 from an earlier configuration
-    # must give way, and not stand beside the value that this appliance needs.
-    # set_cmdline_word replaces the value of a key that is there.
+    # plymouth.ignore-serial-consoles IS WHAT PUTS THE IMAGE ON THE PANEL.
+    #
+    # MEASURED with plymouth.debug: cmdline.txt gives console=serial0,115200,
+    # which the Raspberry Pi 5 resolves to /dev/ttyAMA10. plymouthd finds that
+    # console, decides that this machine is a serial terminal, and writes:
+    #
+    #   serial consoles detected, managing them with details forced
+    #   creating devices for (renderer type: 4294967295) (terminal: /dev/ttyAMA10)
+    #   adding text display for terminal /dev/ttyAMA10
+    #
+    # 4294967295 is PLY_RENDERER_TYPE_NONE. plymouthd never opens /dev/dri, it
+    # draws text, and no error says so: the panel keeps the console and the
+    # image never comes.
+    #
+    # CAUTION: this must be a word of the kernel and not an argument of a unit
+    # of systemd. The plymouthd of the start comes from the initramfs at
+    # 00:00:01, which is before the root file system, thus /etc reaches it
+    # never. plymouthd reads this word itself. It also covers the four units of
+    # the stop, thus one word does the work of five files.
+    #
+    # The serial console stays. It is the one way in when the panel and the
+    # network are both gone, and this only tells plymouthd to pass over it.
     if [ -f "$CMDLINE_TXT" ]; then
-        for word in quiet splash logo.nologo vt.global_cursor_default=0 loglevel=3; do
+        for word in quiet splash logo.nologo vt.global_cursor_default=0 \
+                    loglevel=3 plymouth.ignore-serial-consoles; do
             if set_cmdline_word "$CMDLINE_TXT" "$word"; then
                 echo "[INFO] cmdline.txt: ${word}"
                 REBOOT_NEEDED=1

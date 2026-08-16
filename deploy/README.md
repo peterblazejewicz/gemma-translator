@@ -1252,12 +1252,35 @@ start.** See section 8.13.
 
 ### 11.3 How to make sure of the work
 
-**IMPORTANT: nobody has done these steps on the appliance.** The commands come
-from the documents of Plymouth and of Raspberry Pi OS. Do each step and record
-what occurs.
+**The theme is installed on the appliance and the machine started with it.**
+`deploy-pi.sh --with-splash` did each step of 11.2, and these are the
+measurements:
 
-1. `plymouth-set-default-theme` with no argument gives the name of the theme.
-   It must give `gemma`.
+| Item | Measured |
+| --- | --- |
+| `plymouth-set-default-theme` | `gemma` |
+| `plymouth-quit-wait.service` | `Result=success`, **29 ms** |
+| `plymouth-start.service` | 161 ms |
+| `plymouthd` after the start | Gone. It gave the panel back. |
+| The translator | `active`, and its mark is on the panel |
+
+**Thus the fear that section 11.3 held is not what occurs on this machine:**
+Plymouth takes the DRM device, gives it back inside 30 ms, and the software
+gets the panel. The limit of 30 s below never applies.
+
+**CAUTION: the limit stays, because 29 ms is one measurement and not a
+promise.** `/usr/lib/systemd/system/plymouth-quit-wait.service` of Debian gives
+`TimeoutSec=0`, and 0 in systemd is INFINITY. The unit of the translator is
+`After=` that service, thus with no limit a plymouth that does not stop keeps
+the panel for ever, and this appliance has no keyboard. `deploy-pi.sh` writes
+`/etc/systemd/system/plymouth-quit-wait.service.d/99-gemma-timeout.conf` with
+`TimeoutStartSec=30` and `JobTimeoutSec=30`. Do not remove that file.
+
+`plymouth-set-default-theme` is in `/usr/sbin`, thus a shell that is not a
+login shell needs the full path.
+
+1. `sudo /usr/sbin/plymouth-set-default-theme` with no argument gives the name
+   of the theme. It must give `gemma`.
 2. Start the machine again and look at the display. The mark must be upright
    and in the middle.
 3. `sudo plymouthd; sudo plymouth --show-splash` shows the image with no start
