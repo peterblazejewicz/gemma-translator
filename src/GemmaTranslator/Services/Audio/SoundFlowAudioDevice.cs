@@ -449,29 +449,33 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
 
             double seconds = Stopwatch.GetElapsedTime(ticks).TotalSeconds;
 
-            // TakeLoudest puts the value back to 0, thus it must operate one
-            // time for each piece and not one time for each piece that the log
+            // TakeLoudest puts the values back, thus it must operate one time
+            // for each piece and not one time for each piece that the log
             // writes. Inside the argument list a reader can make the log
             // conditional and stop the reset.
-            double loudest = _meter.TakeLoudest();
+            PlaybackLoudness loudest = _meter.TakeLoudest();
 
             LogPlayed(
                 _logger,
                 seconds,
                 speech.WavBytes.Length,
                 format.SampleRate,
-                loudest,
+                loudest.Decibels,
+                loudest.Magnitude,
                 _meter.Frames);
         }
         catch (TimeoutException)
         {
-            // This path must take the value too, or the largest level of a
+            // This path must take the values too, or the largest level of a
             // piece that stopped goes in the line of the piece after it.
+            PlaybackLoudness loudest = _meter.TakeLoudest();
+
             LogPlaybackDidNotEnd(
                 _logger,
                 player.Duration,
                 budget.TotalSeconds,
-                _meter.TakeLoudest());
+                loudest.Decibels,
+                loudest.Magnitude);
         }
         finally
         {
@@ -498,6 +502,12 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
             {
                 Retire(player);
             }
+
+            // A person who cuts the sentence short writes no line, thus the
+            // values must go here or they land in the line of the piece after
+            // this one. A second take gives the floor and 0, thus the two
+            // paths that write a line pay nothing.
+            _ = _meter.TakeLoudest();
 
             // SECURITY CONTROL. The player is disposed above, thus nothing
             // reads these bytes after this line. See the finally of PlayAsync.
@@ -1024,23 +1034,25 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The speaker played {bytes} bytes in {seconds:F2} s at {sampleRate} Hz. The largest sound is {loudest:F1} dBFS, and the last callback of the speaker gave {frames} samples.")]
+        Message = "The speaker played {bytes} bytes in {seconds:F2} s at {sampleRate} Hz. The largest sound is {loudest:F1} dBFS and the largest sample is {peak:F3}. A sample of 1.000 or more says that the speaker clips. The last callback of the speaker gave {frames} samples.")]
     private static partial void LogPlayed(
         ILogger logger,
         double seconds,
         int bytes,
         int sampleRate,
         double loudest,
+        double peak,
         int frames);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The audio of {audioSeconds:F1} s did not come to its end in {budgetSeconds:F1} s. The software stops it. The largest sound before it stopped is {loudest:F1} dBFS. A value of 0.0 for the audio says that the decoder gave no length, and that the budget is the value of the software.")]
+        Message = "The audio of {audioSeconds:F1} s did not come to its end in {budgetSeconds:F1} s. The software stops it. The largest sound before it stopped is {loudest:F1} dBFS and the largest sample is {peak:F3}. A sample of 1.000 or more says that the speaker clips. A value of 0.0 for the audio says that the decoder gave no length, and that the budget is the value of the software.")]
     private static partial void LogPlaybackDidNotEnd(
         ILogger logger,
         double audioSeconds,
         double budgetSeconds,
-        double loudest);
+        double loudest,
+        double peak);
 
     [LoggerMessage(
         Level = LogLevel.Error,

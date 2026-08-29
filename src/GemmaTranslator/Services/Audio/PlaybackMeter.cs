@@ -7,9 +7,15 @@ using SoundFlow.Structs;
 
 namespace GemmaTranslator.Services.Audio;
 
+/// <summary>
+/// The largest RMS of one callback in DECIBELS, and the largest magnitude of
+/// one sample. A magnitude of 1.0 or more says that the speaker clips.
+/// </summary>
+internal readonly record struct PlaybackLoudness(double Decibels, float Magnitude);
+
 /// <remarks>
 /// <para>
-/// This class keeps four numbers and no audio: no ring, no window, and no
+/// This class keeps five numbers and no audio: no ring, no window, and no
 /// transform, thus it needs none of the wipes of the microphone path.
 /// </para>
 /// <para>
@@ -48,6 +54,7 @@ internal sealed class PlaybackMeter(AudioFormat format) : AudioAnalyzer(format)
         BitConverter.SingleToInt32Bits((float)FloorDecibels);
 
     private int _loudestBits = QuietBits;
+    private int _peakSampleBits;
 
     private long _ticks;
 
@@ -75,16 +82,19 @@ internal sealed class PlaybackMeter(AudioFormat format) : AudioAnalyzer(format)
     }
 
     /// <summary>
-    /// The largest DECIBELS since the call before this one, which it puts back
-    /// to the floor.
+    /// The two largest values since the call before this one, which it puts
+    /// back to their floors. One call gives both, thus a caller cannot take one
+    /// and leave the other at the value of the piece that ended.
     /// </summary>
     /// <remarks>
-    /// CAUTION: the value that goes back is the FLOOR and not 0. Speech gives a
+    /// CAUTION: the decibels go back to the FLOOR and not to 0. Speech gives a
     /// negative value of decibels, thus a reset to 0 would make each test of
-    /// the raise below false and the peak would never move again.
+    /// the raise below false and the value would never move again. The
+    /// magnitude goes back to 0, which is its own floor.
     /// </remarks>
-    public double TakeLoudest() =>
-        BitConverter.Int32BitsToSingle(Interlocked.Exchange(ref _loudestBits, QuietBits));
+    public PlaybackLoudness TakeLoudest() => new(
+        BitConverter.Int32BitsToSingle(Interlocked.Exchange(ref _loudestBits, QuietBits)),
+        BitConverter.Int32BitsToSingle(Interlocked.Exchange(ref _peakSampleBits, 0)));
 
     /// <remarks>CAUTION: the caller must stop the device first.</remarks>
     public void Reset()
@@ -93,6 +103,7 @@ internal sealed class PlaybackMeter(AudioFormat format) : AudioAnalyzer(format)
         _levelBits = 0;
         _frames = 0;
         Volatile.Write(ref _loudestBits, QuietBits);
+        Volatile.Write(ref _peakSampleBits, 0);
     }
 
     protected override void Analyze(ReadOnlySpan<float> buffer, int channels)
@@ -103,10 +114,22 @@ internal sealed class PlaybackMeter(AudioFormat format) : AudioAnalyzer(format)
         }
 
         double square = 0;
+        float peak = 0;
 
         foreach (float sample in buffer)
         {
             square += (double)sample * sample;
+
+            // This needs no test for a NaN: each comparison with a NaN is
+            // false, thus the test below refuses it. DecibelsOf needs one
+            // because Math.Clamp passes a NaN through and a comparison does
+            // not.
+            float magnitude = Math.Abs(sample);
+
+            if (magnitude > peak)
+            {
+                peak = magnitude;
+            }
         }
 
         int frames = buffer.Length / Math.Max(channels, 1);
@@ -129,13 +152,24 @@ internal sealed class PlaybackMeter(AudioFormat format) : AudioAnalyzer(format)
         // and a value that stops says only that the ceiling is too low. The
         // journal of the appliance sites CeilingDecibels from this number.
         //
-        // This raise and the Exchange of TakeLoudest can cross and lose the
+        // The magnitude goes with it, because an RMS of one callback cannot
+        // show one sample that clipped, and it is NOT clamped. This meter sits
+        // on the master mixer, thus a value above 1.0 says that the speaker
+        // clips and not which part made it: the synthesis, the resample of
+        // miniaudio, and the sum of the mixer are each sufficient.
+        //
+        // Each raise and the Exchange of TakeLoudest can cross and lose the
         // reset. Do NOT make a CAS loop of it: a retry with no limit is the one
         // thing this thread must not do. The caller takes the value when the
         // piece is complete and the level is falling, thus the test is false.
         if (decibels > BitConverter.Int32BitsToSingle(Volatile.Read(ref _loudestBits)))
         {
             Volatile.Write(ref _loudestBits, BitConverter.SingleToInt32Bits((float)decibels));
+        }
+
+        if (peak > BitConverter.Int32BitsToSingle(Volatile.Read(ref _peakSampleBits)))
+        {
+            Volatile.Write(ref _peakSampleBits, BitConverter.SingleToInt32Bits(peak));
         }
 
         // The timestamp goes last. A reader that sees it then sees the level
