@@ -448,13 +448,28 @@ The guard refuses a value that is not a number, a value that starts with 0,
 and a value that is not between 2500000 and 4300000. It writes a CAUTION and
 keeps 3200000.
 
-**TO BE UNDERSTOOD: the journal of this machine is in memory and not on the
-card.**
+**The journal stays, and step 5c of `deploy-pi.sh` is what makes it stay.**
 
-**Thus the line that gives the cause of a shutdown does not stay after the
-machine starts again, and a person who asks why the appliance stopped has no
-answer. `Storage=persistent` in `journald.conf` corrects this, and it writes
-more to the card.**
+Raspberry Pi OS gives `Storage=volatile` in
+`/usr/lib/systemd/journald.conf.d/40-rpi-volatile-storage.conf`, to spare an
+SD card. With that value the line that gives the cause of a shutdown goes away
+when the machine starts again, and a person who asks why the appliance stopped
+has no answer. This appliance boots from NVMe, thus the cause of that value
+does not apply.
+
+The installation writes
+`/etc/systemd/journald.conf.d/99-gemma-persistent.conf` with
+`Storage=persistent` and a limit of 200M.
+
+| Item | Value |
+| --- | --- |
+| The name must sort after `40-` | A drop-in beats the main file, and the last drop-in wins. `Storage=` in `/etc/systemd/journald.conf` does nothing. |
+| The test | The device of the root filesystem. A device that the script cannot identify counts as a card, thus the journal stays in memory. |
+| `journalctl -b -1` | It gives an answer from the NEXT start of the machine. A restart of journald does not move a journal that is in memory on to the disk. |
+
+**CAUTION: a log line must hold no part of what a person said.** The journal
+now rests on a disk that survives a power cut. Section 5.4 of `CLAUDE.md` and
+the swap of step 7 give the same rule for the same cause.
 
 ---
 

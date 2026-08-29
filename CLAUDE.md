@@ -255,6 +255,11 @@ document that it comes from, by the identifier of that document.
 A Raspberry Pi 5 with **16 GB** of RAM. The system image is Raspberry Pi OS
 Lite.
 
+The appliance boots from an **NVMe drive over PCIe**. There is no SD card.
+Thus a rule that exists to spare the write endurance of a card does not apply
+here: `deploy-pi.sh` makes the journal of systemd persistent, and it makes that
+decision from the device of the root filesystem, not from this document.
+
 **CAUTION: this line said 8 GB and no measurement ever gave that value.**
 Upstream uses 8 GB. The appliance had a 4 GB board first, and `/proc/meminfo`
 gave `MemTotal: 4146288 kB`. A person then changed the board, which is the

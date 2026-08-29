@@ -512,6 +512,59 @@ echo "[5/9] Downloading LiteRT model..."
 echo "[5b/9] Downloading the models of the speech..."
 "${PROJECT_DIR}/download_speech_models.sh"
 
+echo "[5c/9] Making the journal keep the boot before this one..."
+# Raspberry Pi OS ships
+# /usr/lib/systemd/journald.conf.d/40-rpi-volatile-storage.conf with
+# Storage=volatile, which spares the SD card. The cost is that no log survives
+# a restart. After a machine turns itself off, the one thing that says why is
+# the log of the boot that ended, and with that setting the log is gone.
+#
+# The override must SORT AFTER 40-, because the drop-ins beat the main file
+# and the last one wins. A value in /etc/systemd/journald.conf does nothing.
+#
+# This step goes BEFORE the guard, and not after it. journald throws away the
+# log of the current boot when it restarts, and the banner of the guard, which
+# gives every threshold that the guard operates on, is written in the seconds
+# after the guard starts. The step that keeps the log must come first, or it
+# discards the lines that it exists to keep.
+#
+# On an SD card the write endurance is worth more than the log. The test is the
+# device of the root filesystem, and a device that this script cannot identify
+# counts as a card: a rule that spares a card must not write to one that it
+# failed to recognize.
+JOURNAL_DROPIN="/etc/systemd/journald.conf.d/99-gemma-persistent.conf"
+ROOT_SOURCE="$(findmnt -no SOURCE / 2>/dev/null | head -n 1)"
+ROOT_SOURCE="${ROOT_SOURCE:-unknown}"
+
+case "$ROOT_SOURCE" in
+    *mmcblk* | *mapper* | /dev/root | unknown)
+        echo "[INFO] The root filesystem is on ${ROOT_SOURCE}. The journal"
+        echo "[INFO] stays in RAM, to keep the write endurance of a card."
+        ;;
+    *)
+        # Each command in this step is a convenience, and none of them is worth
+        # the end of an installation. From step 2 the boot of the machine is
+        # already changed and there is no translator yet, thus an exit here
+        # gives a machine that starts and does nothing.
+        if sudo mkdir -p /etc/systemd/journald.conf.d \
+            && printf '%s\n' \
+                '[Journal]' \
+                'Storage=persistent' \
+                'SystemMaxUse=200M' \
+                'SystemMaxFileSize=20M' \
+                | sudo install -m 644 /dev/stdin "$JOURNAL_DROPIN" \
+            && sudo systemctl restart systemd-journald; then
+            echo "[INFO] The journal is persistent, with a limit of 200M."
+            echo "[INFO] From the NEXT restart of the machine, the boot before"
+            echo "[INFO] it is at: journalctl -b -1"
+        else
+            echo "[CAUTION] The journal did not become persistent. The"
+            echo "[CAUTION] installation continues, and the log of a boot that"
+            echo "[CAUTION] ends does not stay."
+        fi
+        ;;
+esac
+
 echo "[6/9] Installing the low battery guard..."
 # The guard stops the machine when the voltage of the cells stays low. Without
 # it, the cells go empty, the Raspberry Pi loses its electrical supply in one
