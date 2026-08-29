@@ -160,6 +160,10 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
         _options = options.Value;
         _logger = logger;
 
+        // Before the first read of the list of the devices, which is what
+        // makes libasound write.
+        AlsaErrorLog.Install(logger);
+
         _buffer = new float[_options.SampleRate * _options.MaximumRecordingSeconds];
         _deviceSampleRate = _options.SampleRate;
         _spectrum = new Spectrum();
@@ -636,6 +640,11 @@ public sealed partial class SoundFlowAudioDevice : IAudioCapture, IAudioPlayback
             do
             {
                 PollPresence();
+
+                // The read above is what makes libasound write, and its
+                // handler only keeps the message. This thread can wait for the
+                // lock of the log; the audio thread cannot.
+                AlsaErrorLog.Drain(_logger);
             }
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false));
         }
