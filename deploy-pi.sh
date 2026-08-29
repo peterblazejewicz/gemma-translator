@@ -505,6 +505,13 @@ dotnet publish "${PROJECT_DIR}/src/GemmaTranslator" \
 echo "[5/9] Downloading LiteRT model..."
 "${PROJECT_DIR}/download_model.sh"
 
+# The models of the speech are not in the step above. That one gives the model
+# of the translation to litert-lm, and this one fills the cache that
+# libmoonshine.so reads. An appliance with one and not the other starts, shows
+# the user interface, and hears nothing.
+echo "[5b/9] Downloading the models of the speech..."
+"${PROJECT_DIR}/download_speech_models.sh"
+
 echo "[6/9] Installing the low battery guard..."
 # The guard stops the machine when the voltage of the cells stays low. Without
 # it, the cells go empty, the Raspberry Pi loses its electrical supply in one
