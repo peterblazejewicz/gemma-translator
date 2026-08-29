@@ -311,6 +311,7 @@ value is in microvolts.
 | Less than 2000000, or more than 4400000 | Not possible, thus hold the counts |
 | A fall of more than 300000 from a value that was not low | Not possible, thus hold the counts |
 | The mains supplies the machine, for a maximum of 120 reads | Hold the counts |
+| Below 3200000 and at 3000000 or above, with no fall of 10000 in the last 60 reads | Hold the counts, and clear them |
 | Less than 3000000, for 3 reads together | Stop the machine |
 | Less than 3200000, for 12 net reads | Stop the machine |
 | 3250000 or more | Remove 1 from the count of the low reads |
@@ -318,6 +319,37 @@ value is in microvolts.
 | The read gives nothing | Hold the counts |
 
 3.20 V is the value that Geekworm uses in its own script.
+
+**The low tier needs a FALL, and not only a level.** The guard keeps a
+reference, which is the last reading that fell by 10000 microvolts or more. A
+rise takes the reference up and arms nothing, because a voltage that goes up
+is not a discharge. When 60 reads give no such fall, the guard holds the low
+tier and stops no machine.
+
+The cause is measured. An X1201 with an EMPTY holder still answers at I2C
+0x36, still reports `present` as 1, and still gives about 3176000 microvolts,
+which is below the low value. That reading moved 3750 microvolts, three steps
+of the gauge, in fifty minutes. Before this rule the guard stopped the machine
+about 11 minutes after each start, and the machine started again, six times.
+
+Two properties of this rule:
+
+- **The emergency tier is not affected.** A reading below 3000000 counts and
+  stops the machine, whatever the movement gives. Cells at that voltage take
+  damage while a person examines the sensor.
+- **The guard holds until it sees a fall, and not the opposite.** At the start
+  it has no evidence that a pack is there, thus it stops nothing. A pack that
+  supplies this machine clears that in less than a minute, because a Raspberry
+  Pi 5 uses whole watts and a pack below 3.2 V that carries that load falls by
+  tens of millivolts each minute.
+
+**CAUTION: this rule OVERRIDES the maximum of 120 reads in section 9.3.** A
+gauge that was never seen to fall holds for all time. Thus a charger that
+holds a degraded pack below 3.2 V, and a pack whose protection board has
+tripped, both read low and flat, and the guard stops the machine for neither.
+No cell is run flat in either case, because the mains is present. What is lost
+is the clean stop before the supply goes away. A machine that turns itself off
+each 11 minutes in a public place was judged the worse of the two.
 
 ### 9.2 Why the voltage, and not the charge
 
@@ -368,8 +400,17 @@ sudo systemctl restart gemma-battery-guard
 journalctl -u gemma-battery-guard -f
 ```
 
-The machine stops after 12 reads, which is 60 s. With the mains connected it
-stops after 132 reads, which is 11 minutes, because of section 9.3.
+The machine stops after 12 reads, which is 60 s.
+
+**CAUTION: THE ORDER IS NOT FREE, AND THE TEST GIVES NOTHING WITH THE MAINS
+CONNECTED.** The low tier needs a fall of 10000 microvolts in 60 reads, and a
+pack that a charger holds is the most quiet thing on the board. Thus the guard
+holds and the machine does not stop. On the cells the pack falls, the guard
+arms, and the test measures the path that an appliance really uses.
+
+**CAUTION: DO NOT DO THIS ON AN APPLIANCE WITH AN EMPTY HOLDER.** With no
+cells the X1201 gives no ride-through, thus the USB-C is the only supply and
+the machine stops the moment it goes out.
 
 The value goes away at the next start of the machine, because systemd keeps it
 in memory only.

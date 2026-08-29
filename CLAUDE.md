@@ -394,6 +394,32 @@ The cell diameter of 18.5 mm is a maximum, thus it is the correct value for a
 keep-out. The MEASURED body of the connector of the electrical supply is 6 mm
 thick.
 
+**CAUTION: THE APPLIANCE HAS NO CELLS IN THE HOLDER AT THIS TIME.** It operates
+from the USB-C of the X1201 only. The table above gives the cells that the
+enclosure must accept. It does not give the state of the machine on the bench.
+An appliance with no cells has no ride-through: a supply that goes away stops
+the Raspberry Pi in one moment.
+
+**An empty holder does not read as an empty holder.** The MAX17040 gauge at
+I2C 0x36 answers, `present` reads 1, `status` reads Unknown, and `capacity`
+reads 0 while `voltage_now` gives about 3176000 microvolts. That voltage is
+*below* the low threshold of the guard, thus an empty holder is the perfect
+likeness of a pack that is about to die. A measurement on this appliance gives
+a movement of 3750 microvolts, three steps of the ADC, in fifty minutes.
+
+Two rules come from that measurement, and the code holds both:
+
+1. `deploy/gemma-battery-guard.sh` powers nothing off on a level alone. A deep
+   discharge is a voltage that FALLS, and a reading that does not move is not
+   one. See the movement test at `MOVEMENT_UV`.
+2. `deploy-pi.sh` installs the guard and does not enable it. A person says that
+   the cells are in with `GEMMA_UPS_CELLS_FITTED=1`. No reading from the board
+   can replace that statement.
+
+**CAUTION: A MISSING 0x36 IS A POGO PIN THAT DOES NOT TOUCH. IT IS NOT AN EMPTY
+HOLDER.** Geekworm answers this question in its own FAQ. Software that reads a
+silent gauge as "no cells" gives the wrong answer to a fault of the assembly.
+
 **CAUTION: A PERSON MUST NOT CONNECT AN ELECTRICAL SUPPLY TO THE USB-C OF THE
 RASPBERRY PI. CHARGE THROUGH THE USB-C OF THE X1201 AND THROUGH NOTHING ELSE.**
 

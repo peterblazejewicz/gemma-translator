@@ -76,7 +76,40 @@ EMERGENCY_READS=3
 # enough current, so a rule that latched on any recent high reading would
 # never fire while the pack drained. Holding per read merely slows the count
 # in that case; it does not stop it.
+#
+# CAUTION: the movement test below OVERRIDES this bound. A gauge never seen to
+# fall holds for ever. The cost is taken knowingly: a charger holding a
+# degraded pack, and a pack with a tripped protection board, both read low and
+# flat and get no shutdown. Neither is being discharged, so no cell is run
+# flat; what is lost is the clean stop before the mains goes. See section 9.1
+# of deploy/README.md.
 MAINS_HOLD_READS=120
+
+# The movement test, and the reason a level on its own is not enough.
+#
+# A deep discharge is a FALLING voltage. That is what the words mean. A
+# reading that sits still is not a discharge whatever its level, and powering
+# a machine off because of one protects nothing at all.
+#
+# This is not a theoretical case. The gauge answers with an empty holder. On
+# an X1201 with no cells and the mains present the MAX17040 keeps its I2C
+# address, reports present=1, and puts the voltage at about 3176000
+# microvolts with a capacity of 0 - below LOW_UV, and the perfect likeness of
+# a pack that is about to die. It moved 3750 microvolts, three steps of the
+# ADC, in fifty minutes. A pack that is really being discharged cannot do
+# that. It falls, and under this appliance's bursty load it also sags and
+# recovers by tens of millivolts within seconds.
+#
+# Only a FALL counts. An X1201 with an empty holder still answers, and gives
+# 3176000 microvolts that drifted 3750 in fifty minutes - below LOW_UV, and
+# UPWARD. A test on the size of the change would re-arm on that drift about
+# every two hours, for ever. See section 9.1 of deploy/README.md.
+#
+# MOVEMENT_UV is above the noise of three gauge steps and BELOW the tens of
+# millivolts that line 53 gives for a sag under load. That is deliberate: with
+# a fall-only test a sag arms the guard, which is the safe direction.
+MOVEMENT_UV=10000
+MOVEMENT_WINDOW_READS=60
 
 # How often the guard says it is alive and what it reads. Silence must not be
 # the signature of both a healthy appliance and a guard that went blind.
@@ -232,6 +265,7 @@ log "The low battery guard starts. The file is ${VOLTAGE_FILE}."
 log "Low is ${LOW_UV} microvolts for ${LOW_READS} net reads, and a read at ${RESET_UV} or above takes one off the count."
 log "Emergency is ${EMERGENCY_UV} microvolts for ${EMERGENCY_READS} reads together."
 log "A reading outside ${FLOOR_UV} to ${CEILING_UV}, or a fall of more than ${MAX_FALL_UV} in one read, is not believed."
+log "The low tier needs a fall of ${MOVEMENT_UV} microvolts inside ${MOVEMENT_WINDOW_READS} reads. With no fall the guard stops no machine, and the emergency tier is not affected."
 
 low_count=0
 emergency_count=0
@@ -242,6 +276,13 @@ held_reads=0
 failed_reads=0
 mains_held=0
 heartbeat=0
+static_ref_uv=""
+static_reads=0
+
+# Starts at 1, and that is the safety property. No fall has been seen, thus
+# there is no evidence of a pack, thus the guard stops nothing. Safe from the
+# first read and not from the 61st. A real pack clears it inside a minute.
+sensor_static=1
 
 # Say a held condition once, then again every REPEAT_READS reads. A guard that
 # cannot read its sensor is a guard that protects nothing, and that must not
@@ -253,12 +294,65 @@ hold() {
     held_reads=$((held_reads + 1))
 }
 
+# Follow the voltage, and set sensor_static from it.
+#
+# The reference is the last reading that moved, not the previous reading. That
+# is what makes a slow drain visible: a pack that falls one millivolt per read
+# leaves its reference far behind inside one window, while a gauge with no
+# pack under it never leaves its reference at all. A comparison against the
+# neighbour would call that same slow pack static, and disarm the guard on the
+# machine that needs it.
+track_movement() {
+    read_uv="$1"
+
+    if [ -z "$static_ref_uv" ]; then
+        static_ref_uv="$read_uv"
+        static_reads=0
+        return
+    fi
+
+    # A fall, and the comparison holds the boundary. A fall of exactly
+    # MOVEMENT_UV is a fall: a pack that sags by that much under load must arm
+    # the guard, and a greater-than would throw that reading away.
+    if [ "$read_uv" -le "$((static_ref_uv - MOVEMENT_UV))" ]; then
+        static_ref_uv="$read_uv"
+        static_reads=0
+
+        if [ "$sensor_static" -eq 1 ]; then
+            sensor_static=0
+            log "The voltage fell to ${read_uv} microvolts. The guard watches a pack again."
+        fi
+
+        return
+    fi
+
+    # A rise takes the reference up with it, so that a charge does not leave a
+    # low reference behind for the fall test to measure from. It arms nothing:
+    # a voltage that goes up is not a discharge.
+    if [ "$read_uv" -gt "$static_ref_uv" ]; then
+        static_ref_uv="$read_uv"
+    fi
+
+    static_reads=$((static_reads + 1))
+
+    if [ "$static_reads" -ge "$MOVEMENT_WINDOW_READS" ] && [ "$sensor_static" -eq 0 ]; then
+        sensor_static=1
+        alert "The voltage has not fallen by ${MOVEMENT_UV} microvolts in ${MOVEMENT_WINDOW_READS} reads. The guard stops no machine on a level alone."
+    fi
+}
+
 while true; do
     if microvolts="$(read_microvolts)"; then
         if [ "$failed_reads" -ne 0 ]; then
             log "The guard reads ${VOLTAGE_FILE} again."
             failed_reads=0
             held_reads=0
+        fi
+
+        # A reading the guard refuses to believe must not move the reference
+        # of the control that decides a poweroff.
+        if [ "$microvolts" -ge "$FLOOR_UV" ] && [ "$microvolts" -le "$CEILING_UV" ]; then
+            track_movement "$microvolts"
         fi
 
         if [ "$microvolts" -lt "$FLOOR_UV" ] || [ "$microvolts" -gt "$CEILING_UV" ]; then
@@ -269,6 +363,26 @@ while true; do
             && [ "$((last_uv - microvolts))" -gt "$MAX_FALL_UV" ]; then
             emergency_count=0
             hold "The voltage fell from ${last_uv} to ${microvolts} microvolts in one read, which these cells cannot do."
+        elif [ "$sensor_static" -eq 1 ] \
+            && [ "$microvolts" -lt "$LOW_UV" ] \
+            && [ "$microvolts" -ge "$EMERGENCY_UV" ]; then
+            # THE POSITION OF THIS BRANCH IS THE CONTROL. It must stay above
+            # the mains branch and above every branch that can reach
+            # power_off. Move it down the chain and the appliance turns itself
+            # off every few minutes, for ever, on a healthy mains supply.
+            #
+            # EMERGENCY_UV is outside it on purpose: cells under 3.0 V take
+            # damage while a person examines the sensor.
+            #
+            # Both counts CLEAR, where every other hold in this file only
+            # holds. The others are absence of evidence; this one is a finding
+            # that nothing is being discharged. A held low_count could never
+            # fall again - only a read at RESET_UV or above removes one, and
+            # this reading is below LOW_UV - so it would fire on the first
+            # read that cleared sensor_static.
+            emergency_count=0
+            low_count=0
+            hold "The voltage is ${microvolts} microvolts and has not fallen for ${static_reads} reads."
         elif on_mains && [ "$mains_held" -lt "$MAINS_HOLD_READS" ]; then
             emergency_count=0
             mains_held=$((mains_held + 1))
