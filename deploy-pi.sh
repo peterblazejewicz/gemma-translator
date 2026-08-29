@@ -50,6 +50,7 @@ CURRENT_USER="$(whoami)"
 CURRENT_UID="$(id -u)"
 WITH_SPLASH=0
 WITH_RTC_CHARGE=0
+WITH_GPIO_FAN=0
 
 # Put one word on the ONE line of cmdline.txt, and give 0 when the file
 # changed. A word of the form key=value takes the position of a key that is
@@ -93,13 +94,20 @@ for arg in "$@"; do
     case "$arg" in
         --with-splash) WITH_SPLASH=1 ;;
         --with-rtc-charge) WITH_RTC_CHARGE=1 ;;
+        --with-gpio-fan) WITH_GPIO_FAN=1 ;;
         *)
             echo "[ERROR] ${arg} is not a known argument."
             echo "[ERROR] Usage: ./deploy-pi.sh [--with-splash] [--with-rtc-charge]"
+            echo "[ERROR]                       [--with-gpio-fan]"
             echo "[ERROR]"
             echo "[ERROR] --with-rtc-charge puts a charging voltage on the cell of"
             echo "[ERROR] the clock. Give it with a rechargeable cell only, which"
             echo "[ERROR] is an ML-2020 and not a CR2032 and not a LIR2032."
+            echo "[ERROR]"
+            echo "[ERROR] --with-gpio-fan moves the fan of the Active Cooler to"
+            echo "[ERROR] GPIO12. Give it on a board whose 4-pin fan socket is"
+            echo "[ERROR] gone. On a board that still has its socket it takes the"
+            echo "[ERROR] fan away from the pin that the socket uses."
             exit 1
             ;;
     esac
@@ -330,6 +338,46 @@ if [ -f "$OVERLAY_SRC" ] && [ -d "${BOOT_DIR}/overlays" ]; then
     fi
 else
     echo "[INFO] ${BOOT_DIR}/overlays not found. Skipping the GPIO overlay."
+fi
+
+# The fan of the Active Cooler on GPIO12, with --with-gpio-fan only.
+#
+# CAUTION: GIVE THIS ARGUMENT ONLY ON A BOARD WHOSE 4-PIN FAN SOCKET IS GONE.
+# The overlay takes /cooling_fan away from the pin of the socket and gives it
+# to GPIO12. On a board that still has its socket, the fan of that socket then
+# gets no control from the governor.
+#
+# See deploy/gemma-fan-gpio12-overlay.dts for the measurement and for the
+# polarity, which is not the polarity of the base device tree.
+FAN_OVERLAY_SRC="${PROJECT_DIR}/deploy/gemma-fan-gpio12-overlay.dts"
+
+if [ "$WITH_GPIO_FAN" = "1" ] \
+    && [ -f "$FAN_OVERLAY_SRC" ] && [ -d "${BOOT_DIR}/overlays" ]; then
+    CONFIG_TXT="${BOOT_DIR}/config.txt"
+    TMP_FAN_DTBO="$(mktemp)"
+    dtc -@ -I dts -O dtb -o "$TMP_FAN_DTBO" "$FAN_OVERLAY_SRC"
+
+    if ! sudo cmp -s "$TMP_FAN_DTBO" "${BOOT_DIR}/overlays/gemma-fan-gpio12.dtbo"; then
+        sudo install -m 644 "$TMP_FAN_DTBO" \
+            "${BOOT_DIR}/overlays/gemma-fan-gpio12.dtbo"
+        echo "[INFO] Installed ${BOOT_DIR}/overlays/gemma-fan-gpio12.dtbo"
+        REBOOT_NEEDED=1
+    else
+        echo "[INFO] gemma-fan-gpio12.dtbo is current."
+    fi
+    rm -f "$TMP_FAN_DTBO"
+
+    if ! grep -qE '^[[:space:]]*dtoverlay=gemma-fan-gpio12[[:space:]]*$' "$CONFIG_TXT"; then
+        printf '\n[all]\ndtoverlay=gemma-fan-gpio12\n' \
+            | sudo tee -a "$CONFIG_TXT" > /dev/null
+        echo "[INFO] Added dtoverlay=gemma-fan-gpio12 to config.txt"
+        REBOOT_NEEDED=1
+    else
+        echo "[INFO] config.txt already has dtoverlay=gemma-fan-gpio12."
+    fi
+elif [ "$WITH_GPIO_FAN" = "1" ]; then
+    echo "[CAUTION] --with-gpio-fan was given and the overlay did not go in."
+    echo "[CAUTION] The fan of this appliance has no control from the governor."
 fi
 
 # The charger of the cell of the real time clock, with --with-rtc-charge only.

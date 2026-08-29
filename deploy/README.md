@@ -1684,3 +1684,115 @@ time, stop the machine, take the mains AND the cells of the X1201 away, wait,
 and give the power back. Read `timedatectl` before NTP corrects anything. A cell
 that holds gives the correct time; a cell that is empty gives a date near the
 epoch. Wait a day after 14.2 first, so that the cell is full.
+
+---
+
+## 15. The fan of the Active Cooler on GPIO12
+
+**CAUTION: THIS SECTION IS FOR A BOARD WHOSE 4-PIN FAN SOCKET IS GONE.** The
+socket of this appliance was damaged and a person removed it. On a Raspberry Pi
+5 that still has its socket, do not do this: the overlay takes the fan away
+from the pin of the socket, and the fan of that socket then gets no control.
+
+### 15.1 The wiring
+
+| Wire | Goes to | What it is |
+| --- | --- | --- |
+| Red | 5 V of the X1201 | the supply |
+| Black | Ground of the X1201 | the return, and the reference of the two signals |
+| Blue | GPIO12 | the PWM that the Raspberry Pi drives |
+| Yellow | GPIO13 | the tachometer that the fan drives |
+
+The ground must land. The two signals have no return path without it, and the
+X1201 shares its ground with the Raspberry Pi through the pogo pins.
+
+**The colours came from a measurement and not from a document.** The product
+brief `RP-008188-DS-2` gives "5 V DC supplied via four-pin fan header on
+Raspberry Pi 5. Pulse width modulation control with tachometer. 1.09 CFM.
+8000 RPM +/- 15%", and it gives no pinout. To tell the two signals apart, make
+each pin an input and see which one moves:
+
+```bash
+sudo pinctrl set 12 ip pu
+sudo pinctrl set 13 ip pu
+gpiomon -c gpiochip0 -b pull-up -e both 12 13
+```
+
+The line that toggles is the tachometer. Both pins stay inputs, thus no two
+outputs can meet.
+
+### 15.2 Why the fan stops when a person connects the blue wire
+
+GPIO12 has a pull-down and no function until an overlay gives it one:
+
+```text
+12: no    pd | -- // GPIO12 = none
+```
+
+The PWM input of a 4-wire fan has a pull-up on the fan, thus a wire that is
+loose gives 100 %. A pin that is held low gives 0 %, and the fan stops. This is
+not a fault of the fan and not of the wiring.
+
+### 15.3 How to put it on
+
+```bash
+./deploy-pi.sh --with-gpio-fan
+sudo reboot
+```
+
+The argument is not optional. Without it the installation leaves the fan alone,
+because the overlay is wrong for a board with a socket. See section 15.1.
+
+**CAUTION: DO NOT TEST THIS OVERLAY WITH THE `dtoverlay` COMMAND.**
+`rp1_pwm_remove` of kernel 6.18.34 reads a null pointer when a runtime overlay
+that started the RP1 PWM goes away:
+
+```text
+Unable to handle kernel NULL pointer dereference at virtual address 0000000000000008
+pc : rp1_pwm_remove+0x1c/0x48
+```
+
+The `dtoverlay` process then stays in state D, it holds the locks of the driver
+core, each later overlay operation waits for ever, and only a restart of the
+machine clears it. An overlay of `config.txt` never takes that path, because
+the firmware puts it in the device tree and nothing removes it.
+
+To measure the fan without an overlay, use `/sys/class/pwm/` directly.
+**`pwmchip0` is the regulator of the touchscreen. Do not write to it.** The PWM
+of the RP1 is the chip whose device is `1f00098000.pwm`.
+
+### 15.4 How to make sure
+
+```bash
+cat /sys/class/thermal/cooling_device0/type     # pwm-fan
+cat /sys/class/thermal/cooling_device0/cur_state
+pinctrl get 12                                  # 12: a0 pn | lo // GPIO12 = PWM0_CHAN0
+```
+
+The fan gives 2 pulses for each revolution, thus the speed is the count of the
+rising edges in one second, multiplied by 30:
+
+```bash
+timeout 2 gpiomon -c gpiochip0 -b pull-up -e rising 13 | wc -l   # x 15 gives RPM
+```
+
+A state of 0 with 0 RPM below 50 degrees is correct and it is not a fault. The
+appliance is then silent, which the microphone needs. To see the governor
+operate, load the four cores and read the three values again.
+
+The measurement of this appliance:
+
+| Condition | Temperature | State | RPM |
+| --- | --- | --- | --- |
+| Idle | 45.2 C | 0 | 0 |
+| Load | 54.0 C | 1 | 2520 |
+| Load | 59.0 C | 2 | 4185 |
+| Load | 61.1 C | 2 | 4350 |
+| After the load | 51.8 C | 1 | 2715 |
+
+**The appliance is not silent at idle with the software running.** The
+translator holds the machine at about 53 degrees, which is above the first
+trip, thus the fan turns at about 2670 RPM. That is far below the 8750 RPM of a
+fan with no control, and it is not zero. `dtparam=fan_temp0=58000` in
+`config.txt` buys silence and gives away some margin. Measure the transcription
+before and after such a change.

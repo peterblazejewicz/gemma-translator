@@ -1,0 +1,87 @@
+// Copyright 2026 Piotr Błażejewicz (Peter Blazejewicz)
+// SPDX-License-Identifier: Apache-2.0
+
+// The fan of the Raspberry Pi Active Cooler, on GPIO12, for a board whose
+// 4-pin fan socket is gone. 5 V and ground come from the X1201, the blue wire
+// goes to GPIO12, and the yellow wire goes to GPIO13.
+
+// deploy/README.md gives the wiring, the measurement, and the installation.
+// deploy-pi.sh does the installation, with --with-gpio-fan only.
+
+// CAUTION: THIS FILE IS FOR A BOARD WITH NO FAN SOCKET. On a Raspberry Pi 5
+// that still has its socket, this overlay takes the fan away from the pin that
+// the socket uses and gives it to GPIO12, where there is no fan. That is the
+// cause for the argument of deploy-pi.sh.
+
+// This file makes NO new pwm-fan node. /cooling_fan is in the base device tree
+// with the whole curve, and /thermal-zones/cpu-thermal maps its trips of 50,
+// 60, 67.5 and 75 degrees on to that node. The node is disabled only, because
+// the firmware finds no fan on the dead socket. Thus this file gives it a PWM
+// that reaches a pin a person can solder to, and turns it on. The dtparam
+// values fan_temp0 and its family then operate again.
+
+// MEASURED on the appliance, with the tach on GPIO13 as the reference:
+//
+//     duty  100%  75%   50%   25%   0%
+//     RPM   8780  7140  5280  2780  120
+//
+// The governor was then measured through a load of the four cores: 45.2 C
+// gave state 0 and 0 RPM, 54.0 C gave state 1 and 2520 RPM, and 61.1 C gave
+// state 2 and 4350 RPM.
+
+// CAUTION: the polarity here is NORMAL and the entry of the base device tree
+// is INVERTED. That difference is not an error. The path of the socket goes
+// through an inverting buffer between the RP1 and the connector, and a wire to
+// GPIO12 does not. A person who copies the flag 1 of the base device tree gets
+// a fan that turns fastest when the governor asks for silence.
+
+// The period of 41566 ns is the value of the base device tree, which is
+// 24.06 kHz. It is not a round number and it is not a guess.
+
+// CAUTION: DO NOT PUT THIS OVERLAY IN AND TAKE IT OUT AGAIN WITH THE dtoverlay
+// COMMAND. rp1_pwm_remove of kernel 6.18.34 reads a null pointer when a
+// runtime overlay that started the RP1 PWM goes away. The process then stays
+// in state D, it holds the locks of the driver core, and only a restart of the
+// machine clears it. An overlay of config.txt never takes that path.
+
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2835";
+
+    // The pin configuration goes first, as in recorder-keys-overlay.dts.
+    fragment@0 {
+        target = <&gpio>;
+        __overlay__ {
+            fan_pwm_pins: fan_pwm_pins {
+                brcm,pins = <12>;
+                brcm,function = <4>;   // Alt0 = PWM0_CHAN0
+                brcm,pull = <0>;       // the PWM drives the line
+            };
+        };
+    };
+
+    fragment@1 {
+        target = <&rp1_pwm0>;
+        __overlay__ {
+            pinctrl-names = "default";
+            pinctrl-0 = <&fan_pwm_pins>;
+            status = "okay";
+        };
+    };
+
+    // rpm-regmap goes away. It names a register of the fan block of the RP1
+    // that belongs to the socket, and that block stays off. The kernel then
+    // gives no RPM, and deploy/README.md gives the command that reads the
+    // speed on GPIO13.
+    fragment@2 {
+        target = <&fan>;
+        __overlay__ {
+            pwms = <&rp1_pwm0 0 41566 0>;
+            status = "okay";
+            /delete-property/ rpm-regmap;
+            /delete-property/ rpm-offset;
+        };
+    };
+};
