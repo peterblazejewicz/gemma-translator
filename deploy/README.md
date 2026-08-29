@@ -385,14 +385,36 @@ systemctl is-active gemma-battery-guard
 journalctl -u gemma-battery-guard -n 6
 ```
 
-The result must be `enabled` and `active`. A guard that operates writes its
-values each 5 minutes, thus a journal with no such line is not correct.
+**The correct result depends on the cells.** `deploy-pi.sh` puts the guard on
+each appliance and starts it only where a person said that the holder has
+cells:
+
+| The holder | is-enabled | is-active |
+| --- | --- | --- |
+| Cells in it | `enabled` | `active` |
+| Empty | `disabled` | `inactive` |
+
+A machine with cells that gives `disabled` has no protection. Correct it with
+the installation, and not by hand, or the next update removes it again:
+
+```bash
+GEMMA_UPS_CELLS_FITTED=1 ./deploy-pi.sh
+```
+
+That writes `/etc/gemma-translator/ups-cells-fitted`, which the installation
+reads each time afterwards. Thus an update that gives no variable keeps the
+protection. Only `GEMMA_UPS_CELLS_FITTED=0` removes it.
+
+A guard that operates writes its values each 5 minutes, thus a journal with no
+such line is not correct. A journal that holds `has not fallen` says that the
+guard sees no pack, and it stops no machine while that stays.
 
 **CAUTION: `systemctl start` does not make the guard operate after the next
 start of the machine. Use `systemctl enable`.**
 
-To see the guard stop the machine, move the low value above the voltage of a
-full cell. The guard writes two CAUTION lines when it has this value:
+To see the guard stop the machine, **first take the USB-C out**, then move the
+low value above the voltage of a full cell. The guard writes two CAUTION lines
+when it has this value:
 
 ```bash
 sudo systemctl set-environment GEMMA_GUARD_LOW_UV=4300000

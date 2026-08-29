@@ -525,14 +525,79 @@ GUARD_DEST="/usr/local/sbin/gemma-battery-guard.sh"
 GUARD_UNIT_SRC="${PROJECT_DIR}/deploy/gemma-battery-guard.service"
 GUARD_UNIT_DEST="/etc/systemd/system/gemma-battery-guard.service"
 
+# Whether cells are in the holder is a fact a person knows when they build the
+# appliance, and no reading from the board can replace it. An X1201 with an
+# empty holder still answers on I2C, still reports present=1, and still gives
+# a voltage below the low threshold. A guard that is enabled by default then
+# powers the machine off every few minutes on a mains supply that never
+# failed. The files always go on, so that they are there when cells arrive.
+# Only the unit waits for a person to say that the cells are in.
+#
+# The answer is kept ON THE MACHINE. An appliance gets a software update many
+# times after a person puts the cells in, and an update that runs without the
+# variable must not take the protection away from cells that are there. Thus
+# the marker file gives the default, the variable can change it, and only an
+# explicit 0 removes the protection.
+CELLS_MARKER="/etc/gemma-translator/ups-cells-fitted"
+
+if [ -e "$CELLS_MARKER" ]; then
+    GEMMA_UPS_CELLS_FITTED="${GEMMA_UPS_CELLS_FITTED:-1}"
+else
+    GEMMA_UPS_CELLS_FITTED="${GEMMA_UPS_CELLS_FITTED:-0}"
+fi
+
+# A value that is not one of these comes from a person who believes the guard
+# operates. Stop, because the alternative is an appliance with no protection
+# and an [INFO] line that agrees with them.
+case "$(printf '%s' "$GEMMA_UPS_CELLS_FITTED" | tr 'A-Z' 'a-z')" in
+    1 | true | yes | y) CELLS_FITTED=1 ;;
+    0 | false | no | n) CELLS_FITTED=0 ;;
+    *)
+        echo "[ERROR] GEMMA_UPS_CELLS_FITTED is \"${GEMMA_UPS_CELLS_FITTED}\"."
+        echo "[ERROR] Use 1 or 0. This value decides if the cells of the X1201"
+        echo "[ERROR] get protection from a deep discharge, thus this script"
+        echo "[ERROR] does not guess what you meant."
+        exit 1
+        ;;
+esac
+
 if [ -f "$GUARD_SRC" ] && [ -f "$GUARD_UNIT_SRC" ]; then
     sudo install -m 755 "$GUARD_SRC" "$GUARD_DEST"
     sudo install -m 644 "$GUARD_UNIT_SRC" "$GUARD_UNIT_DEST"
     sudo systemctl daemon-reload
-    sudo systemctl enable gemma-battery-guard.service
-    sudo systemctl restart gemma-battery-guard.service
-    echo "[INFO] The low battery guard is at ${GUARD_DEST}."
-    echo "[INFO] Read it with: journalctl -u gemma-battery-guard -n 20"
+
+    if [ "$CELLS_FITTED" = "1" ]; then
+        sudo mkdir -p "$(dirname "$CELLS_MARKER")"
+        sudo touch "$CELLS_MARKER"
+        sudo systemctl enable gemma-battery-guard.service
+        sudo systemctl restart gemma-battery-guard.service
+        echo "[INFO] The low battery guard is at ${GUARD_DEST} and it operates."
+        echo "[INFO] Read it with: journalctl -u gemma-battery-guard -n 20"
+    else
+        # This is the repair path for an appliance that is already in the
+        # poweroff loop, thus it must not fail quietly. A disable that did not
+        # work, with a line below that says it did, leaves the machine free to
+        # turn itself off in the middle of the steps that follow. The errors
+        # stay on the display for the same reason.
+        sudo rm -f "$CELLS_MARKER"
+        sudo systemctl disable gemma-battery-guard.service || true
+        sudo systemctl stop gemma-battery-guard.service || true
+
+        if systemctl is-active --quiet gemma-battery-guard.service; then
+            echo "[ERROR] The low battery guard still operates and this script"
+            echo "[ERROR] could not stop it. It can turn the machine off in the"
+            echo "[ERROR] steps below, and this installation would not finish."
+            echo "[ERROR] Stop it by hand, then run this script again."
+            exit 1
+        fi
+
+        echo "[CAUTION] The low battery guard is at ${GUARD_DEST} and it does"
+        echo "[CAUTION] NOT operate. Nothing protects a cell of the X1201 from"
+        echo "[CAUTION] a deep discharge, and nothing stops this machine before"
+        echo "[CAUTION] the supply goes away."
+        echo "[CAUTION] With cells in the holder, run this script again with"
+        echo "[CAUTION] GEMMA_UPS_CELLS_FITTED=1 in the environment."
+    fi
 else
     echo "[ERROR] deploy/ has no low battery guard. The appliance would have"
     echo "[ERROR] no protection against cells that go empty, thus this"
