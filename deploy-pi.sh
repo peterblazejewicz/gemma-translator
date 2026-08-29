@@ -133,10 +133,14 @@ if command -v apt-get &> /dev/null; then
     # "libegl1-mesa" is not one of them: that name went away on Debian 13, and
     # a person who copies it from an older guide gets "Unable to locate
     # package". See section 8.17 of deploy/README.md.
+    #
+    # libinput10 is the input part of that same backend, and Pi OS Lite does
+    # not give it. Without it Avalonia throws DllNotFoundException for
+    # libinput.so.10 and the software stops before it draws one pixel.
     sudo apt-get install -y python3-venv python3-pip libasound2-dev \
         alsa-utils device-tree-compiler i2c-tools \
         netcat-openbsd lsof wget \
-        libgbm1 libegl1 libegl-mesa0 libgl1-mesa-dri libgles2
+        libinput10 libgbm1 libegl1 libegl-mesa0 libgl1-mesa-dri libgles2
 else
     echo "[INFO] apt-get not detected. Skipping Debian package installation."
 fi

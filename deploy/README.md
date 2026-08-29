@@ -460,7 +460,22 @@ names:
 sudo apt-get install -y libgbm1 libegl1 libegl-mesa0 libgl1-mesa-dri libgles2
 ```
 
-`libinput10`, `libdrm2`, `libfontconfig1` and `libicu76` come with the image. `libicu76` is necessary, because `InvariantGlobalization` is `false`.
+`libdrm2`, `libfontconfig1` and `libicu76` come with the image. `libicu76` is
+necessary, because `InvariantGlobalization` is `false`.
+
+**CAUTION: `libinput10` does NOT come with the image. An earlier text of this
+section said that it does, and that text was not correct.** The DRM backend of
+Avalonia loads that library for the input. A clean installation of Raspberry Pi
+OS Lite of 2026-06-18 gives `Installed: (none)` for the package, thus the
+software stops at the start:
+
+```text
+System.DllNotFoundException: Unable to load shared library 'libinput.so.10'
+  at Avalonia.LinuxFramebuffer.Input.LibInput.LibInputBackend.Initialize(...)
+```
+
+The panel stays black and no message comes on it, because the software stops
+before it draws. `deploy-pi.sh` installs the package in its step 1.
 
 `kmscube` gives the proof that the stack operates, before the software starts:
 
